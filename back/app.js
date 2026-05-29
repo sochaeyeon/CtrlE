@@ -8,23 +8,24 @@ var QRCode = require('qrcode');
 require('dotenv').config();
 require('./passport');
 
-const sampleRouter = require("./routes/sample");
 const userRouter = require("./routes/user");
 const authRouter = require("./routes/auth");
+const feedRouter = require("./routes/feed");
 const db = require("./db");
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(passport.initialize());
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, '.'));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-app.use("/sample", sampleRouter);
 app.use("/user", userRouter);
 app.use("/api/auth", authRouter);
+app.use("/feed", feedRouter);
 
 async function startServer() {
   try {

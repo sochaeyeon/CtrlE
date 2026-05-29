@@ -7,6 +7,8 @@ import Feed from './components/Feed';
 import Register from './components/Register';
 import MyPage from './components/MyPage';
 import Menu from './components/Menu'; // Menu로 변경
+import Explore from './components/Explore';
+import PostDetail from './components/PostDetail';
 
 function App() {
   const location = useLocation();
@@ -21,8 +23,11 @@ function App() {
           <Route path="/" element={<Login />} />
           <Route path="/join" element={<Join />} />
           <Route path="/feed" element={<Feed />} />
+          <Route path="/explore" element={<Explore />} />
           <Route path="/register" element={<Register />} />
           <Route path="/mypage" element={<MyPage />} />
+          <Route path="/post/:postId" element={<PostDetail />} />
+          {/* <Route path="/user/:nickname" element={<UserProfile />} /> */}
         </Routes>
       </Box>
     </Box>

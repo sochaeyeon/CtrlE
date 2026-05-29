@@ -5,6 +5,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.3",
+    "multer": "^2.1.1",
     "nodemailer": "^8.0.9",
     "nodemon": "^3.1.14",
     "oracledb": "^6.9.0",

@@ -4,7 +4,8 @@ const bcrypt = require('bcrypt');
 const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
-
+const oracledb = require('oracledb');
+const jwtAuthentication = require('../middlewares/auth');
 const JWT_SECRET = process.env.JWT_SECRET;
 
 const transporter = nodemailer.createTransport({
@@ -190,9 +191,9 @@ router.post('/login', async (req, res) => {
         // 💡 [핵심 가드 정정] 소셜 연동 계정이라도 일반 가입 시 비밀번호를 설정했다면 로그인이 가능해야 합니다.
         // 단, 비밀번호 컬럼이 비어있고 오직 소셜 로그인의 다리로만 들어온 계정인 경우에만 예외 가이드를 띄웁니다.
         if (!dbPassword && (oauthType === 'GOOGLE' || oauthType === 'GITHUB')) {
-            return res.status(401).json({ 
-                success: false, 
-                message: `소셜 회원가입 계정입니다. 하단의 ${oauthType} 로그인 버튼을 이용해 주세요.` 
+            return res.status(401).json({
+                success: false,
+                message: `소셜 회원가입 계정입니다. 하단의 ${oauthType} 로그인 버튼을 이용해 주세요.`
             });
         }
 
@@ -226,4 +227,53 @@ router.post('/login', async (req, res) => {
     }
 });
 
+// [back/routes/user.js] - /mypage/data 라우터 내부
+router.get('/mypage/data', jwtAuthentication, async (req, res) => {
+    const userId = req.user.userId;
+    let connection;
+    try {
+        connection = await db.getConnection();
+        
+        // 1. 사용자 정보
+        const userRes = await connection.execute(
+            `SELECT NICKNAME, EMAIL, BIO, GITHUB, WEBSITE FROM USERS WHERE USER_ID = :id`,
+            { id: userId }, 
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        
+        // 💡 2. 게시물 정보 + 이미지(LISTAGG 사용) 쿼리 수정
+        const postsRes = await connection.execute(
+            `SELECT 
+                p.POST_ID AS "id", 
+                p.TITLE AS "title", 
+                p.CONTENT AS "description", 
+                'General' AS "tag",
+                (SELECT LISTAGG(f.FILE_URL, ',') WITHIN GROUP (ORDER BY f.FILE_ID)
+                 FROM ATTACHED_FILES f 
+                 WHERE f.TARGET_ID = p.POST_ID AND f.TARGET_TYPE = 'POST') AS "images"
+             FROM POSTS p
+             WHERE p.USER_ID = :id AND p.STATUS = 'ACTIVE'`,
+            { id: userId }, 
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+
+        // CLOB 처리 및 데이터 정제
+        const postData = await Promise.all((postsRes.rows || []).map(async (row) => {
+            let content = row.description;
+            if (content && typeof content.getData === 'function') {
+                content = await content.getData();
+            }
+            return { ...row, description: content };
+        }));
+
+        const userData = (userRes.rows && userRes.rows.length > 0) ? userRes.rows[0] : {};
+        res.status(200).json({ success: true, user: userData, posts: postData });
+
+    } catch (err) {
+        console.error('MYPAGE_ERROR:', err);
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (connection) await connection.close();
+    }
+});
 module.exports = router;
