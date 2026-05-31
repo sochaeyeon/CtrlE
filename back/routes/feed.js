@@ -13,6 +13,11 @@ router.post('/register', jwtAuthentication, async (req, res) => {
     try {
         connection = await db.getConnection();
         const catRes = await connection.execute(`SELECT CATEGORY_ID FROM CATEGORIES WHERE CATEGORY_NAME = :c`, [category]);
+
+        if (!catRes.rows || catRes.rows.length === 0) {
+            return res.status(400).json({ success: false, message: '존재하지 않는 카테고리입니다.' });
+        }
+
         const categoryId = catRes.rows[0][0];
 
         // 1. 초기 데이터 삽입 (CONTENT에는 EMPTY_CLOB() 사용)
@@ -141,21 +146,20 @@ router.get('/:postId', jwtAuthentication, async (req, res) => {
         // 2) 게시글 조회
         const postResult = await conn.execute(
             `SELECT p.*,
-              u.NICKNAME  AS WRITER,
-              u.BIO       AS ROLE,
-              (SELECT IMAGE_URL FROM PROFILE_IMAGES
-               WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y'
-               AND ROWNUM = 1) AS AVATAR,
-              (SELECT COUNT(*) FROM POST_LIKES   WHERE POST_ID = p.POST_ID) AS LIKES,
-              (SELECT COUNT(*) FROM POST_LIKES   WHERE POST_ID = p.POST_ID AND USER_ID = :userId) AS LIKED,
-              (SELECT COUNT(*) FROM BOOKMARKS    WHERE POST_ID = p.POST_ID AND USER_ID = :userId) AS BOOKMARKED
-         FROM POSTS p
-         JOIN USERS u ON u.USER_ID = p.USER_ID
-        WHERE p.POST_ID = :postId
-          AND p.STATUS  = 'ACTIVE'`,
-            { postId, userId },
+      u.NICKNAME  AS WRITER,
+      u.BIO       AS ROLE,
+      (SELECT IMAGE_URL FROM PROFILE_IMAGES
+       WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y'
+       AND ROWNUM = 1) AS AVATAR,
+      (SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID) AS LIKES,
+      (SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID AND USER_ID = :userId1) AS LIKED,
+      (SELECT COUNT(*) FROM BOOKMARKS  WHERE POST_ID = p.POST_ID AND USER_ID = :userId2) AS BOOKMARKED
+ FROM POSTS p
+ JOIN USERS u ON u.USER_ID = p.USER_ID
+WHERE p.POST_ID = :postId
+  AND p.STATUS  = 'ACTIVE'`,
+            { postId, userId1: userId, userId2: userId },  // ✅ 이름 다르게
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
-
         );
 
         if (!postResult.rows.length) {

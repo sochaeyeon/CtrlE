@@ -7,6 +7,8 @@ const db = require('../db');
 const oracledb = require('oracledb');
 const jwtAuthentication = require('../middlewares/auth');
 const JWT_SECRET = process.env.JWT_SECRET;
+const upload = require('../middlewares/upload');
+
 
 const transporter = nodemailer.createTransport({
     service: 'gmail',
@@ -92,7 +94,6 @@ router.post('/signup/request', async (req, res) => {
 router.post('/signup/verify', async (req, res) => {
     const { email, password, nickname, termsAgree, privacyAgree, marketingAgree, code } = req.body;
 
-    // 💡 프론트엔드가 소셜 가입 우회용 특수 마킹 코드를 보냈는지 판단합니다.
     const isOauthSkip = (code === 'OAUTH_SKIP_CODE');
 
     if (!isOauthSkip) {
@@ -114,8 +115,6 @@ router.post('/signup/verify', async (req, res) => {
     try {
         connection = await db.getConnection();
 
-        // 💡 소셜 가입일 경우 비밀번호 해싱 단계를 거치지 않고 완전히 비워둡니다. (디비 변경 기준 NULL 안착)
-        // 만약 자체 비밀번호 생성을 원한다면 나중에 마이페이지 등에서 수정 가능하도록 인프라를 마련합니다.
         const hashedPassword = isOauthSkip ? null : await bcrypt.hash(password, 10);
 
         const insertSql = `
@@ -137,8 +136,6 @@ router.post('/signup/verify', async (req, res) => {
             terms: termsAgree === 'Y' || termsAgree === true ? 'Y' : 'N',
             privacy: privacyAgree === 'Y' || privacyAgree === true ? 'Y' : 'N',
             marketing: marketingAgree === 'Y' || marketingAgree === true ? 'Y' : 'N',
-            // 💡 소셜 가입 절차를 밟은 유저는 디폴트 연동 상태인 'PENDING'으로 두고, 
-            // 가입 최종 승인 절차가 완전히 마무리될 때 auth.js confirm 라우터에서 GOOGLE/GITHUB로 확정 표기됩니다.
             oauthType: isOauthSkip ? 'PENDING' : 'LOCAL'
         };
 
@@ -173,7 +170,6 @@ router.post('/login', async (req, res) => {
     try {
         connection = await db.getConnection();
 
-        // 💡 새로운 통합 컬럼인 OAUTH_TYPE을 디비에서 같이 퍼옵니다.
         const selectSql = `
             SELECT USER_ID, EMAIL, PASSWORD, NICKNAME, OAUTH_TYPE 
             FROM USERS 
@@ -188,8 +184,6 @@ router.post('/login', async (req, res) => {
 
         const [userId, dbEmail, dbPassword, nickname, oauthType] = result.rows[0];
 
-        // 💡 [핵심 가드 정정] 소셜 연동 계정이라도 일반 가입 시 비밀번호를 설정했다면 로그인이 가능해야 합니다.
-        // 단, 비밀번호 컬럼이 비어있고 오직 소셜 로그인의 다리로만 들어온 계정인 경우에만 예외 가이드를 띄웁니다.
         if (!dbPassword && (oauthType === 'GOOGLE' || oauthType === 'GITHUB')) {
             return res.status(401).json({
                 success: false,
@@ -197,14 +191,12 @@ router.post('/login', async (req, res) => {
             });
         }
 
-        // 비밀번호 대조 검증 수행
         const isMatch = await bcrypt.compare(password, dbPassword);
 
         if (!isMatch) {
             return res.status(401).json({ success: false, message: '비밀번호가 일치하지 않습니다.' });
         }
 
-        // 인증 완결 시 피드에서 가독 및 조작할 통합 JWT 규격 발행
         const token = jwt.sign(
             { userId, email: dbEmail, nickname },
             JWT_SECRET,
@@ -227,37 +219,48 @@ router.post('/login', async (req, res) => {
     }
 });
 
-// [back/routes/user.js] - /mypage/data 라우터 내부
+// ──────────────────────────────────────────────────────────
+//  GET /user/mypage/data  — BIO_SHORT + 카테고리 JOIN 추가
+// ──────────────────────────────────────────────────────────
 router.get('/mypage/data', jwtAuthentication, async (req, res) => {
     const userId = req.user.userId;
     let connection;
     try {
         connection = await db.getConnection();
-        
-        // 1. 사용자 정보
+
+        // 1. 사용자 정보 + 프로필 이미지 (BIO_SHORT 추가)
         const userRes = await connection.execute(
-            `SELECT NICKNAME, EMAIL, BIO, GITHUB, WEBSITE FROM USERS WHERE USER_ID = :id`,
-            { id: userId }, 
-            { outFormat: oracledb.OUT_FORMAT_OBJECT }
-        );
-        
-        // 💡 2. 게시물 정보 + 이미지(LISTAGG 사용) 쿼리 수정
-        const postsRes = await connection.execute(
             `SELECT 
-                p.POST_ID AS "id", 
-                p.TITLE AS "title", 
-                p.CONTENT AS "description", 
-                'General' AS "tag",
-                (SELECT LISTAGG(f.FILE_URL, ',') WITHIN GROUP (ORDER BY f.FILE_ID)
-                 FROM ATTACHED_FILES f 
-                 WHERE f.TARGET_ID = p.POST_ID AND f.TARGET_TYPE = 'POST') AS "images"
-             FROM POSTS p
-             WHERE p.USER_ID = :id AND p.STATUS = 'ACTIVE'`,
-            { id: userId }, 
+                u.NICKNAME, u.EMAIL, u.BIO, u.BIO_SHORT, u.GITHUB, u.WEBSITE,
+                (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWER_ID = u.USER_ID) AS FOLLOWING_CNT,
+                (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWING_ID = u.USER_ID) AS FOLLOWER_CNT,
+                (SELECT IMAGE_URL FROM PROFILE_IMAGES
+                 WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y'
+                 AND ROWNUM = 1) AS AVATAR
+             FROM USERS u
+             WHERE u.USER_ID = :id`,
+            { id: userId },
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
 
-        // CLOB 처리 및 데이터 정제
+        // 2. 게시물 + 카테고리명 JOIN (General 하드코딩 제거)
+        const postsRes = await connection.execute(
+            `SELECT 
+                p.POST_ID AS "id",
+                p.TITLE AS "title",
+                p.CONTENT AS "description",
+                NVL(c.CATEGORY_NAME, 'General') AS "tag",
+                (SELECT LISTAGG(f.FILE_URL, ',') WITHIN GROUP (ORDER BY f.FILE_ID)
+                 FROM ATTACHED_FILES f
+                 WHERE f.TARGET_ID = p.POST_ID AND f.TARGET_TYPE = 'POST') AS "images"
+             FROM POSTS p
+             LEFT JOIN CATEGORIES c ON c.CATEGORY_ID = p.CATEGORY_ID
+             WHERE p.USER_ID = :id AND p.STATUS = 'ACTIVE'
+             ORDER BY p.CREATED_AT DESC`,
+            { id: userId },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+
         const postData = await Promise.all((postsRes.rows || []).map(async (row) => {
             let content = row.description;
             if (content && typeof content.getData === 'function') {
@@ -276,4 +279,161 @@ router.get('/mypage/data', jwtAuthentication, async (req, res) => {
         if (connection) await connection.close();
     }
 });
+
+// ──────────────────────────────────────────────────────────
+//  GET /user/followers  — 나를 팔로우하는 사람들
+// ──────────────────────────────────────────────────────────
+router.get('/followers', jwtAuthentication, async (req, res) => {
+    const userId = req.user.userId;
+    let connection;
+    try {
+        connection = await db.getConnection();
+        const result = await connection.execute(
+            `SELECT 
+                u.USER_ID AS "userId",
+                u.NICKNAME AS "nickname",
+                u.BIO_SHORT AS "bioShort",
+                (SELECT IMAGE_URL FROM PROFILE_IMAGES
+                 WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS "avatar"
+             FROM FOLLOWS f
+             JOIN USERS u ON u.USER_ID = f.FOLLOWER_ID
+             WHERE f.FOLLOWING_ID = :userId
+             ORDER BY f.CREATED_AT DESC`,
+            { userId },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        res.json({ success: true, list: result.rows || [] });
+    } catch (err) {
+        console.error('[GET /user/followers]', err);
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (connection) await connection.close();
+    }
+});
+
+// ──────────────────────────────────────────────────────────
+//  GET /user/following  — 내가 팔로우하는 사람들
+// ──────────────────────────────────────────────────────────
+router.get('/following', jwtAuthentication, async (req, res) => {
+    const userId = req.user.userId;
+    let connection;
+    try {
+        connection = await db.getConnection();
+        const result = await connection.execute(
+            `SELECT 
+                u.USER_ID AS "userId",
+                u.NICKNAME AS "nickname",
+                u.BIO_SHORT AS "bioShort",
+                (SELECT IMAGE_URL FROM PROFILE_IMAGES
+                 WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS "avatar"
+             FROM FOLLOWS f
+             JOIN USERS u ON u.USER_ID = f.FOLLOWING_ID
+             WHERE f.FOLLOWER_ID = :userId
+             ORDER BY f.CREATED_AT DESC`,
+            { userId },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        res.json({ success: true, list: result.rows || [] });
+    } catch (err) {
+        console.error('[GET /user/following]', err);
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (connection) await connection.close();
+    }
+});
+
+// ──────────────────────────────────────────────────────────
+//  PUT /user/profile
+// ──────────────────────────────────────────────────────────
+router.put('/profile', jwtAuthentication, async (req, res) => {
+    const userId = req.user.userId;
+    const { nickname, bio, bio_short, github, website } = req.body;
+
+    if (!nickname || !nickname.trim()) {
+        return res.status(400).json({ success: false, message: '닉네임은 필수 입력 항목입니다.' });
+    }
+
+    let connection;
+    try {
+        connection = await db.getConnection();
+
+        const nickCheck = await connection.execute(
+            `SELECT COUNT(*) AS CNT FROM USERS WHERE NICKNAME = :nickname AND USER_ID != :userId`,
+            { nickname: nickname.trim(), userId },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        if (nickCheck.rows[0].CNT > 0) {
+            return res.status(400).json({ success: false, message: '이미 사용 중인 닉네임입니다.' });
+        }
+
+        await connection.execute(
+            `UPDATE USERS
+             SET NICKNAME  = :nickname,
+                 BIO       = :bio,
+                 BIO_SHORT = :bio_short,
+                 GITHUB    = :github,
+                 WEBSITE   = :website
+             WHERE USER_ID = :userId`,
+            {
+                nickname:  nickname.trim(),
+                bio:       bio       || null,
+                bio_short: bio_short || null,
+                github:    github    || null,
+                website:   website   || null,
+                userId,
+            },
+            { autoCommit: true }
+        );
+
+        res.json({ success: true, message: '프로필이 업데이트되었습니다.' });
+
+    } catch (err) {
+        console.error('[PUT /user/profile]', err);
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (connection) await connection.close();
+    }
+});
+
+// ──────────────────────────────────────────────────────────
+//  POST /user/avatar
+// ──────────────────────────────────────────────────────────
+router.post('/avatar', jwtAuthentication, upload.single('avatar'), async (req, res) => {
+    const userId = req.user.userId;
+
+    if (!req.file) {
+        return res.status(400).json({ success: false, message: '이미지 파일이 없습니다.' });
+    }
+
+    const imageUrl = `/uploads/${req.file.filename}`;
+
+    let connection;
+    try {
+        connection = await db.getConnection();
+
+        await connection.execute(
+            `UPDATE PROFILE_IMAGES SET IS_MAIN = 'N' WHERE USER_ID = :userId`,
+            { userId },
+            { autoCommit: false }
+        );
+
+        await connection.execute(
+            `INSERT INTO PROFILE_IMAGES (IMAGE_ID, USER_ID, IMAGE_URL, IS_MAIN)
+             VALUES (SEQ_IMAGE_ID.NEXTVAL, :userId, :imageUrl, 'Y')`,
+            { userId, imageUrl },
+            { autoCommit: false }
+        );
+
+        await connection.commit();
+        res.json({ success: true, imageUrl });
+
+    } catch (err) {
+        if (connection) await connection.rollback();
+        console.error('[POST /user/avatar]', err);
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (connection) await connection.close();
+    }
+});
+
 module.exports = router;
