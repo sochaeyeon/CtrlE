@@ -7,7 +7,8 @@ const db = require('../db');
 const oracledb = require('oracledb');
 const jwtAuthentication = require('../middlewares/auth');
 const JWT_SECRET = process.env.JWT_SECRET;
-const upload = require('../middlewares/upload');
+const createUploader = require('../middlewares/upload');
+const upload = createUploader('profile');
 
 
 const transporter = nodemailer.createTransport({
@@ -243,20 +244,16 @@ router.get('/mypage/data', jwtAuthentication, async (req, res) => {
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
 
-        // 2. 게시물 + 카테고리명 JOIN (General 하드코딩 제거)
         const postsRes = await connection.execute(
             `SELECT 
-                p.POST_ID AS "id",
-                p.TITLE AS "title",
-                p.CONTENT AS "description",
-                NVL(c.CATEGORY_NAME, 'General') AS "tag",
-                (SELECT LISTAGG(f.FILE_URL, ',') WITHIN GROUP (ORDER BY f.FILE_ID)
-                 FROM ATTACHED_FILES f
-                 WHERE f.TARGET_ID = p.POST_ID AND f.TARGET_TYPE = 'POST') AS "images"
-             FROM POSTS p
-             LEFT JOIN CATEGORIES c ON c.CATEGORY_ID = p.CATEGORY_ID
-             WHERE p.USER_ID = :id AND p.STATUS = 'ACTIVE'
-             ORDER BY p.CREATED_AT DESC`,
+        p.POST_ID AS "id",
+        p.TITLE AS "title",
+        p.CONTENT AS "description",
+        NVL(c.CATEGORY_NAME, 'General') AS "tag"
+     FROM POSTS p
+     LEFT JOIN CATEGORIES c ON c.CATEGORY_ID = p.CATEGORY_ID
+     WHERE p.USER_ID = :id AND p.STATUS = 'ACTIVE'
+     ORDER BY p.CREATED_AT DESC`,
             { id: userId },
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
@@ -266,9 +263,12 @@ router.get('/mypage/data', jwtAuthentication, async (req, res) => {
             if (content && typeof content.getData === 'function') {
                 content = await content.getData();
             }
-            return { ...row, description: content };
-        }));
 
+            const imgMatch = content ? content.match(/<img[^>]+src=["']([^"']+)["']/) : null;
+            const firstImage = imgMatch ? imgMatch[1] : null;
+
+            return { ...row, description: content, images: firstImage };
+        }));
         const userData = (userRes.rows && userRes.rows.length > 0) ? userRes.rows[0] : {};
         res.status(200).json({ success: true, user: userData, posts: postData });
 
@@ -375,11 +375,11 @@ router.put('/profile', jwtAuthentication, async (req, res) => {
                  WEBSITE   = :website
              WHERE USER_ID = :userId`,
             {
-                nickname:  nickname.trim(),
-                bio:       bio       || null,
+                nickname: nickname.trim(),
+                bio: bio || null,
                 bio_short: bio_short || null,
-                github:    github    || null,
-                website:   website   || null,
+                github: github || null,
+                website: website || null,
                 userId,
             },
             { autoCommit: true }
@@ -405,7 +405,7 @@ router.post('/avatar', jwtAuthentication, upload.single('avatar'), async (req, r
         return res.status(400).json({ success: false, message: '이미지 파일이 없습니다.' });
     }
 
-    const imageUrl = `/uploads/${req.file.filename}`;
+    const imageUrl = `/uploads/profile/${req.file.filename}`;
 
     let connection;
     try {
@@ -433,6 +433,252 @@ router.post('/avatar', jwtAuthentication, upload.single('avatar'), async (req, r
         res.status(500).json({ success: false, message: err.message });
     } finally {
         if (connection) await connection.close();
+    }
+});
+
+// GET /user/suggestions - 팔로우 추천 (내가 팔로우하지 않은 사람, 최대 5명)
+router.get('/suggestions', jwtAuthentication, async (req, res) => {
+    const userId = req.user?.userId ?? req.user?.id;
+    const conn = await db.getConnection();
+    try {
+        const result = await conn.execute(
+            `select u.user_id, u.nickname, u.bio_short,
+                    (select image_url from profile_images
+                     where user_id = u.user_id and is_main = 'Y' and rownum = 1) as avatar
+             from users u
+             where u.user_id <> :userId
+             and u.user_id not in (
+                 select following_id from follows where follower_id = :userId2
+             )
+             and rownum <= 5`,
+            { userId, userId2: userId },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        res.json({ success: true, users: result.rows });
+    } catch (err) {
+        console.error('[GET /user/suggestions]', err);
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        await conn.close();
+    }
+});
+
+router.post('/follow/:targetId', jwtAuthentication, async (req, res) => {
+    const userId = req.user?.userId ?? req.user?.id;
+    const { targetId } = req.params;
+    const conn = await db.getConnection();
+    try {
+        // 대상 유저 비밀계정 여부 확인
+        const targetUser = await conn.execute(
+            `SELECT IS_PRIVATE FROM USERS WHERE USER_ID = :targetId`,
+            { targetId },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        const isPrivate = targetUser.rows[0]?.IS_PRIVATE === 'Y';
+
+        // 기존 팔로우/요청 여부 확인
+        const exists = await conn.execute(
+            `SELECT STATUS FROM FOLLOWS WHERE FOLLOWER_ID = :userId AND FOLLOWING_ID = :targetId`,
+            { userId, targetId },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+
+        if (exists.rows.length > 0) {
+            // 이미 존재 → 취소 (팔로우 또는 요청 모두)
+            await conn.execute(
+                `DELETE FROM FOLLOWS WHERE FOLLOWER_ID = :userId AND FOLLOWING_ID = :targetId`,
+                { userId, targetId }
+            );
+            // 관련 알림도 삭제
+            await conn.execute(
+                `DELETE FROM NOTIFICATIONS 
+                 WHERE SENDER_ID = :userId AND RECEIVER_ID = :targetId 
+                 AND NOTI_TYPE IN ('FOLLOW', 'FOLLOW_REQUEST')`,
+                { userId, targetId }
+            );
+            await conn.commit();
+            return res.json({ success: true, status: 'NONE' });
+        }
+
+        // 신규
+        const followStatus = isPrivate ? 'PENDING' : 'ACCEPTED';
+        await conn.execute(
+            `INSERT INTO FOLLOWS (FOLLOWER_ID, FOLLOWING_ID, STATUS) 
+             VALUES (:userId, :targetId, :status)`,
+            { userId, targetId, status: followStatus }
+        );
+
+        // 알림 타입 분기
+        const notiType = isPrivate ? 'FOLLOW_REQUEST' : 'FOLLOW';
+        await conn.execute(
+            `INSERT INTO NOTIFICATIONS (NOTI_ID, RECEIVER_ID, SENDER_ID, NOTI_TYPE, TARGET_TYPE, TARGET_ID)
+             VALUES (SEQ_NOTI_ID.NEXTVAL, :targetId, :userId, :notiType, 'USER', :userId2)`,
+            { targetId, userId, notiType, userId2: userId }
+        );
+
+        await conn.commit();
+        return res.json({ success: true, status: followStatus });
+    } catch (err) {
+        await conn.rollback();
+        console.error('[POST /user/follow/:targetId]', err);
+        return res.status(500).json({ success: false, message: err.message });
+    } finally {
+        await conn.close();
+    }
+});
+
+router.put('/follow/:requesterId/accept', jwtAuthentication, async (req, res) => {
+    const userId = req.user?.userId ?? req.user?.id; // 나 (수락하는 사람)
+    const { requesterId } = req.params;
+    const conn = await db.getConnection();
+    try {
+        await conn.execute(
+            `UPDATE FOLLOWS SET STATUS = 'ACCEPTED'
+             WHERE FOLLOWER_ID = :requesterId AND FOLLOWING_ID = :userId AND STATUS = 'PENDING'`,
+            { requesterId, userId }
+        );
+        // 요청 알림 → FOLLOW 알림으로 교체
+        await conn.execute(
+            `UPDATE NOTIFICATIONS SET NOTI_TYPE = 'FOLLOW'
+             WHERE SENDER_ID = :requesterId AND RECEIVER_ID = :userId AND NOTI_TYPE = 'FOLLOW_REQUEST'`,
+            { requesterId, userId }
+        );
+        // 수락 알림을 요청자에게 발송
+        await conn.execute(
+            `INSERT INTO NOTIFICATIONS (NOTI_ID, RECEIVER_ID, SENDER_ID, NOTI_TYPE, TARGET_TYPE, TARGET_ID)
+             VALUES (SEQ_NOTI_ID.NEXTVAL, :requesterId, :userId, 'FOLLOW_ACCEPTED', 'USER', :userId2)`,
+            { requesterId, userId, userId2: userId }
+        );
+        await conn.commit();
+        return res.json({ success: true });
+    } catch (err) {
+        await conn.rollback();
+        console.error('[PUT /user/follow/:requesterId/accept]', err);
+        return res.status(500).json({ success: false, message: err.message });
+    } finally {
+        await conn.close();
+    }
+});
+
+router.put('/follow/:requesterId/reject', jwtAuthentication, async (req, res) => {
+    const userId = req.user?.userId ?? req.user?.id;
+    const { requesterId } = req.params;
+    const conn = await db.getConnection();
+    try {
+        await conn.execute(
+            `DELETE FROM FOLLOWS 
+             WHERE FOLLOWER_ID = :requesterId AND FOLLOWING_ID = :userId AND STATUS = 'PENDING'`,
+            { requesterId, userId }
+        );
+        await conn.execute(
+            `DELETE FROM NOTIFICATIONS
+             WHERE SENDER_ID = :requesterId AND RECEIVER_ID = :userId AND NOTI_TYPE = 'FOLLOW_REQUEST'`,
+            { requesterId, userId }
+        );
+        await conn.commit();
+        return res.json({ success: true });
+    } catch (err) {
+        await conn.rollback();
+        console.error('[PUT /user/follow/:requesterId/reject]', err);
+        return res.status(500).json({ success: false, message: err.message });
+    } finally {
+        await conn.close();
+    }
+});
+
+router.get('/profile/:nickname', jwtAuthentication, async (req, res) => {
+    const myId = req.user?.userId ?? req.user?.id;
+    const { nickname } = req.params;
+    let connection;
+
+    try {
+        connection = await db.getConnection();
+        const userRes = await connection.execute(
+            `SELECT u.USER_ID, u.NICKNAME, u.BIO, u.BIO_SHORT, u.GITHUB, u.WEBSITE, u.IS_PRIVATE,
+                    (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWER_ID = u.USER_ID AND STATUS = 'ACCEPTED') AS FOLLOWING_CNT,
+                    (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWING_ID = u.USER_ID AND STATUS = 'ACCEPTED') AS FOLLOWER_CNT,
+                    (SELECT STATUS FROM FOLLOWS WHERE FOLLOWER_ID = :myId AND FOLLOWING_ID = u.USER_ID) AS FOLLOW_STATUS,
+                    (SELECT IMAGE_URL FROM PROFILE_IMAGES WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR
+             FROM USERS u
+             WHERE u.NICKNAME = :nickname`,
+            { myId, nickname },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+
+        if (userRes.rows.length === 0) {
+            return res.status(404).json({ success: false, message: '사용자를 찾을 수 없습니다.' });
+        }
+
+        const targetUser = userRes.rows[0];
+        const isPrivate = targetUser.IS_PRIVATE === 'Y';
+        const isFollowing = targetUser.FOLLOW_STATUS === 'ACCEPTED';
+        const isMe = targetUser.USER_ID === myId;
+        const canView = isMe || !isPrivate || isFollowing;
+
+        let posts = [];
+
+        if (canView) {
+            const postsRes = await connection.execute(
+                `SELECT p.POST_ID AS "id", p.TITLE AS "title", p.CONTENT AS "description", NVL(c.CATEGORY_NAME, 'General') AS "tag"
+                 FROM POSTS p
+                 LEFT JOIN CATEGORIES c ON c.CATEGORY_ID = p.CATEGORY_ID
+                 WHERE p.USER_ID = :id AND p.STATUS = 'ACTIVE'
+                 ORDER BY p.CREATED_AT DESC`,
+                { id: targetUser.USER_ID },
+                { outFormat: oracledb.OUT_FORMAT_OBJECT }
+            );
+
+            posts = await Promise.all((postsRes.rows || []).map(async (row) => {
+                let content = row.description;
+                if (content && typeof content.getData === 'function') {
+                    content = await content.getData();
+                }
+                const imgMatch = content ? content.match(/<img[^>]+src=["']([^"']+)["']/) : null;
+                return { ...row, description: content, images: imgMatch ? imgMatch[1] : null };
+            }));
+        }
+
+        res.json({
+            success: true,
+            user: targetUser,
+            posts,
+            canView,
+            isMe
+        });
+
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (connection) await connection.close();
+    }
+});
+
+// routes/user.js 에 추가
+router.get('/search/public', jwtAuthentication, async (req, res) => {
+    const myId = req.user?.userId ?? req.user?.id;
+    const { q = '' } = req.query;
+    // 검색어가 없으면 '%%'가 되어 모든 계정을 가져옵니다.
+    const keyword = `%${q.toLowerCase()}%`;
+
+    const conn = await db.getConnection();
+    try {
+        const sql = `
+            SELECT u.USER_ID, u.NICKNAME, u.BIO_SHORT,
+                   (SELECT IMAGE_URL FROM PROFILE_IMAGES WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR
+            FROM USERS u
+            WHERE NVL(u.IS_PRIVATE, 'N') = 'N' -- 비공개 계정 제외 (N이거나 NULL인 경우)
+              AND u.USER_ID != :myId           -- 내 계정 제외
+              AND LOWER(u.NICKNAME) LIKE :keyword
+            ORDER BY u.USER_ID DESC            -- 최근 가입자 순으로 정렬
+            FETCH FIRST 30 ROWS ONLY           -- 최대 30명까지만
+        `;
+        const result = await conn.execute(sql, { myId, keyword }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+        res.json({ success: true, users: result.rows });
+    } catch (err) {
+        console.error('[GET /user/search/public]', err);
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (conn) await conn.close();
     }
 });
 

@@ -1,56 +1,28 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Box,
-  Avatar,
-  Button,
-  Chip,
-  Stack,
-  Typography,
-  createTheme,
-  ThemeProvider,
-  CssBaseline,
-  InputBase,
-  CircularProgress,
-  IconButton,
-  Divider,
+  Box, Avatar, Button, Chip, Stack, Typography,
+  createTheme, ThemeProvider, CssBaseline, InputBase,
+  CircularProgress, IconButton, Divider, Skeleton,
 } from '@mui/material';
 import {
-  Search,
-  Close,
-  TrendingUp,
-  Code,
-  BugReport,
-  Rocket,
-  Lightbulb,
-  Favorite,
-  ChatBubbleOutline,
-  BookmarkBorderOutlined,
-  Bookmark,
-  PersonAdd,
-  ArrowBack,
-  Tag,
-  People,
-  Article,
-  History,
-  NorthEast,
+  Search, Close, TrendingUp, Code, BugReport, Rocket, Lightbulb,
+  Favorite, FavoriteBorder, ChatBubbleOutline, BookmarkBorderOutlined,
+  Bookmark, PersonAdd, PersonRemove, ArrowBack, Tag, People, Article,
+  History, NorthEast, LocalFireDepartment, GroupAdd, AutoAwesome,
+  WorkspacePremium, EmojiEvents,
 } from '@mui/icons-material';
 
-// ──────────────────────────────────────────
-//  Theme
-// ──────────────────────────────────────────
+const API = 'http://localhost:3010';
+
 const theme = createTheme({
   palette: {
     mode: 'light',
     primary: { main: '#2563EB' },
-    secondary: { main: '#0F172A' },
     background: { default: '#F8FAFC', paper: '#FFFFFF' },
     text: { primary: '#0F172A', secondary: '#64748B' },
   },
-  typography: {
-    fontFamily: '"Plus Jakarta Sans", "Noto Sans KR", sans-serif',
-  },
-  shape: { borderRadius: 8 },
+  typography: { fontFamily: '"Plus Jakarta Sans", "Noto Sans KR", sans-serif' },
   components: {
     MuiCssBaseline: {
       styleOverrides: `
@@ -68,143 +40,60 @@ const theme = createTheme({
         }
       `,
     },
+    MuiButton: { styleOverrides: { root: { textTransform: 'none', fontWeight: 700 } } },
   },
 });
 
-// ──────────────────────────────────────────
-//  Constants — 하드코딩 목업
-// ──────────────────────────────────────────
-const TAG_META = {
-  'Bug Fix':      { color: '#DC2626', bg: '#FEF2F2', icon: <BugReport sx={{ fontSize: 13 }} /> },
-  'React':        { color: '#2563EB', bg: '#EFF6FF', icon: <Code sx={{ fontSize: 13 }} /> },
-  'TypeScript':   { color: '#7C3AED', bg: '#F5F3FF', icon: <Code sx={{ fontSize: 13 }} /> },
-  'Architecture': { color: '#D97706', bg: '#FFFBEB', icon: <Rocket sx={{ fontSize: 13 }} /> },
-  'Tip':          { color: '#059669', bg: '#ECFDF5', icon: <Lightbulb sx={{ fontSize: 13 }} /> },
-  'DevOps':       { color: '#0891B2', bg: '#ECFEFF', icon: <TrendingUp sx={{ fontSize: 13 }} /> },
+// 태그 → 색상 매핑 (동적으로 할당)
+const TAG_COLORS = [
+  { color: '#DC2626', bg: '#FEF2F2' },
+  { color: '#2563EB', bg: '#EFF6FF' },
+  { color: '#7C3AED', bg: '#F5F3FF' },
+  { color: '#D97706', bg: '#FFFBEB' },
+  { color: '#059669', bg: '#ECFDF5' },
+  { color: '#0891B2', bg: '#ECFEFF' },
+  { color: '#DB2777', bg: '#FDF2F8' },
+  { color: '#65A30D', bg: '#F7FEE7' },
+];
+const tagColorCache = {};
+const getTagColor = (name) => {
+  if (!tagColorCache[name]) {
+    const idx = Object.keys(tagColorCache).length % TAG_COLORS.length;
+    tagColorCache[name] = TAG_COLORS[idx];
+  }
+  return tagColorCache[name];
 };
 
-const CATEGORY_TAGS = [
-  { label: '전체', value: 'all' },
-  { label: 'Bug Fix', value: 'Bug Fix' },
-  { label: 'React', value: 'React' },
-  { label: 'TypeScript', value: 'TypeScript' },
-  { label: 'Architecture', value: 'Architecture' },
-  { label: 'Tip', value: 'Tip' },
-  { label: 'DevOps', value: 'DevOps' },
-];
-
-const TRENDING_TAGS = [
-  { tag: '#ReactHooks', count: '1.2k', growth: '+18%' },
-  { tag: '#TypeScript5', count: '847', growth: '+12%' },
-  { tag: '#NextJS15', count: '634', growth: '+9%' },
-  { tag: '#PrismaORM', count: '412', growth: '+22%' },
-  { tag: '#DockerCompose', count: '389', growth: '+7%' },
-  { tag: '#TailwindCSS', count: '356', growth: '+15%' },
-];
-
-const MOCK_POSTS = [
-  {
-    id: 1, tag: 'React',
-    title: 'useCallback 제대로 쓰는 법 — deps 배열 완전 정복',
-    description: 'deps 배열을 잘못 관리하면 오히려 성능이 악화됩니다. 실제 사례와 함께 정리했어요.',
-    writer: 'Jiyeon Park', handle: '@jiyeon.dev', avatar: 'https://i.pravatar.cc/150?img=5',
-    likes: 84, commentCount: 12, bookmarked: false,
-    image: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=600&q=80',
-    createdAt: '2시간 전',
-  },
-  {
-    id: 2, tag: 'TypeScript',
-    title: 'Discriminated Union 패턴으로 타입 안전성 높이기',
-    description: '상태 관리에서 타입 가드 대신 Discriminated Union을 활용하면 훨씬 깔끔합니다.',
-    writer: 'Minjun Lee', handle: '@minjun', avatar: 'https://i.pravatar.cc/150?img=12',
-    likes: 61, commentCount: 7, bookmarked: false,
-    image: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=600&q=80',
-    createdAt: '5시간 전',
-  },
-  {
-    id: 3, tag: 'Bug Fix',
-    title: 'Safari에서 position:sticky 안 먹는 이슈 해결',
-    description: 'overflow: hidden 때문이었습니다. 2시간 삽질 끝에 찾은 원인 공유합니다.',
-    writer: 'Sunho Kim', handle: '@sunho.dev', avatar: 'https://i.pravatar.cc/150?img=33',
-    likes: 132, commentCount: 23, bookmarked: true,
-    image: null,
-    createdAt: '1일 전',
-  },
-  {
-    id: 4, tag: 'Tip',
-    title: 'VSCode 단축키 모음 — 생산성 3배로 올리는 20가지',
-    description: '매일 쓰는 단축키 20개만 알아도 코딩 속도가 체감상 달라집니다.',
-    writer: 'Haerin Yoon', handle: '@haerin', avatar: 'https://i.pravatar.cc/150?img=47',
-    likes: 210, commentCount: 34, bookmarked: false,
-    image: 'https://images.unsplash.com/photo-1607799279861-4dd421887fb3?w=600&q=80',
-    createdAt: '2일 전',
-  },
-  {
-    id: 5, tag: 'Architecture',
-    title: 'Feature-Sliced Design 1달 사용 후기',
-    description: '폴더 구조 때문에 고민하던 분들에게 적극 추천합니다. 장단점 솔직하게 정리했어요.',
-    writer: 'Taehun Oh', handle: '@taehun', avatar: 'https://i.pravatar.cc/150?img=15',
-    likes: 98, commentCount: 15, bookmarked: false,
-    image: 'https://images.unsplash.com/photo-1618477388954-7852f32655ec?w=600&q=80',
-    createdAt: '3일 전',
-  },
-  {
-    id: 6, tag: 'DevOps',
-    title: 'Docker Compose로 로컬 개발 환경 완전 정복',
-    description: '팀원 온보딩 시간 90% 단축한 Compose 구성을 공유합니다.',
-    writer: 'Seungho Lim', handle: '@seungho', avatar: 'https://i.pravatar.cc/150?img=52',
-    likes: 74, commentCount: 9, bookmarked: false,
-    image: null,
-    createdAt: '4일 전',
-  },
-  {
-    id: 7, tag: 'React',
-    title: 'Zustand vs Jotai — 2024 상태관리 라이브러리 비교',
-    description: '프로젝트 규모별로 어떤 걸 선택해야 할지 실제 코드와 함께 비교했습니다.',
-    writer: 'Minji Kwon', handle: '@minji.fe', avatar: 'https://i.pravatar.cc/150?img=25',
-    likes: 156, commentCount: 28, bookmarked: true,
-    image: 'https://images.unsplash.com/photo-1627398242454-45a1465c2479?w=600&q=80',
-    createdAt: '5일 전',
-  },
-  {
-    id: 8, tag: 'TypeScript',
-    title: 'satisfies 연산자 — TypeScript 4.9 숨겨진 보석',
-    description: 'as const의 대안으로 훨씬 유연하게 타입을 좁힐 수 있습니다.',
-    writer: 'Jiyeon Park', handle: '@jiyeon.dev', avatar: 'https://i.pravatar.cc/150?img=5',
-    likes: 89, commentCount: 11, bookmarked: false,
-    image: null,
-    createdAt: '1주 전',
-  },
-];
-
-const MOCK_USERS = [
-  { id: 1, name: 'Jiyeon Park', handle: '@jiyeon.dev', avatar: 'https://i.pravatar.cc/150?img=5', role: 'React · TypeScript', followers: 342, following: false },
-  { id: 2, name: 'Minjun Lee', handle: '@minjun', avatar: 'https://i.pravatar.cc/150?img=12', role: 'Node.js · Golang', followers: 218, following: false },
-  { id: 3, name: 'Haerin Yoon', handle: '@haerin', avatar: 'https://i.pravatar.cc/150?img=47', role: 'UI/UX · Figma', followers: 504, following: true },
-  { id: 4, name: 'Taehun Oh', handle: '@taehun', avatar: 'https://i.pravatar.cc/150?img=15', role: 'Rust · Backend', followers: 189, following: false },
-  { id: 5, name: 'Minji Kwon', handle: '@minji.fe', avatar: 'https://i.pravatar.cc/150?img=25', role: 'Vue · Frontend', followers: 276, following: false },
-];
-
-const RECENT_SEARCHES = ['useCallback', 'Docker Compose', 'TypeScript satisfies', 'Zustand'];
-
 const getInitial = (name) => name?.charAt(0).toUpperCase() ?? '?';
-const tagMeta = (tag) => TAG_META[tag] ?? { color: '#64748B', bg: '#F1F5F9', icon: null };
+
+const formatCount = (n) => {
+  if (!n && n !== 0) return '0';
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return String(n);
+};
+
+const timeAgo = (dateStr) => {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return '방금 전';
+  if (min < 60) return `${min}분 전`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}시간 전`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}일 전`;
+  return `${Math.floor(day / 7)}주 전`;
+};
 
 // ──────────────────────────────────────────
 //  SearchBar
 // ──────────────────────────────────────────
-const SearchBar = ({ value, onChange, onClear, onFocus, onBlur, inputRef }) => (
+const SearchBar = ({ value, onChange, onClear, onFocus, onBlur, inputRef, onEnter }) => (
   <Box sx={{
     display: 'flex', alignItems: 'center', gap: 1,
-    backgroundColor: '#fff',
-    border: '1.5px solid #E2E8F0',
-    borderRadius: 2,
-    px: 2, py: 1.2,
-    transition: 'all 0.2s',
-    '&:focus-within': {
-      borderColor: '#2563EB',
-      boxShadow: '0 0 0 3px rgba(37,99,235,0.08)',
-    },
+    backgroundColor: '#fff', border: '1.5px solid #E2E8F0',
+    borderRadius: 2, px: 2, py: 1.2, transition: 'all 0.2s',
+    '&:focus-within': { borderColor: '#2563EB', boxShadow: '0 0 0 3px rgba(37,99,235,0.08)' },
   }}>
     <Search sx={{ color: '#94A3B8', fontSize: 20, flexShrink: 0 }} />
     <InputBase
@@ -214,11 +103,9 @@ const SearchBar = ({ value, onChange, onClear, onFocus, onBlur, inputRef }) => (
       onChange={(e) => onChange(e.target.value)}
       onFocus={onFocus}
       onBlur={onBlur}
+      onKeyDown={(e) => { if (e.key === 'Enter') onEnter(); }}
       fullWidth
-      sx={{
-        fontSize: '0.92rem', color: '#0F172A', fontWeight: 500,
-        '& input::placeholder': { color: '#94A3B8' },
-      }}
+      sx={{ fontSize: '0.92rem', color: '#0F172A', fontWeight: 500, '& input::placeholder': { color: '#94A3B8' } }}
     />
     {value && (
       <IconButton size="small" onClick={onClear} sx={{ color: '#94A3B8', p: 0.3 }}>
@@ -229,146 +116,199 @@ const SearchBar = ({ value, onChange, onClear, onFocus, onBlur, inputRef }) => (
 );
 
 // ──────────────────────────────────────────
-//  SearchDropdown  (포커스 시 표시)
+//  SearchDropdown  (실시간 유저 검색 포함)
 // ──────────────────────────────────────────
-const SearchDropdown = ({ query, onSelect }) => (
-  <Box sx={{
-    position: 'absolute', top: '100%', left: 0, right: 0,
-    mt: 1,
-    backgroundColor: '#fff',
-    border: '1px solid #E2E8F0',
-    borderRadius: 2,
-    boxShadow: '0 16px 40px rgba(15,23,42,0.12)',
-    zIndex: 200,
-    overflow: 'hidden',
-    animation: 'slideDown 0.18s ease both',
-  }}>
-    {!query ? (
-      <>
-        <Box sx={{ px: 2, pt: 2, pb: 1 }}>
-          <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-            최근 검색
-          </Typography>
-        </Box>
-        {RECENT_SEARCHES.map((s) => (
-          <Box
-            key={s}
-            onMouseDown={() => onSelect(s)}
-            sx={{
-              display: 'flex', alignItems: 'center', gap: 1.5,
-              px: 2, py: 1.2, cursor: 'pointer',
-              '&:hover': { backgroundColor: '#F8FAFC' },
-              transition: 'background 0.12s',
-            }}
-          >
-            <History sx={{ fontSize: 15, color: '#CBD5E1' }} />
-            <Typography sx={{ fontSize: '0.88rem', color: '#475569', fontWeight: 500 }}>{s}</Typography>
-          </Box>
-        ))}
-        <Divider sx={{ borderColor: '#F1F5F9', mx: 2 }} />
-        <Box sx={{ px: 2, py: 1.5 }}>
-          <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.08em', textTransform: 'uppercase', mb: 1 }}>
-            인기 태그
-          </Typography>
-          <Stack direction="row" flexWrap="wrap" gap={0.8}>
-            {Object.keys(TAG_META).map(t => {
-              const m = TAG_META[t];
-              return (
-                <Chip
-                  key={t}
-                  label={`#${t}`}
-                  size="small"
-                  onMouseDown={() => onSelect(t)}
-                  sx={{
-                    backgroundColor: m.bg, color: m.color,
-                    fontWeight: 700, fontSize: '0.7rem', cursor: 'pointer',
-                    border: `1px solid ${m.color}22`,
-                    '&:hover': { opacity: 0.8 },
-                  }}
-                />
-              );
-            })}
-          </Stack>
-        </Box>
-      </>
-    ) : (
-      <>
-        {/* 게시물 결과 */}
-        <Box sx={{ px: 2, pt: 2, pb: 0.5 }}>
-          <Typography sx={{ fontSize: '0.7rem', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-            게시물
-          </Typography>
-        </Box>
-        {MOCK_POSTS.filter(p =>
-          p.title.toLowerCase().includes(query.toLowerCase()) ||
-          p.tag.toLowerCase().includes(query.toLowerCase())
-        ).slice(0, 3).map(p => {
-          const m = tagMeta(p.tag);
-          return (
-            <Box
-              key={p.id}
-              onMouseDown={() => onSelect(p.title)}
-              sx={{
-                display: 'flex', alignItems: 'center', gap: 1.5,
-                px: 2, py: 1.3, cursor: 'pointer',
-                '&:hover': { backgroundColor: '#F8FAFC' },
-              }}
-            >
-              <Box sx={{ width: 32, height: 32, borderRadius: 1, backgroundColor: m.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: m.color }}>
-                {m.icon}
-              </Box>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography sx={{ fontSize: '0.85rem', color: '#0F172A', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {p.title}
+const SearchDropdown = ({ query, recentSearches, trendingTags, onSelect, onClearRecent, onDeleteRecent, token }) => {
+  const [liveUsers, setLiveUsers] = useState([]);
+  const [liveTags, setLiveTags] = useState([]);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    if (!query || query.trim().length < 1) {
+      setLiveUsers([]);
+      setLiveTags([]);
+      return;
+    }
+    // 디바운스 150ms
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `${API}/explore/search?q=${encodeURIComponent(query)}&type=all&limit=5`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = await res.json();
+        if (data.success) {
+          setLiveUsers(data.users?.slice(0, 4) || []);
+          setLiveTags(data.tags?.slice(0, 4) || []);
+        }
+      } catch { /* ignore */ }
+    }, 150);
+    return () => clearTimeout(timerRef.current);
+  }, [query, token]);
+
+  return (
+    <Box sx={{
+      position: 'absolute', top: '100%', left: 0, right: 0, mt: 1,
+      backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 2,
+      boxShadow: '0 16px 40px rgba(15,23,42,0.12)', zIndex: 200,
+      overflow: 'hidden', animation: 'slideDown 0.18s ease both',
+    }}>
+      {!query ? (
+        /* ── 입력 전: 최근 검색 + 인기 태그 ── */
+        <>
+          {recentSearches.length > 0 && (
+            <>
+              <Box sx={{ px: 2, pt: 2, pb: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Typography sx={{ fontSize: '0.7rem', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                  최근 검색
                 </Typography>
-                <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8' }}>{p.writer}</Typography>
+                <Typography onClick={onClearRecent} sx={{ fontSize: '0.7rem', color: '#CBD5E1', cursor: 'pointer', '&:hover': { color: '#94A3B8' } }}>
+                  전체삭제
+                </Typography>
               </Box>
-              <NorthEast sx={{ fontSize: 14, color: '#CBD5E1' }} />
+              {recentSearches.map((s) => (
+                <Box key={s} sx={{
+                  display: 'flex', alignItems: 'center', gap: 1.5,
+                  px: 2, py: 1.2,
+                  '&:hover': { backgroundColor: '#F8FAFC' },
+                  '&:hover .delete-btn': { opacity: 1 },
+                  transition: 'background 0.12s',
+                }}>
+                  <History sx={{ fontSize: 15, color: '#CBD5E1', flexShrink: 0 }} />
+                  <Typography
+                    onMouseDown={() => onSelect(s)}
+                    sx={{ fontSize: '0.88rem', color: '#475569', fontWeight: 500, flex: 1, cursor: 'pointer' }}
+                  >
+                    {s}
+                  </Typography>
+                  <IconButton
+                    className="delete-btn"
+                    size="small"
+                    onMouseDown={(e) => { e.stopPropagation(); onDeleteRecent(s); }}
+                    sx={{ opacity: 0, transition: 'opacity 0.15s', p: 0.3, color: '#CBD5E1', '&:hover': { color: '#94A3B8', backgroundColor: 'transparent' } }}
+                  >
+                    <Close sx={{ fontSize: 13 }} />
+                  </IconButton>
+                </Box>
+              ))}
+              <Divider sx={{ borderColor: '#F1F5F9', mx: 2 }} />
+            </>
+          )}
+          {trendingTags.length > 0 && (
+            <Box sx={{ px: 2, py: 1.5 }}>
+              <Typography sx={{ fontSize: '0.7rem', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.08em', textTransform: 'uppercase', mb: 1 }}>
+                인기 태그
+              </Typography>
+              <Stack direction="row" flexWrap="wrap" gap={0.8}>
+                {trendingTags.slice(0, 8).map(t => {
+                  const m = getTagColor(t.TAG_NAME);
+                  return (
+                    <Chip key={t.TAG_NAME} label={`#${t.TAG_NAME}`} size="small"
+                      onMouseDown={() => onSelect(t.TAG_NAME)}
+                      sx={{ backgroundColor: m.bg, color: m.color, fontWeight: 700, fontSize: '0.7rem', cursor: 'pointer', border: `1px solid ${m.color}22`, '&:hover': { opacity: 0.8 } }}
+                    />
+                  );
+                })}
+              </Stack>
             </Box>
-          );
-        })}
+          )}
+        </>
+      ) : (
+        /* ── 입력 중: 실시간 유저 + 태그 + "검색하기" ── */
+        <Box sx={{ py: 0.5 }}>
+          {/* 유저 결과 */}
+          {liveUsers.length > 0 && (
+            <>
+              <Typography sx={{ px: 2, pt: 1.5, pb: 0.5, fontSize: '0.68rem', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                개발자
+              </Typography>
+              {liveUsers.map(u => (
+                <Box key={u.USER_ID} onMouseDown={() => onSelect(u.NICKNAME)} sx={{
+                  display: 'flex', alignItems: 'center', gap: 1.5,
+                  px: 2, py: 1, cursor: 'pointer',
+                  '&:hover': { backgroundColor: '#F8FAFC' }, transition: 'background 0.1s',
+                }}>
+                  <Avatar src={u.AVATAR} sx={{ width: 28, height: 28, fontSize: '0.7rem', fontWeight: 800, backgroundColor: '#0F172A' }}>
+                    {getInitial(u.NICKNAME)}
+                  </Avatar>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: '0.85rem', color: '#0F172A', fontWeight: 700, lineHeight: 1.2 }}>
+                      {u.NICKNAME}
+                    </Typography>
+                    {u.BIO && (
+                      <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {u.BIO}
+                      </Typography>
+                    )}
+                  </Box>
+                  <NorthEast sx={{ fontSize: 13, color: '#CBD5E1', flexShrink: 0 }} />
+                </Box>
+              ))}
+            </>
+          )}
 
-        {/* 개발자 결과 */}
-        {MOCK_USERS.filter(u => u.name.toLowerCase().includes(query.toLowerCase()) || u.handle.toLowerCase().includes(query.toLowerCase())).slice(0, 2).map(u => (
-          <Box
-            key={u.id}
-            onMouseDown={() => onSelect(u.name)}
-            sx={{
-              display: 'flex', alignItems: 'center', gap: 1.5,
-              px: 2, py: 1.2, cursor: 'pointer',
-              '&:hover': { backgroundColor: '#F8FAFC' },
-            }}
-          >
-            <Avatar src={u.avatar} sx={{ width: 32, height: 32, fontSize: '0.75rem', fontWeight: 800 }}>
-              {getInitial(u.name)}
-            </Avatar>
-            <Box>
-              <Typography sx={{ fontSize: '0.85rem', color: '#0F172A', fontWeight: 600 }}>{u.name}</Typography>
-              <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8' }}>{u.handle}</Typography>
-            </Box>
+          {/* 태그 결과 */}
+          {liveTags.length > 0 && (
+            <>
+              {liveUsers.length > 0 && <Divider sx={{ borderColor: '#F1F5F9', mx: 2, my: 0.5 }} />}
+              <Typography sx={{ px: 2, pt: 1, pb: 0.5, fontSize: '0.68rem', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                태그
+              </Typography>
+              {liveTags.map(t => {
+                const m = getTagColor(t.TAG_NAME);
+                return (
+                  <Box key={t.TAG_NAME} onMouseDown={() => onSelect(t.TAG_NAME)} sx={{
+                    display: 'flex', alignItems: 'center', gap: 1.5,
+                    px: 2, py: 0.9, cursor: 'pointer',
+                    '&:hover': { backgroundColor: '#F8FAFC' }, transition: 'background 0.1s',
+                  }}>
+                    <Box sx={{ width: 28, height: 28, borderRadius: 1, backgroundColor: m.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: m.color }}>
+                      <Tag sx={{ fontSize: 14 }} />
+                    </Box>
+                    <Typography sx={{ fontSize: '0.85rem', color: '#0F172A', fontWeight: 700, flex: 1 }}>
+                      #{t.TAG_NAME}
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8' }}>
+                      {formatCount(t.POST_COUNT)}개
+                    </Typography>
+                  </Box>
+                );
+              })}
+            </>
+          )}
+
+          {/* 검색하기 */}
+          {(liveUsers.length > 0 || liveTags.length > 0) && <Divider sx={{ borderColor: '#F1F5F9', mx: 2, my: 0.5 }} />}
+          <Box onMouseDown={() => onSelect(query)} sx={{
+            display: 'flex', alignItems: 'center', gap: 1.5,
+            px: 2, py: 1.2, cursor: 'pointer',
+            '&:hover': { backgroundColor: '#F8FAFC' },
+          }}>
+            <Search sx={{ fontSize: 16, color: '#94A3B8' }} />
+            <Typography sx={{ fontSize: '0.88rem', color: '#0F172A', fontWeight: 600 }}>
+              "{query}" 전체 검색하기
+            </Typography>
+            <NorthEast sx={{ fontSize: 14, color: '#CBD5E1', ml: 'auto' }} />
           </Box>
-        ))}
-      </>
-    )}
-  </Box>
-);
+        </Box>
+      )}
+    </Box>
+  );
+};
 
 // ──────────────────────────────────────────
-//  ResultTab 버튼
+//  ResultTab
 // ──────────────────────────────────────────
 const ResultTabBtn = ({ icon, label, active, onClick, count }) => (
   <Button
     startIcon={icon}
     onClick={onClick}
     sx={{
-      textTransform: 'none',
-      fontWeight: active ? 800 : 500,
-      fontSize: '0.82rem',
+      fontWeight: active ? 800 : 500, fontSize: '0.82rem',
       color: active ? '#0F172A' : '#94A3B8',
       borderBottom: active ? '2px solid #2563EB' : '2px solid transparent',
-      borderRadius: 0,
-      px: 2, py: 1.5,
-      gap: 0.5,
+      borderRadius: 0, px: 2, py: 1.5,
       '&:hover': { color: '#0F172A', backgroundColor: 'transparent' },
       transition: 'all 0.15s',
     }}
@@ -388,54 +328,65 @@ const ResultTabBtn = ({ icon, label, active, onClick, count }) => (
 );
 
 // ──────────────────────────────────────────
-//  PostCard (compact)
+//  PostCard
 // ──────────────────────────────────────────
-const PostCard = ({ post, idx }) => {
+const PostCard = ({ post, idx, token }) => {
+  const navigate = useNavigate();
   const [bookmarked, setBookmarked] = useState(post.bookmarked);
-  const [liked, setLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(post.likes);
-  const m = tagMeta(post.tag);
+  const [liked, setLiked] = useState(post.liked);
+  const [likeCount, setLikeCount] = useState(Number(post.likes) || 0);
+  const m = getTagColor(post.tags?.[0] || '');
+
+  const toggleLike = async (e) => {
+    e.stopPropagation();
+    setLiked(l => !l);
+    setLikeCount(c => c + (liked ? -1 : 1));
+    await fetch(`${API}/feed/${post.id}/like`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` },
+    });
+  };
+
+  const toggleBookmark = async (e) => {
+    e.stopPropagation();
+    setBookmarked(b => !b);
+    await fetch(`${API}/feed/${post.id}/bookmark`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` },
+    });
+  };
 
   return (
-    <Box sx={{
-      backgroundColor: '#fff',
-      border: '1px solid #E2E8F0',
-      borderRadius: 2,
-      overflow: 'hidden',
-      animation: `fadeUp 0.35s ease ${idx * 0.05}s both`,
-      transition: 'all 0.2s',
-      '&:hover': { borderColor: '#CBD5E1', boxShadow: '0 4px 20px rgba(15,23,42,0.07)', transform: 'translateY(-1px)' },
-    }}>
-      {post.image && (
-        <Box
-          component="img"
-          src={post.image}
-          alt={post.title}
+    <Box
+      onClick={() => navigate(`/post/${post.id}`)}
+      sx={{
+        backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 2,
+        overflow: 'hidden', cursor: 'pointer',
+        animation: `fadeUp 0.35s ease ${idx * 0.05}s both`,
+        transition: 'all 0.2s',
+        '&:hover': { borderColor: '#CBD5E1', boxShadow: '0 4px 20px rgba(15,23,42,0.07)', transform: 'translateY(-1px)' },
+      }}
+    >
+      {post.firstImage && (
+        <Box component="img" src={post.firstImage} alt={post.title}
           sx={{ width: '100%', height: 160, objectFit: 'cover', display: 'block' }}
         />
       )}
       <Box sx={{ p: 2.5 }}>
-        {/* Author */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
           <Avatar src={post.avatar} sx={{ width: 26, height: 26, fontSize: '0.65rem', fontWeight: 800, backgroundColor: '#0F172A' }}>
             {getInitial(post.writer)}
           </Avatar>
           <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569' }}>{post.writer}</Typography>
           <Typography sx={{ fontSize: '0.72rem', color: '#CBD5E1' }}>·</Typography>
-          <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8' }}>{post.createdAt}</Typography>
+          <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8' }}>{timeAgo(post.createdAt)}</Typography>
           <Box sx={{ flex: 1 }} />
-          <Chip
-            label={post.tag}
-            size="small"
-            sx={{
+          {post.tags?.[0] && (
+            <Chip label={post.tags[0]} size="small" sx={{
               backgroundColor: m.bg, color: m.color,
               fontWeight: 700, fontSize: '0.65rem', height: 18,
               border: `1px solid ${m.color}22`,
-            }}
-          />
+            }} />
+          )}
         </Box>
-
-        {/* Title */}
         <Typography sx={{
           fontWeight: 700, fontSize: '0.95rem', color: '#0F172A',
           mb: 0.8, lineHeight: 1.45, letterSpacing: '-0.01em',
@@ -443,43 +394,35 @@ const PostCard = ({ post, idx }) => {
         }}>
           {post.title}
         </Typography>
-
-        {/* Description */}
         <Typography sx={{
           fontSize: '0.82rem', color: '#64748B', lineHeight: 1.7, mb: 2,
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
         }}>
           {post.description}
         </Typography>
-
-        {/* Actions */}
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Stack direction="row" spacing={0.5}>
-            <Button
-              size="small"
-              startIcon={liked ? <Favorite sx={{ fontSize: 14, color: '#EF4444' }} /> : <Favorite sx={{ fontSize: 14 }} />}
-              onClick={() => { setLiked(l => !l); setLikeCount(c => c + (liked ? -1 : 1)); }}
+            <Button size="small" onClick={toggleLike}
+              startIcon={liked
+                ? <Favorite sx={{ fontSize: 14, color: '#EF4444' }} />
+                : <FavoriteBorder sx={{ fontSize: 14 }} />
+              }
               sx={{
                 color: liked ? '#EF4444' : '#94A3B8', fontSize: '0.78rem', fontWeight: 600,
-                textTransform: 'none', px: 1, borderRadius: 1.5, minWidth: 0,
+                px: 1, borderRadius: 1.5, minWidth: 0,
                 '&:hover': { backgroundColor: '#FEF2F2', color: '#EF4444' },
               }}
             >
               {likeCount}
             </Button>
-            <Button
-              size="small"
+            <Button size="small"
               startIcon={<ChatBubbleOutline sx={{ fontSize: 14 }} />}
-              sx={{
-                color: '#94A3B8', fontSize: '0.78rem', fontWeight: 600,
-                textTransform: 'none', px: 1, borderRadius: 1.5, minWidth: 0,
-                '&:hover': { backgroundColor: '#EFF6FF', color: '#2563EB' },
-              }}
+              sx={{ color: '#94A3B8', fontSize: '0.78rem', fontWeight: 600, px: 1, borderRadius: 1.5, minWidth: 0, '&:hover': { backgroundColor: '#EFF6FF', color: '#2563EB' } }}
             >
               {post.commentCount}
             </Button>
           </Stack>
-          <IconButton size="small" onClick={() => setBookmarked(b => !b)}>
+          <IconButton size="small" onClick={toggleBookmark}>
             {bookmarked
               ? <Bookmark sx={{ fontSize: 16, color: '#2563EB' }} />
               : <BookmarkBorderOutlined sx={{ fontSize: 16, color: '#CBD5E1' }} />
@@ -494,45 +437,72 @@ const PostCard = ({ post, idx }) => {
 // ──────────────────────────────────────────
 //  UserCard
 // ──────────────────────────────────────────
-const UserCard = ({ user, idx }) => {
-  const [following, setFollowing] = useState(user.following);
+const UserCard = ({ user, idx, token }) => {
+  const [following, setFollowing] = useState(user.IS_FOLLOWING);
+  const [followerCount, setFollowerCount] = useState(Number(user.FOLLOWER_COUNT) || 0);
+  const [loading, setLoading] = useState(false);
+
+  const toggleFollow = async () => {
+    // 낙관적 업데이트: API 응답 기다리지 않고 즉시 UI 반영
+    const willFollow = !following;
+    setFollowing(willFollow);
+    setFollowerCount(c => c + (willFollow ? 1 : -1));
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/explore/follow/${user.USER_ID}`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      // 서버 응답이 다르면 롤백
+      if (!data.success || data.following !== willFollow) {
+        setFollowing(!willFollow);
+        setFollowerCount(c => c + (willFollow ? -1 : 1));
+      }
+    } catch {
+      // 실패 시 롤백
+      setFollowing(!willFollow);
+      setFollowerCount(c => c + (willFollow ? -1 : 1));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <Box sx={{
-      backgroundColor: '#fff',
-      border: '1px solid #E2E8F0',
-      borderRadius: 2,
-      p: 2.5,
-      display: 'flex', alignItems: 'center', gap: 2,
+      backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 2,
+      p: 2.5, display: 'flex', alignItems: 'center', gap: 2,
       animation: `fadeUp 0.35s ease ${idx * 0.05}s both`,
       transition: 'all 0.2s',
       '&:hover': { borderColor: '#CBD5E1', boxShadow: '0 4px 16px rgba(15,23,42,0.06)' },
     }}>
-      <Avatar
-        src={user.avatar}
-        sx={{ width: 48, height: 48, fontSize: '1rem', fontWeight: 800, backgroundColor: '#0F172A' }}
-      >
-        {getInitial(user.name)}
+      <Avatar src={user.AVATAR} sx={{ width: 48, height: 48, fontSize: '1rem', fontWeight: 800, backgroundColor: '#0F172A' }}>
+        {getInitial(user.NICKNAME)}
       </Avatar>
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography sx={{ fontWeight: 800, fontSize: '0.9rem', color: '#0F172A', lineHeight: 1.2 }}>
-          {user.name}
+          {user.NICKNAME}
         </Typography>
-        <Typography sx={{ fontSize: '0.75rem', color: '#94A3B8', mb: 0.3 }}>{user.handle}</Typography>
-        <Typography sx={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 500 }}>{user.role}</Typography>
+        <Typography sx={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 500, mt: 0.3 }}>
+          {user.BIO || '소개가 없습니다.'}
+        </Typography>
       </Box>
       <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
         <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8', mb: 0.8 }}>
-          팔로워 {user.followers.toLocaleString()}
+          팔로워 {followerCount.toLocaleString()}
         </Typography>
         <Button
           size="small"
-          startIcon={following ? null : <PersonAdd sx={{ fontSize: 13 }} />}
-          onClick={() => setFollowing(f => !f)}
+          disabled={loading}
+          startIcon={loading
+            ? <CircularProgress size={11} />
+            : following
+              ? <PersonRemove sx={{ fontSize: 13 }} />
+              : <PersonAdd sx={{ fontSize: 13 }} />
+          }
+          onClick={toggleFollow}
           sx={{
-            fontSize: '0.75rem', fontWeight: 700, textTransform: 'none',
-            px: 1.8, py: 0.5, borderRadius: 1.2, minWidth: 0,
-            boxShadow: 'none',
+            fontSize: '0.75rem', fontWeight: 700, px: 1.8, py: 0.5,
+            borderRadius: 1.2, minWidth: 0, boxShadow: 'none',
             ...(following
               ? { border: '1px solid #E2E8F0', color: '#64748B', backgroundColor: 'transparent', '&:hover': { borderColor: '#EF4444', color: '#EF4444', backgroundColor: '#FEF2F2' } }
               : { backgroundColor: '#0F172A', color: '#fff', '&:hover': { backgroundColor: '#2563EB' } }
@@ -550,99 +520,148 @@ const UserCard = ({ user, idx }) => {
 // ──────────────────────────────────────────
 //  TagCard
 // ──────────────────────────────────────────
-const TagCard = ({ tag, idx }) => {
-  const m = TAG_META[tag.label] ?? { color: '#64748B', bg: '#F1F5F9', icon: null };
+const TagCard = ({ tag, idx, onTagClick }) => {
+  const m = getTagColor(tag.TAG_NAME);
   return (
-    <Box sx={{
-      backgroundColor: '#fff',
-      border: '1px solid #E2E8F0',
-      borderRadius: 2,
-      p: 2.5,
-      display: 'flex', alignItems: 'center', gap: 2,
-      cursor: 'pointer',
-      animation: `fadeUp 0.35s ease ${idx * 0.05}s both`,
-      transition: 'all 0.2s',
-      '&:hover': { borderColor: m.color, boxShadow: `0 4px 16px ${m.color}14`, transform: 'translateY(-1px)' },
-    }}>
+    <Box
+      onClick={() => onTagClick(tag.TAG_NAME)}
+      sx={{
+        backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 2,
+        p: 2.5, display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer',
+        animation: `fadeUp 0.35s ease ${idx * 0.05}s both`,
+        transition: 'all 0.2s',
+        '&:hover': { borderColor: m.color, boxShadow: `0 4px 16px ${m.color}14`, transform: 'translateY(-1px)' },
+      }}
+    >
       <Box sx={{
-        width: 44, height: 44, borderRadius: 1.5,
-        backgroundColor: m.bg,
+        width: 44, height: 44, borderRadius: 1.5, backgroundColor: m.bg,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0,
-        color: m.color,
-        border: `1px solid ${m.color}22`,
+        flexShrink: 0, color: m.color, border: `1px solid ${m.color}22`,
       }}>
-        <Box sx={{ transform: 'scale(1.6)' }}>{m.icon}</Box>
+        <Tag sx={{ fontSize: 22 }} />
       </Box>
       <Box sx={{ flex: 1 }}>
-        <Typography sx={{ fontWeight: 800, fontSize: '0.92rem', color: '#0F172A' }}>#{tag.label}</Typography>
-        <Typography sx={{ fontSize: '0.75rem', color: '#94A3B8', mt: 0.2 }}>{tag.count} 게시물</Typography>
-      </Box>
-      <Box sx={{
-        px: 1.2, py: 0.4,
-        backgroundColor: '#ECFDF5', borderRadius: 10,
-        color: '#059669', fontSize: '0.7rem', fontWeight: 700,
-      }}>
-        {tag.growth}
+        <Typography sx={{ fontWeight: 800, fontSize: '0.92rem', color: '#0F172A' }}>#{tag.TAG_NAME}</Typography>
+        <Typography sx={{ fontSize: '0.75rem', color: '#94A3B8', mt: 0.2 }}>
+          {formatCount(tag.POST_COUNT)} 게시물
+        </Typography>
       </Box>
     </Box>
   );
 };
 
 // ──────────────────────────────────────────
-//  DefaultView — 검색 전 화면
+//  Skeleton loaders
 // ──────────────────────────────────────────
-const DefaultView = ({ onTagClick }) => (
-  <Box sx={{ animation: 'fadeUp 0.3s ease both' }}>
-    {/* 트렌딩 태그 섹션 */}
-    <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: '#0F172A', mb: 2, letterSpacing: '-0.01em' }}>
-      🔥 지금 뜨는 태그
-    </Typography>
-    <Stack spacing={1.5} sx={{ mb: 4 }}>
-      {TRENDING_TAGS.map((t, i) => (
-        <Box
-          key={t.tag}
-          onClick={() => onTagClick(t.tag.replace('#', ''))}
-          sx={{
-            display: 'flex', alignItems: 'center',
-            backgroundColor: '#fff',
-            border: '1px solid #E2E8F0',
-            borderRadius: 2,
-            px: 2, py: 1.6,
-            cursor: 'pointer',
-            animation: `fadeUp 0.35s ease ${i * 0.05}s both`,
-            transition: 'all 0.18s',
-            '&:hover': { borderColor: '#2563EB', boxShadow: '0 4px 16px rgba(37,99,235,0.08)', transform: 'translateX(3px)' },
-          }}
-        >
-          <Typography sx={{ color: '#CBD5E1', fontWeight: 800, fontSize: '0.78rem', width: 20, mr: 1.5 }}>
-            {i + 1}
-          </Typography>
-          <Tag sx={{ fontSize: 16, color: '#94A3B8', mr: 1 }} />
-          <Typography sx={{ fontWeight: 700, fontSize: '0.88rem', color: '#0F172A', flex: 1 }}>
-            {t.tag}
-          </Typography>
-          <Typography sx={{ fontSize: '0.75rem', color: '#94A3B8', mr: 2 }}>{t.count} 게시물</Typography>
-          <Box sx={{
-            px: 1, py: 0.3,
-            backgroundColor: '#ECFDF5', borderRadius: 10,
-            color: '#059669', fontSize: '0.68rem', fontWeight: 800,
-          }}>
-            {t.growth}
-          </Box>
-        </Box>
-      ))}
-    </Stack>
+const PostSkeleton = () => (
+  <Box sx={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 2, p: 2.5 }}>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+      <Skeleton variant="circular" width={26} height={26} />
+      <Skeleton width={80} height={16} />
+    </Box>
+    <Skeleton width="90%" height={20} sx={{ mb: 0.8 }} />
+    <Skeleton width="70%" height={20} sx={{ mb: 1.5 }} />
+    <Skeleton width="100%" height={14} />
+    <Skeleton width="80%" height={14} />
+  </Box>
+);
 
-    {/* 추천 개발자 */}
-    <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: '#0F172A', mb: 2, letterSpacing: '-0.01em' }}>
-      👥 팔로우 추천
+const UserSkeleton = () => (
+  <Box sx={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 2, p: 2.5, display: 'flex', alignItems: 'center', gap: 2 }}>
+    <Skeleton variant="circular" width={48} height={48} />
+    <Box sx={{ flex: 1 }}>
+      <Skeleton width={120} height={18} />
+      <Skeleton width={80} height={14} sx={{ mt: 0.5 }} />
+    </Box>
+    <Skeleton width={70} height={32} sx={{ borderRadius: 1 }} />
+  </Box>
+);
+
+// ──────────────────────────────────────────
+//  DefaultView
+// ──────────────────────────────────────────
+const DefaultView = ({ trendingTags, recommendedUsers, loadingDefault, onTagClick, token }) => {
+  if (loadingDefault) {
+    return (
+      <Stack spacing={1.5}>
+        {[...Array(5)].map((_, i) => <UserSkeleton key={i} />)}
+      </Stack>
+    );
+  }
+
+  return (
+    <Box sx={{ animation: 'fadeUp 0.3s ease both' }}>
+      {/* 트렌딩 태그 */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+        <LocalFireDepartment sx={{ color: '#F87171', fontSize: 18, opacity: 0.75 }} />
+        <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: '#0F172A', letterSpacing: '-0.01em' }}>
+          지금 뜨는 태그
+        </Typography>
+      </Box>
+      <Stack spacing={1.5} sx={{ mb: 4 }}>
+        {trendingTags.map((t, i) => {
+          const m = getTagColor(t.TAG_NAME);
+          return (
+            <Box
+              key={t.TAG_NAME}
+              onClick={() => onTagClick(t.TAG_NAME)}
+              sx={{
+                display: 'flex', alignItems: 'center',
+                backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 2,
+                px: 2, py: 1.6, cursor: 'pointer',
+                animation: `fadeUp 0.35s ease ${i * 0.05}s both`,
+                transition: 'all 0.18s',
+                '&:hover': { borderColor: '#2563EB', boxShadow: '0 4px 16px rgba(37,99,235,0.08)', transform: 'translateX(3px)' },
+              }}
+            >
+              <Typography sx={{ color: '#CBD5E1', fontWeight: 800, fontSize: '0.78rem', width: 20, mr: 1.5 }}>
+                {i + 1}
+              </Typography>
+              <Tag sx={{ fontSize: 15, color: '#94A3B8', mr: 1 }} />
+              <Typography sx={{ fontWeight: 700, fontSize: '0.88rem', color: '#0F172A', flex: 1 }}>
+                #{t.TAG_NAME}
+              </Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: '#94A3B8', mr: 1 }}>
+                {formatCount(t.POST_COUNT)} 게시물
+              </Typography>
+              {i < 3 && (
+                <EmojiEvents sx={{ fontSize: 15, color: i === 0 ? '#D4A843' : i === 1 ? '#B0B8C4' : '#A07850', opacity: 0.7 }} />
+              )}
+            </Box>
+          );
+        })}
+      </Stack>
+
+      {/* 추천 개발자 */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+        <GroupAdd sx={{ color: '#93B4E0', fontSize: 18, opacity: 0.85 }} />
+        <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: '#0F172A', letterSpacing: '-0.01em' }}>
+          팔로우 추천
+        </Typography>
+      </Box>
+      <Stack spacing={1.5}>
+        {recommendedUsers.map((u, i) => (
+          <UserCard key={u.USER_ID} user={u} idx={i} token={token} />
+        ))}
+      </Stack>
+    </Box>
+  );
+};
+
+// ──────────────────────────────────────────
+//  EmptyState
+// ──────────────────────────────────────────
+const EmptyState = ({ label, query }) => (
+  <Box sx={{ textAlign: 'center', py: 8, animation: 'fadeUp 0.3s ease both' }}>
+    <Box sx={{ mb: 1.5 }}>
+      <Search sx={{ fontSize: 40, color: '#E2E8F0' }} />
+    </Box>
+    <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color: '#0F172A', mb: 0.5 }}>
+      "{query}"에 해당하는 {label}이 없습니다
     </Typography>
-    <Stack spacing={1.5}>
-      {MOCK_USERS.slice(0, 4).map((u, i) => (
-        <UserCard key={u.id} user={u} idx={i} />
-      ))}
-    </Stack>
+    <Typography sx={{ fontSize: '0.82rem', color: '#94A3B8' }}>
+      다른 키워드로 검색해보세요
+    </Typography>
   </Box>
 );
 
@@ -653,25 +672,95 @@ export default function Explore() {
   const navigate = useNavigate();
   const token = localStorage.getItem('accessToken');
 
-  const [query, setQuery] = useState('');
   const [inputValue, setInputValue] = useState('');
+  const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
-  const [activeResultTab, setActiveResultTab] = useState('posts'); // posts | users | tags
+  const [activeResultTab, setActiveResultTab] = useState('posts');
   const [activeTagFilter, setActiveTagFilter] = useState('all');
-  const [loading, setLoading] = useState(false);
+  const [recentSearches, setRecentSearches] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('explore_recent') || '[]'); } catch { return []; }
+  });
+
+  // 기본 화면 데이터
+  const [trendingTags, setTrendingTags] = useState([]);
+  const [recommendedUsers, setRecommendedUsers] = useState([]);
+  const [loadingDefault, setLoadingDefault] = useState(true);
+
+  // 검색 결과
+  const [posts, setPosts] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [tags, setTags] = useState([]);
+  const [loadingSearch, setLoadingSearch] = useState(false);
+  const [availableTags, setAvailableTags] = useState([]); // 필터 칩용 태그 목록
 
   const inputRef = useRef(null);
-  const dropdownRef = useRef(null);
+
+  // 기본 화면 데이터 로드
+  const loadDefault = useCallback(async () => {
+    setLoadingDefault(true);
+    try {
+      const [tRes, uRes] = await Promise.all([
+        fetch(`${API}/explore/trending-tags`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API}/explore/recommended-users`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      const [tData, uData] = await Promise.all([tRes.json(), uRes.json()]);
+      if (tData.success) setTrendingTags(tData.tags);
+      if (uData.success) setRecommendedUsers(uData.users);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingDefault(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) { navigate('/'); return; }
+    loadDefault();
+  }, [token, navigate, loadDefault]);
 
   // 검색 실행
+  const doSearch = useCallback(async (q) => {
+    if (!q?.trim()) return;
+    setLoadingSearch(true);
+    try {
+      const res = await fetch(
+        `${API}/explore/search?q=${encodeURIComponent(q)}&type=all&limit=30`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await res.json();
+      if (data.success) {
+        setPosts(data.posts || []);
+        setUsers(data.users || []);
+        setTags(data.tags || []);
+        // 필터 칩 목록 = 결과 posts에 있는 태그들
+        const tagSet = new Set();
+        (data.posts || []).forEach(p => (p.tags || []).forEach(t => tagSet.add(t)));
+        setAvailableTags([...tagSet]);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingSearch(false);
+    }
+  }, [token]);
+
   const handleSearch = (val) => {
-    const v = val ?? inputValue;
-    if (!v.trim()) return;
+    const v = (val ?? inputValue).trim();
+    if (!v) return;
     setQuery(v);
     setInputValue(v);
     setFocused(false);
     setActiveResultTab('posts');
     setActiveTagFilter('all');
+
+    // 최근 검색 저장
+    setRecentSearches(prev => {
+      const updated = [v, ...prev.filter(s => s !== v)].slice(0, 5);
+      localStorage.setItem('explore_recent', JSON.stringify(updated));
+      return updated;
+    });
+
+    doSearch(v);
   };
 
   const handleClear = () => {
@@ -681,63 +770,34 @@ export default function Explore() {
     inputRef.current?.focus();
   };
 
-  // 필터링
-  const filteredPosts = MOCK_POSTS.filter(p => {
-    const matchQuery = !query ||
-      p.title.toLowerCase().includes(query.toLowerCase()) ||
-      p.description.toLowerCase().includes(query.toLowerCase()) ||
-      p.tag.toLowerCase().includes(query.toLowerCase()) ||
-      p.writer.toLowerCase().includes(query.toLowerCase());
-    const matchTag = activeTagFilter === 'all' || p.tag === activeTagFilter;
-    return matchQuery && matchTag;
-  });
+  // 태그 필터 적용한 posts
+  const filteredPosts = activeTagFilter === 'all'
+    ? posts
+    : posts.filter(p => (p.tags || []).includes(activeTagFilter));
 
-  const filteredUsers = MOCK_USERS.filter(u =>
-    !query ||
-    u.name.toLowerCase().includes(query.toLowerCase()) ||
-    u.handle.toLowerCase().includes(query.toLowerCase()) ||
-    u.role.toLowerCase().includes(query.toLowerCase())
-  );
-
-  const filteredTags = TRENDING_TAGS.filter(t =>
-    !query || t.tag.toLowerCase().includes(query.toLowerCase())
-  ).map(t => ({
-    label: t.tag.replace('#', ''),
-    count: t.count,
-    growth: t.growth,
-  }));
-
-  const showDropdown = focused && !query || focused && query.length > 0;
+  const showDropdown = focused;
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box sx={{ minHeight: '100vh', backgroundColor: '#F8FAFC' }}>
 
-        {/* ── Top bar ── */}
+        {/* Top bar */}
         <Box sx={{
           position: 'sticky', top: 0, zIndex: 100,
-          backgroundColor: 'rgba(248,250,252,0.9)',
-          backdropFilter: 'blur(12px)',
+          backgroundColor: 'rgba(248,250,252,0.9)', backdropFilter: 'blur(12px)',
           borderBottom: '1px solid #E2E8F0',
         }}>
           <Box sx={{ maxWidth: 860, mx: 'auto', px: { xs: 2, md: 4 }, py: 1.5, display: 'flex', alignItems: 'center', gap: 2 }}>
             <IconButton size="small" onClick={() => navigate('/feed')} sx={{ color: '#64748B', flexShrink: 0 }}>
               <ArrowBack sx={{ fontSize: 20 }} />
             </IconButton>
-            {/* 로고 */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 1, flexShrink: 0 }}>
-              <Box sx={{
-                width: 26, height: 26, borderRadius: 1,
-                backgroundColor: '#0F172A',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
+              <Box sx={{ width: 26, height: 26, borderRadius: 1, backgroundColor: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '0.68rem' }}>{'<>'}</Typography>
               </Box>
               <Typography sx={{ fontWeight: 800, fontSize: '0.95rem', letterSpacing: '-0.02em', color: '#0F172A' }}>탐색</Typography>
             </Box>
-
-            {/* Search bar */}
             <Box sx={{ flex: 1, position: 'relative' }}>
               <SearchBar
                 value={inputValue}
@@ -745,28 +805,37 @@ export default function Explore() {
                 onClear={handleClear}
                 onFocus={() => setFocused(true)}
                 onBlur={() => setTimeout(() => setFocused(false), 150)}
+                onEnter={handleSearch}
                 inputRef={inputRef}
               />
-              {/* Enter 키 처리 */}
-              <Box
-                component="input"
-                sx={{ display: 'none' }}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
-              />
               {showDropdown && (
-                <SearchDropdown query={inputValue} onSelect={handleSearch} />
+                <SearchDropdown
+                  query={inputValue}
+                  recentSearches={recentSearches}
+                  trendingTags={trendingTags}
+                  onSelect={handleSearch}
+                  token={token}
+                  onClearRecent={() => {
+                    setRecentSearches([]);
+                    localStorage.removeItem('explore_recent');
+                  }}
+                  onDeleteRecent={(s) => {
+                    setRecentSearches(prev => {
+                      const updated = prev.filter(x => x !== s);
+                      localStorage.setItem('explore_recent', JSON.stringify(updated));
+                      return updated;
+                    });
+                  }}
+                />
               )}
             </Box>
-
             <Button
               variant="contained"
               onClick={() => handleSearch()}
               sx={{
-                backgroundColor: '#0F172A', color: '#fff',
-                textTransform: 'none', fontWeight: 700, fontSize: '0.82rem',
+                backgroundColor: '#0F172A', color: '#fff', fontSize: '0.82rem',
                 px: 2.2, py: 1, borderRadius: 1.5, boxShadow: 'none', flexShrink: 0,
-                '&:hover': { backgroundColor: '#2563EB' },
-                transition: 'background 0.18s',
+                '&:hover': { backgroundColor: '#2563EB' }, transition: 'background 0.18s',
               }}
             >
               검색
@@ -774,87 +843,57 @@ export default function Explore() {
           </Box>
         </Box>
 
-        {/* ── Body ── */}
+        {/* Body */}
         <Box sx={{ maxWidth: 860, mx: 'auto', px: { xs: 2, md: 4 }, py: 4 }}>
-
           {!query ? (
-            // ── 기본 화면 ──
-            <DefaultView onTagClick={(tag) => { setInputValue(tag); handleSearch(tag); }} />
+            <DefaultView
+              trendingTags={trendingTags}
+              recommendedUsers={recommendedUsers}
+              loadingDefault={loadingDefault}
+              onTagClick={(tag) => handleSearch(tag)}
+              token={token}
+            />
           ) : (
-            // ── 검색 결과 화면 ──
             <Box sx={{ animation: 'fadeIn 0.25s ease both' }}>
-
               {/* 결과 헤더 */}
               <Box sx={{ mb: 3 }}>
                 <Typography sx={{ fontWeight: 800, fontSize: '1.1rem', color: '#0F172A', letterSpacing: '-0.02em' }}>
                   <Box component="span" sx={{ color: '#2563EB' }}>"{query}"</Box> 검색 결과
                 </Typography>
-                <Typography sx={{ color: '#94A3B8', fontSize: '0.82rem', mt: 0.3 }}>
-                  게시물 {filteredPosts.length}개 · 개발자 {filteredUsers.length}명 · 태그 {filteredTags.length}개
-                </Typography>
+                {!loadingSearch && (
+                  <Typography sx={{ color: '#94A3B8', fontSize: '0.82rem', mt: 0.3 }}>
+                    게시물 {posts.length}개 · 개발자 {users.length}명 · 태그 {tags.length}개
+                  </Typography>
+                )}
               </Box>
 
               {/* 결과 탭 */}
-              <Box sx={{
-                backgroundColor: '#fff',
-                border: '1px solid #E2E8F0',
-                borderRadius: 2,
-                overflow: 'hidden',
-                mb: 2.5,
-              }}>
+              <Box sx={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 2, overflow: 'hidden', mb: 2.5 }}>
                 <Box sx={{ display: 'flex', borderBottom: '1px solid #E2E8F0', px: 1 }}>
-                  <ResultTabBtn
-                    icon={<Article sx={{ fontSize: 15 }} />}
-                    label="게시물"
-                    active={activeResultTab === 'posts'}
-                    onClick={() => setActiveResultTab('posts')}
-                    count={filteredPosts.length}
-                  />
-                  <ResultTabBtn
-                    icon={<People sx={{ fontSize: 15 }} />}
-                    label="개발자"
-                    active={activeResultTab === 'users'}
-                    onClick={() => setActiveResultTab('users')}
-                    count={filteredUsers.length}
-                  />
-                  <ResultTabBtn
-                    icon={<Tag sx={{ fontSize: 15 }} />}
-                    label="태그"
-                    active={activeResultTab === 'tags'}
-                    onClick={() => setActiveResultTab('tags')}
-                    count={filteredTags.length}
-                  />
+                  <ResultTabBtn icon={<Article sx={{ fontSize: 15 }} />} label="게시물" active={activeResultTab === 'posts'} onClick={() => setActiveResultTab('posts')} count={posts.length} />
+                  <ResultTabBtn icon={<People sx={{ fontSize: 15 }} />} label="개발자" active={activeResultTab === 'users'} onClick={() => setActiveResultTab('users')} count={users.length} />
+                  <ResultTabBtn icon={<Tag sx={{ fontSize: 15 }} />} label="태그" active={activeResultTab === 'tags'} onClick={() => setActiveResultTab('tags')} count={tags.length} />
                 </Box>
 
-                {/* 태그 필터 (posts 탭일 때만) */}
-                {activeResultTab === 'posts' && (
+                {/* 태그 필터 (posts 탭) */}
+                {activeResultTab === 'posts' && availableTags.length > 0 && (
                   <Box sx={{
                     display: 'flex', gap: 0.8, px: 2, py: 1.5,
                     overflowX: 'auto', '&::-webkit-scrollbar': { display: 'none' },
                     borderBottom: '1px solid #F1F5F9',
                   }}>
-                    {CATEGORY_TAGS.map(ct => {
-                      const m = ct.value !== 'all' ? TAG_META[ct.value] : null;
-                      const active = activeTagFilter === ct.value;
+                    {['all', ...availableTags].map(ct => {
+                      const active = activeTagFilter === ct;
+                      const m = ct !== 'all' ? getTagColor(ct) : null;
                       return (
-                        <Chip
-                          key={ct.value}
-                          label={ct.label}
-                          size="small"
-                          onClick={() => setActiveTagFilter(ct.value)}
+                        <Chip key={ct} label={ct === 'all' ? '전체' : ct} size="small"
+                          onClick={() => setActiveTagFilter(ct)}
                           sx={{
                             fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer', flexShrink: 0,
-                            backgroundColor: active
-                              ? (m ? m.bg : '#0F172A')
-                              : '#F8FAFC',
-                            color: active
-                              ? (m ? m.color : '#fff')
-                              : '#94A3B8',
-                            border: active
-                              ? `1px solid ${m ? m.color + '44' : 'transparent'}`
-                              : '1px solid #E2E8F0',
-                            '&:hover': { opacity: 0.85 },
-                            transition: 'all 0.15s',
+                            backgroundColor: active ? (m ? m.bg : '#0F172A') : '#F8FAFC',
+                            color: active ? (m ? m.color : '#fff') : '#94A3B8',
+                            border: active ? `1px solid ${m ? m.color + '44' : 'transparent'}` : '1px solid #E2E8F0',
+                            '&:hover': { opacity: 0.85 }, transition: 'all 0.15s',
                           }}
                         />
                       );
@@ -864,34 +903,28 @@ export default function Explore() {
               </Box>
 
               {/* 결과 리스트 */}
-              {activeResultTab === 'posts' && (
-                filteredPosts.length === 0 ? (
-                  <EmptyState label="게시물" query={query} />
-                ) : (
-                  <Stack spacing={2}>
-                    {filteredPosts.map((p, i) => <PostCard key={p.id} post={p} idx={i} />)}
-                  </Stack>
-                )
-              )}
-
-              {activeResultTab === 'users' && (
-                filteredUsers.length === 0 ? (
-                  <EmptyState label="개발자" query={query} />
-                ) : (
-                  <Stack spacing={1.5}>
-                    {filteredUsers.map((u, i) => <UserCard key={u.id} user={u} idx={i} />)}
-                  </Stack>
-                )
-              )}
-
-              {activeResultTab === 'tags' && (
-                filteredTags.length === 0 ? (
-                  <EmptyState label="태그" query={query} />
-                ) : (
-                  <Stack spacing={1.5}>
-                    {filteredTags.map((t, i) => <TagCard key={t.label} tag={t} idx={i} />)}
-                  </Stack>
-                )
+              {loadingSearch ? (
+                <Stack spacing={2}>
+                  {[...Array(4)].map((_, i) => <PostSkeleton key={i} />)}
+                </Stack>
+              ) : (
+                <>
+                  {activeResultTab === 'posts' && (
+                    filteredPosts.length === 0
+                      ? <EmptyState label="게시물" query={query} />
+                      : <Stack spacing={2}>{filteredPosts.map((p, i) => <PostCard key={p.id} post={p} idx={i} token={token} />)}</Stack>
+                  )}
+                  {activeResultTab === 'users' && (
+                    users.length === 0
+                      ? <EmptyState label="개발자" query={query} />
+                      : <Stack spacing={1.5}>{users.map((u, i) => <UserCard key={u.USER_ID} user={u} idx={i} token={token} />)}</Stack>
+                  )}
+                  {activeResultTab === 'tags' && (
+                    tags.length === 0
+                      ? <EmptyState label="태그" query={query} />
+                      : <Stack spacing={1.5}>{tags.map((t, i) => <TagCard key={t.TAG_NAME} tag={t} idx={i} onTagClick={(tag) => handleSearch(tag)} />)}</Stack>
+                  )}
+                </>
               )}
             </Box>
           )}
@@ -900,18 +933,3 @@ export default function Explore() {
     </ThemeProvider>
   );
 }
-
-// ──────────────────────────────────────────
-//  EmptyState
-// ──────────────────────────────────────────
-const EmptyState = ({ label, query }) => (
-  <Box sx={{ textAlign: 'center', py: 8, animation: 'fadeUp 0.3s ease both' }}>
-    <Typography sx={{ fontSize: '2rem', mb: 1 }}>🔍</Typography>
-    <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color: '#0F172A', mb: 0.5 }}>
-      "{query}"에 해당하는 {label}이 없습니다
-    </Typography>
-    <Typography sx={{ fontSize: '0.82rem', color: '#94A3B8' }}>
-      다른 키워드로 검색해보세요
-    </Typography>
-  </Box>
-);

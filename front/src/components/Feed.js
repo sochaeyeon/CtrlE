@@ -1,53 +1,24 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Box,
-  Avatar,
-  Button,
-  Chip,
-  Divider,
-  IconButton,
-  InputBase,
-  Stack,
-  Typography,
-  createTheme,
-  ThemeProvider,
-  CssBaseline,
-  Tooltip,
-  Menu,
-  MenuItem,
-  Badge,
-  Dialog,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
-  InputAdornment,
-  CircularProgress,
+  Box, Avatar, Button, Chip, Divider, IconButton, InputBase,
+  Stack, Typography, createTheme, ThemeProvider, CssBaseline,
+  Tooltip, Menu, MenuItem, Badge, Dialog, List, ListItem,
+  ListItemAvatar, ListItemText, CircularProgress,
+  Snackbar, Alert, Modal, Backdrop, Fade,
+  Radio, RadioGroup, FormControlLabel, TextField,
 } from '@mui/material';
 import {
-  FavoriteBorderOutlined,
-  Favorite,
-  ChatBubbleOutline,
-  BookmarkBorderOutlined,
-  Bookmark,
-  MoreHoriz,
-  Add,
-  Search,
-  NotificationsNoneOutlined,
-  Code,
-  BugReport,
-  Rocket,
-  Lightbulb,
-  TrendingUp,
-  Close,
-  Send,
-  ArrowUpward,
+  FavoriteBorderOutlined, Favorite,
+  ChatBubbleOutline, BookmarkBorderOutlined, Bookmark,
+  MoreHoriz, Add, Search, NotificationsNoneOutlined,
+  Close, LocalFireDepartment, PeopleAlt,
+  ShareOutlined, Check, Edit, Delete, Flag,
+  ViewList, Category, Layers, FlagOutlined,
+  ArrowUpward, FavoriteBorder,
 } from '@mui/icons-material';
+import { BugReport, HelpOutline } from '@mui/icons-material';
 
-// ──────────────────────────────────────────
-//  Theme
-// ──────────────────────────────────────────
 const theme = createTheme({
   palette: {
     mode: 'light',
@@ -56,9 +27,7 @@ const theme = createTheme({
     background: { default: '#F8FAFC', paper: '#FFFFFF' },
     text: { primary: '#0F172A', secondary: '#64748B' },
   },
-  typography: {
-    fontFamily: '"Plus Jakarta Sans", "Noto Sans KR", sans-serif',
-  },
+  typography: { fontFamily: '"Plus Jakarta Sans", "Noto Sans KR", sans-serif' },
   shape: { borderRadius: 8 },
   components: {
     MuiCssBaseline: {
@@ -67,56 +36,396 @@ const theme = createTheme({
           from { opacity: 0; transform: translateY(16px); }
           to   { opacity: 1; transform: translateY(0); }
         }
-        @keyframes pulse {
-          0%, 100% { transform: scale(1); }
-          50%       { transform: scale(1.18); }
+        @keyframes heartPop {
+          0%   { transform: scale(1); }
+          30%  { transform: scale(1.5); }
+          60%  { transform: scale(0.9); }
+          100% { transform: scale(1); }
+        }
+        @keyframes bookmarkPop {
+          0%   { transform: scale(1) rotate(0deg); }
+          40%  { transform: scale(1.4) rotate(-8deg); }
+          70%  { transform: scale(0.9) rotate(4deg); }
+          100% { transform: scale(1) rotate(0deg); }
+        }
+        @keyframes slideDown {
+          from { opacity: 0; transform: translateY(-8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes notiIn {
+          from { opacity: 0; transform: scale(0.95) translateY(-8px); }
+          to   { opacity: 1; transform: scale(1) translateY(0); }
         }
       `,
     },
   },
 });
 
-// ──────────────────────────────────────────
-//  Constants
-// ──────────────────────────────────────────
-const TAG_FILTERS = [
-  { label: '전체', icon: null },
-  { label: 'Bug Fix', icon: <BugReport sx={{ fontSize: 13 }} /> },
-  { label: 'React', icon: <Code sx={{ fontSize: 13 }} /> },
-  { label: 'TypeScript', icon: <Code sx={{ fontSize: 13 }} /> },
-  { label: 'Architecture', icon: <Rocket sx={{ fontSize: 13 }} /> },
-  { label: 'Tip', icon: <Lightbulb sx={{ fontSize: 13 }} /> },
-  { label: 'DevOps', icon: <TrendingUp sx={{ fontSize: 13 }} /> },
+const FIXED_CATEGORIES = [
+  { label: '전체', value: null, icon: <ViewList sx={{ fontSize: 13 }} /> },
+  { label: '트러블슈팅', value: 'ERROR', icon: <BugReport sx={{ fontSize: 13 }} /> },
+  { label: '일반 질문', value: 'QUESTION', icon: <HelpOutline sx={{ fontSize: 13 }} /> },
+  { label: '자유 게시판', value: 'FREE', icon: <ChatBubbleOutline sx={{ fontSize: 13 }} /> },
 ];
 
-const TRENDING = [
-  { tag: '#ReactHooks', count: '1.2k 게시물' },
-  { tag: '#TypeScript5', count: '847 게시물' },
-  { tag: '#NextJS15', count: '634 게시물' },
-  { tag: '#PrismaORM', count: '412 게시물' },
-  { tag: '#DockerCompose', count: '389 게시물' },
-];
-
-const SUGGESTIONS = [
-  { name: 'Taehun Oh', handle: '@taehun', avatar: 'https://i.pravatar.cc/150?img=15', role: 'Rust · Backend' },
-  { name: 'Minji Kwon', handle: '@minji.fe', avatar: 'https://i.pravatar.cc/150?img=25', role: 'Vue · Frontend' },
-  { name: 'Seungho Lim', handle: '@seungho', avatar: 'https://i.pravatar.cc/150?img=52', role: 'ML · Data' },
+const REPORT_REASONS = [
+  { value: 'SPAM', label: '스팸 / 광고성 게시물' },
+  { value: 'HATE', label: '혐오 발언 / 차별' },
+  { value: 'ADULT', label: '성인 / 음란물' },
+  { value: 'FALSE', label: '허위 정보' },
+  { value: 'OTHER', label: '기타' },
 ];
 
 // ──────────────────────────────────────────
 //  Helpers
 // ──────────────────────────────────────────
+const API = 'http://localhost:3010';
+
 const resolveImageSrc = (src) =>
-  src ? src.replace(/src="\/uploads/g, 'src="http://localhost:3010/uploads') : '';
+  src ? src.replace(/src="\/uploads/g, `src="${API}/uploads`) : '';
+
+const resolveAvatarSrc = (src) => {
+  if (!src) return undefined;
+  if (src.startsWith('http')) return src;
+  return `${API}${src}`;
+};
 
 const getInitial = (name) => (name ? name.charAt(0).toUpperCase() : '?');
+
+// ── 시간 포맷: "방금 전", "3분 전", "2시간 전", "2025년 6월 3일"
+const formatRelativeTime = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d)) return dateStr;
+  const diff = Date.now() - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (diff < 60000) return '방금 전';
+  if (mins < 60) return `${mins}분 전`;
+  if (hours < 24) return `${hours}시간 전`;
+  if (days < 7) return `${days}일 전`;
+  return d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+};
+
+// ──────────────────────────────────────────
+//  ReportModal (PostDetail과 동일)
+// ──────────────────────────────────────────
+const ReportModal = ({ open, onClose, postId, token, onSuccess, onDuplicate }) => {
+  const [reason, setReason] = useState('');
+  const [detail, setDetail] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!reason || submitting) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${API}/feed/${postId}/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ reason, detail }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setReason(''); setDetail('');
+        onClose();
+        onSuccess();
+      } else if (res.status === 409) {
+        onClose();
+        onDuplicate();
+      } else {
+        onClose();
+        onDuplicate();
+      }
+    } catch {
+      onClose();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} closeAfterTransition
+      slots={{ backdrop: Backdrop }}
+      slotProps={{ backdrop: { timeout: 200, sx: { backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)' } } }}
+    >
+      <Fade in={open}>
+        <Box sx={{
+          position: 'fixed', top: '50%', left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: { xs: '90vw', sm: 440 },
+          backgroundColor: '#fff', borderRadius: 3,
+          boxShadow: '0 20px 60px rgba(15,23,42,0.18)',
+          overflow: 'hidden', outline: 'none',
+        }}>
+          <Box sx={{ px: 3, py: 2.5, borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+              <Box sx={{ width: 32, height: 32, borderRadius: 1.5, backgroundColor: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <FlagOutlined sx={{ fontSize: 17, color: '#DC2626' }} />
+              </Box>
+              <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: '#0F172A' }}>게시글 신고</Typography>
+            </Box>
+            <IconButton size="small" onClick={onClose} sx={{ color: '#94A3B8' }}>
+              <Close sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Box>
+
+          <Box sx={{ px: 3, py: 3 }}>
+            <Typography sx={{ fontSize: '0.82rem', color: '#64748B', mb: 2 }}>신고 사유를 선택해주세요.</Typography>
+            <RadioGroup value={reason} onChange={e => setReason(e.target.value)}>
+              {REPORT_REASONS.map(r => (
+                <FormControlLabel key={r.value} value={r.value} label={r.label}
+                  control={<Radio size="small" sx={{ color: '#CBD5E1', '&.Mui-checked': { color: '#2563EB' } }} />}
+                  sx={{
+                    mx: 0, px: 1.5, py: 0.8, borderRadius: 1.5, mb: 0.5,
+                    border: reason === r.value ? '1px solid #BFDBFE' : '1px solid transparent',
+                    backgroundColor: reason === r.value ? '#EFF6FF' : 'transparent',
+                    transition: 'all 0.15s',
+                    '& .MuiFormControlLabel-label': { fontSize: '0.88rem', fontWeight: reason === r.value ? 600 : 400 },
+                  }}
+                />
+              ))}
+            </RadioGroup>
+
+            {reason === 'OTHER' && (
+              <TextField multiline rows={2} fullWidth
+                placeholder="기타 사유를 입력해주세요"
+                value={detail} onChange={e => setDetail(e.target.value)}
+                sx={{ mt: 1.5, '& .MuiOutlinedInput-root': { fontSize: '0.85rem', borderRadius: 1.5, '& fieldset': { borderColor: '#E2E8F0' }, '&:hover fieldset': { borderColor: '#CBD5E1' }, '&.Mui-focused fieldset': { borderColor: '#2563EB' } } }}
+              />
+            )}
+
+            <Button fullWidth variant="contained"
+              disabled={!reason || submitting}
+              onClick={handleSubmit}
+              sx={{ mt: 2.5, py: 1.1, borderRadius: 1.5, textTransform: 'none', fontWeight: 700, fontSize: '0.88rem', backgroundColor: '#DC2626', boxShadow: 'none', '&:hover': { backgroundColor: '#B91C1C' }, '&.Mui-disabled': { backgroundColor: '#F1F5F9', color: '#94A3B8' } }}
+            >
+              {submitting ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : '신고 제출'}
+            </Button>
+          </Box>
+        </Box>
+      </Fade>
+    </Modal>
+  );
+};
+
+// ──────────────────────────────────────────
+//  ConfirmModal (alert/confirm 대체)
+// ──────────────────────────────────────────
+const ConfirmModal = ({ open, title, message, confirmLabel = '확인', confirmColor = '#EF4444', onConfirm, onClose }) => (
+  <Modal open={open} onClose={onClose} closeAfterTransition
+    slots={{ backdrop: Backdrop }}
+    slotProps={{ backdrop: { timeout: 200, sx: { backgroundColor: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(4px)' } } }}
+  >
+    <Fade in={open}>
+      <Box sx={{
+        position: 'fixed', top: '50%', left: '50%',
+        transform: 'translate(-50%, -50%)',
+        width: { xs: '88vw', sm: 380 },
+        backgroundColor: '#fff', borderRadius: 3,
+        boxShadow: '0 20px 60px rgba(15,23,42,0.16)',
+        overflow: 'hidden', outline: 'none',
+      }}>
+        <Box sx={{ px: 3, py: 3 }}>
+          <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: '#0F172A', mb: 1 }}>{title}</Typography>
+          <Typography sx={{ fontSize: '0.85rem', color: '#64748B', lineHeight: 1.7 }}>{message}</Typography>
+        </Box>
+        <Box sx={{ px: 3, pb: 3, display: 'flex', gap: 1.5, justifyContent: 'flex-end' }}>
+          <Button onClick={onClose} sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.85rem', color: '#64748B', px: 2, borderRadius: 1.5, border: '1px solid #E2E8F0', '&:hover': { backgroundColor: '#F8FAFC' } }}>
+            취소
+          </Button>
+          <Button onClick={onConfirm} sx={{ textTransform: 'none', fontWeight: 700, fontSize: '0.85rem', color: '#fff', px: 2.5, borderRadius: 1.5, backgroundColor: confirmColor, boxShadow: 'none', '&:hover': { filter: 'brightness(0.9)' } }}>
+            {confirmLabel}
+          </Button>
+        </Box>
+      </Box>
+    </Fade>
+  </Modal>
+);
+
+// ──────────────────────────────────────────
+//  NotificationModal
+// ──────────────────────────────────────────
+const NOTI_LABELS = {
+  LIKE: { text: '회원님의 게시글을 좋아합니다.', color: '#EF4444' },
+  COMMENT: { text: '회원님의 게시글에 댓글을 남겼습니다.', color: '#2563EB' },
+  FOLLOW: { text: '회원님을 팔로우하기 시작했습니다.', color: '#10B981' },
+  FOLLOW_REQUEST: { text: '팔로우를 요청했습니다.', color: '#F97316' },
+  FOLLOW_ACCEPTED: { text: '팔로우 요청을 수락했습니다.', color: '#10B981' },
+};
+const FollowRequestButtons = ({ requesterId, token, onHandled }) => {
+  const [loading, setLoading] = useState(null); // 'accept' | 'reject' | null
+
+  const handle = async (action) => {
+    setLoading(action);
+    try {
+      await fetch(`${API}/user/follow/${requesterId}/${action}`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      onHandled(action);
+    } catch { /* ignore */ }
+    finally { setLoading(null); }
+  };
+
+  return (
+    <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+      <Button size="small" variant="contained"
+        disabled={!!loading}
+        onClick={() => handle('accept')}
+        sx={{
+          fontSize: '0.72rem', fontWeight: 700, textTransform: 'none',
+          px: 1.5, py: 0.3, borderRadius: 1, minWidth: 0,
+          backgroundColor: '#0F172A', color: '#fff', boxShadow: 'none',
+          '&:hover': { backgroundColor: '#2563EB' },
+        }}
+      >
+        {loading === 'accept' ? <CircularProgress size={11} sx={{ color: '#fff' }} /> : '수락'}
+      </Button>
+      <Button size="small" variant="outlined"
+        disabled={!!loading}
+        onClick={() => handle('reject')}
+        sx={{
+          fontSize: '0.72rem', fontWeight: 700, textTransform: 'none',
+          px: 1.5, py: 0.3, borderRadius: 1, minWidth: 0,
+          borderColor: '#E2E8F0', color: '#64748B',
+          '&:hover': { borderColor: '#94A3B8', backgroundColor: '#F8FAFC' },
+        }}
+      >
+        {loading === 'reject' ? <CircularProgress size={11} sx={{ color: '#64748B' }} /> : '거절'}
+      </Button>
+    </Stack>
+  );
+};
+const NotificationModal = ({ open, onClose, token, navigate }) => {
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    fetch(`${API}/notifications`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) setNotifications(d.notifications ?? []);
+        // 전체 읽음 처리
+        fetch(`${API}/notifications/read`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` } }).catch(() => { });
+      })
+      .catch(() => { })
+      .finally(() => setLoading(false));
+  }, [open, token]);
+
+  const handleClick = (n) => {
+    onClose();
+    if (n.TARGET_TYPE === 'POST' && n.TARGET_ID) navigate(`/post/${n.TARGET_ID}`);
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} closeAfterTransition
+      slots={{ backdrop: Backdrop }}
+      slotProps={{ backdrop: { timeout: 200, sx: { backgroundColor: 'rgba(15,23,42,0.3)', backdropFilter: 'blur(2px)' } } }}
+    >
+      <Fade in={open}>
+        <Box sx={{
+          position: 'fixed', top: 64, right: { xs: 12, md: 32 },
+          width: { xs: 'calc(100vw - 24px)', sm: 380 },
+          maxHeight: '70vh',
+          backgroundColor: '#fff', borderRadius: 2.5,
+          boxShadow: '0 20px 60px rgba(15,23,42,0.16)',
+          border: '1px solid #E2E8F0',
+          overflow: 'hidden', outline: 'none',
+          animation: 'notiIn 0.2s ease both',
+        }}>
+          {/* 헤더 */}
+          <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography sx={{ fontWeight: 800, fontSize: '0.95rem', color: '#0F172A' }}>알림</Typography>
+            <IconButton size="small" onClick={onClose} sx={{ color: '#94A3B8' }}>
+              <Close sx={{ fontSize: 17 }} />
+            </IconButton>
+          </Box>
+
+          {/* 목록 */}
+          <Box sx={{ overflowY: 'auto', maxHeight: 'calc(70vh - 56px)' }}>
+            {loading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
+                <CircularProgress size={22} sx={{ color: '#2563EB' }} />
+              </Box>
+            ) : notifications.length === 0 ? (
+              <Box sx={{ textAlign: 'center', py: 8 }}>
+                <NotificationsNoneOutlined sx={{ fontSize: 36, color: '#E2E8F0', mb: 1 }} />
+                <Typography sx={{ color: '#94A3B8', fontSize: '0.85rem' }}>알림이 없습니다.</Typography>
+              </Box>
+            ) : (
+              notifications.map((n, i) => {
+                const meta = NOTI_LABELS[n.NOTI_TYPE] || { text: '새 알림', color: '#64748B' };
+                const isUnread = n.IS_READ === 'N';
+                return (
+                  <Box key={n.NOTI_ID || i}
+                    sx={{
+                      display: 'flex', alignItems: 'center', gap: 1.5,
+                      px: 2.5, py: 2,
+                      backgroundColor: isUnread ? '#F0F7FF' : 'transparent',
+                      borderBottom: '1px solid #F8FAFC',
+                      transition: 'background 0.15s',
+                      '&:hover': { backgroundColor: '#F8FAFC' },
+                      '&:last-child': { borderBottom: 'none' },
+                    }}
+                  >
+                    {/* 아바타 — FOLLOW_REQUEST 아닐 때만 클릭 이동 */}
+                    <Box
+                      sx={{ position: 'relative', flexShrink: 0, cursor: n.NOTI_TYPE !== 'FOLLOW_REQUEST' ? 'pointer' : 'default' }}
+                      onClick={() => n.NOTI_TYPE !== 'FOLLOW_REQUEST' && handleClick(n)}
+                    >
+                      <Avatar
+                        src={resolveAvatarSrc(n.SENDER_AVATAR)}
+                        sx={{ width: 36, height: 36, backgroundColor: '#0F172A', fontSize: '0.8rem', fontWeight: 800 }}
+                      >
+                        {getInitial(n.SENDER_NAME)}
+                      </Avatar>
+                      {isUnread && (
+                        <Box sx={{ position: 'absolute', top: -1, right: -1, width: 9, height: 9, borderRadius: '50%', backgroundColor: meta.color, border: '2px solid #fff' }} />
+                      )}
+                    </Box>
+
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography
+                        sx={{ fontSize: '0.82rem', color: '#0F172A', lineHeight: 1.5, cursor: n.NOTI_TYPE !== 'FOLLOW_REQUEST' ? 'pointer' : 'default' }}
+                        onClick={() => n.NOTI_TYPE !== 'FOLLOW_REQUEST' && handleClick(n)}
+                      >
+                        <Box component="span" sx={{ fontWeight: 700 }}>{n.SENDER_NAME || '알 수 없음'}</Box>
+                        {' '}{meta.text}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.7rem', color: '#94A3B8', mt: 0.2 }}>
+                        {formatRelativeTime(n.CREATED_AT)}
+                      </Typography>
+
+                      {/* 팔로우 요청일 때만 수락/거절 버튼 */}
+                      {n.NOTI_TYPE === 'FOLLOW_REQUEST' && (
+                        <FollowRequestButtons
+                          requesterId={n.SENDER_ID}
+                          token={token}
+                          onHandled={() => setNotifications(prev =>
+                            prev.filter(x => x.NOTI_ID !== n.NOTI_ID)
+                          )}
+                        />
+                      )}
+                    </Box>
+                  </Box>
+                );
+              })
+            )}
+          </Box>
+        </Box>
+      </Fade>
+    </Modal>
+  );
+};
 
 // ──────────────────────────────────────────
 //  NavBar
 // ──────────────────────────────────────────
-const NavBar = ({ onNewPost, onLogout }) => {
+const NavBar = ({ onLogout, notificationCount, onNotificationClick, token }) => {
   const navigate = useNavigate();
-  const [anchorEl, setAnchorEl] = useState(null);
 
   return (
     <Box sx={{
@@ -128,15 +437,8 @@ const NavBar = ({ onNewPost, onLogout }) => {
       <Box sx={{ maxWidth: 1200, mx: 'auto', px: { xs: 2, md: 4 }, py: 1.5, display: 'flex', alignItems: 'center', gap: 2 }}>
 
         {/* Logo */}
-        <Box
-          sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 2, cursor: 'pointer' }}
-          onClick={() => navigate('/feed')}
-        >
-          <Box sx={{
-            width: 28, height: 28, borderRadius: 1,
-            backgroundColor: '#0F172A',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 2, cursor: 'pointer' }} onClick={() => navigate('/feed')}>
+          <Box sx={{ width: 28, height: 28, borderRadius: 1, backgroundColor: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '0.75rem', lineHeight: 1 }}>{'<>'}</Typography>
           </Box>
           <Typography sx={{ fontWeight: 800, fontSize: '1rem', letterSpacing: '-0.02em', color: '#0F172A' }}>CtrlE</Typography>
@@ -146,8 +448,7 @@ const NavBar = ({ onNewPost, onLogout }) => {
         <Box sx={{
           flex: 1, maxWidth: 380,
           display: 'flex', alignItems: 'center', gap: 1,
-          backgroundColor: '#F1F5F9',
-          border: '1px solid #E2E8F0',
+          backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0',
           borderRadius: 2, px: 1.5, py: 0.6,
           '&:focus-within': { borderColor: '#2563EB', backgroundColor: '#fff' },
           transition: 'all 0.2s',
@@ -161,11 +462,14 @@ const NavBar = ({ onNewPost, onLogout }) => {
 
         <Box sx={{ flex: 1 }} />
 
-        {/* Actions */}
         <Stack direction="row" alignItems="center" spacing={1}>
           <Tooltip title="알림">
-            <IconButton size="small">
-              <Badge badgeContent={3} color="error" sx={{ '& .MuiBadge-badge': { fontSize: '0.6rem', minWidth: 16, height: 16 } }}>
+            <IconButton size="small" onClick={onNotificationClick}>
+              <Badge
+                badgeContent={notificationCount > 0 ? notificationCount : null}
+                color="error"
+                sx={{ '& .MuiBadge-badge': { fontSize: '0.6rem', minWidth: 16, height: 16 } }}
+              >
                 <NotificationsNoneOutlined sx={{ fontSize: 20, color: '#64748B' }} />
               </Badge>
             </IconButton>
@@ -174,7 +478,7 @@ const NavBar = ({ onNewPost, onLogout }) => {
           <Button
             variant="contained"
             startIcon={<Add sx={{ fontSize: 16 }} />}
-            onClick={() => navigate('/register')} // 💡 모달 대신 페이지 이동으로 직행
+            onClick={() => navigate('/register')}
             sx={{
               backgroundColor: '#0F172A', color: '#fff', textTransform: 'none',
               fontWeight: 700, fontSize: '0.8rem', px: 2, py: 0.9, borderRadius: 1.5,
@@ -185,703 +489,470 @@ const NavBar = ({ onNewPost, onLogout }) => {
           >
             새 게시물
           </Button>
-
         </Stack>
-
-        <Menu
-          anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}
-          PaperProps={{ sx: { mt: 1, boxShadow: '0 8px 30px rgba(0,0,0,0.08)', borderRadius: 2, border: '1px solid #E2E8F0', minWidth: 140 } }}
-        >
-          <MenuItem sx={{ fontSize: '0.83rem', fontWeight: 600, color: '#0F172A' }}>내 프로필</MenuItem>
-          <MenuItem sx={{ fontSize: '0.83rem', color: '#64748B' }}>설정</MenuItem>
-          <Divider />
-          <MenuItem sx={{ fontSize: '0.83rem', color: '#EF4444' }} onClick={onLogout}>로그아웃</MenuItem>
-        </Menu>
       </Box>
     </Box>
   );
 };
 
 // ──────────────────────────────────────────
-//  CodeBlock
-// ──────────────────────────────────────────
-const CodeBlock = ({ code }) => (
-  <Box sx={{
-    mt: 2,
-    backgroundColor: '#0F172A',
-    borderRadius: 1.5,
-    p: 2,
-    position: 'relative',
-    overflow: 'hidden',
-    '&::before': {
-      content: '""',
-      position: 'absolute', top: 0, left: 0, right: 0, height: 2,
-      background: 'linear-gradient(90deg, #2563EB, #7C3AED)',
-    },
-  }}>
-    <Box sx={{ display: 'flex', gap: 0.5, mb: 1.5 }}>
-      {['#FF5F57', '#FEBC2E', '#28C840'].map(c => (
-        <Box key={c} sx={{ width: 9, height: 9, borderRadius: '50%', backgroundColor: c }} />
-      ))}
-    </Box>
-    <Typography component="pre" sx={{
-      fontFamily: '"JetBrains Mono", "Fira Code", monospace',
-      fontSize: '0.78rem',
-      lineHeight: 1.7,
-      color: '#E2E8F0',
-      margin: 0,
-      overflowX: 'auto',
-      whiteSpace: 'pre',
-    }}>
-      {code}
-    </Typography>
-  </Box>
-);
-
-// ──────────────────────────────────────────
 //  PostCard
 // ──────────────────────────────────────────
-const PostCard = ({ feed, token, onOpenDetail }) => {
+const PostCard = ({ feed, token, onOpenDetail, myNickname, onDelete }) => {
+  const navigate = useNavigate();
   const [liked, setLiked] = useState(feed.liked ?? false);
   const [likeCount, setLikeCount] = useState(feed.likes ?? 0);
   const [bookmarked, setBookmarked] = useState(feed.bookmarked ?? false);
+  const [likeAnim, setLikeAnim] = useState(false);
+  const [bookmarkAnim, setBookmarkAnim] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [shareOpen, setShareOpen] = useState(false);
+
+  // 신고 모달 상태
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportSuccessOpen, setReportSuccessOpen] = useState(false);
+  const [reportDuplicateOpen, setReportDuplicateOpen] = useState(false);
+
+  // 삭제 확인 모달
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const imageList = feed.images ? feed.images.split(',') : [];
+  const isMyPost = myNickname && (feed.writer === myNickname || feed.WRITER === myNickname);
 
-  const handleLike = async () => {
+  const handleLike = async (e) => {
+    e.stopPropagation();
     const next = !liked;
     setLiked(next);
     setLikeCount(c => c + (next ? 1 : -1));
+    setLikeAnim(true);
+    setTimeout(() => setLikeAnim(false), 500);
     try {
-      await fetch(`http://localhost:3010/feed/${feed.id}/like`, {
+      await fetch(`${API}/feed/${feed.id}/like`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
-    } catch (err) {
-      // optimistic rollback
+    } catch {
       setLiked(!next);
       setLikeCount(c => c + (next ? -1 : 1));
     }
   };
 
-  const handleBookmark = async () => {
+  const handleBookmark = async (e) => {
+    e.stopPropagation();
     const next = !bookmarked;
     setBookmarked(next);
+    setBookmarkAnim(true);
+    setTimeout(() => setBookmarkAnim(false), 500);
     try {
-      await fetch(`http://localhost:3010/feed/${feed.id}/bookmark`, {
+      await fetch(`${API}/feed/${feed.id}/bookmark`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
-    } catch (err) {
+    } catch {
       setBookmarked(!next);
     }
   };
 
-  // tag 필드가 없을 때 fallback
-  const tag = feed.tag || 'General';
-  const tagColor = feed.tagColor || '#2563EB';
-  const tagBg = feed.tagBg || '#EFF6FF';
+  const handleShare = async (e) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}/post/${feed.id}`;
+    try { await navigator.clipboard.writeText(url); }
+    catch {
+      const el = document.createElement('textarea');
+      el.value = url;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
+    setShareOpen(true);
+    fetch(`${API}/feed/${feed.id}/share`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => { });
+  };
+
+  const handleMenuClick = (e) => {
+    e.stopPropagation();
+    setAnchorEl(e.currentTarget);
+  };
+
+  const handleMenuClose = (e) => {
+    e?.stopPropagation();
+    setAnchorEl(null);
+  };
+  const handleDeleteConfirm = async () => {
+    setDeleteOpen(false);
+    try {
+      await fetch(`${API}/feed/${feed.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      onDelete(feed.id);
+    } catch { /* ignore */ }
+  };
+
+  const tag = feed.tag || feed.category || 'General';
 
   return (
-    <Box
-      onClick={() => onOpenDetail(feed)} // 카드 전체를 클릭 가능하게 변경
-      sx={{
-        backgroundColor: '#FFFFFF',
-        border: '1px solid #E2E8F0',
-        borderRadius: 2,
-        p: 3,
-        cursor: 'pointer', // 클릭 가능하다는 표시 추가
-        animation: 'fadeUp 0.4s ease both',
-        transition: 'border-color 0.2s, box-shadow 0.2s',
-        '&:hover': { borderColor: '#CBD5E1', boxShadow: '0 4px 20px rgba(15,23,42,0.06)' },
-      }}>
-
-      {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Avatar
-            src={feed.avatar || undefined}
-            sx={{ width: 36, height: 36, backgroundColor: '#0F172A', fontWeight: 800, fontSize: '0.9rem' }}
-          >
-            {getInitial(feed.writer)}
-          </Avatar>
-          <Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+    <>
+      <Box
+        onClick={() => onOpenDetail(feed)}
+        sx={{
+          backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 2,
+          p: 3, cursor: 'pointer', animation: 'fadeUp 0.4s ease both',
+          transition: 'border-color 0.2s, box-shadow 0.2s',
+          '&:hover': { borderColor: '#CBD5E1', boxShadow: '0 4px 20px rgba(15,23,42,0.06)' },
+        }}
+      >
+        {/* Header */}
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Avatar
+              src={resolveAvatarSrc(feed.avatar)}
+              sx={{ width: 36, height: 36, backgroundColor: '#0F172A', fontWeight: 800, fontSize: '0.9rem' }}
+            >
+              {getInitial(feed.writer)}
+            </Avatar>
+            <Box>
               <Typography sx={{ fontWeight: 700, fontSize: '0.88rem', color: '#0F172A', lineHeight: 1 }}>
                 {feed.writer || 'Unknown'}
               </Typography>
+              <Typography sx={{ color: '#94A3B8', fontSize: '0.72rem', mt: 0.2 }}>
+                {feed.role || ''}{feed.role && feed.createdAt ? ' · ' : ''}{formatRelativeTime(feed.createdAt)}
+              </Typography>
             </Box>
-            <Typography sx={{ color: '#94A3B8', fontSize: '0.72rem', mt: 0.2 }}>
-              {feed.role || ''}{feed.role && feed.createdAt ? ' · ' : ''}{feed.createdAt || ''}
-            </Typography>
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Chip
+              label={tag}
+              size="small"
+              sx={{
+                backgroundColor: '#F1F5F9', color: '#475569',
+                fontWeight: 600, fontSize: '0.7rem', height: 22,
+                border: '1px solid #E2E8F0',
+              }}
+            />
+            <IconButton size="small" onClick={handleMenuClick} sx={{ color: '#CBD5E1', '&:hover': { color: '#64748B' } }}>
+              <MoreHoriz sx={{ fontSize: 18 }} />
+            </IconButton>
+            <Menu
+              anchorEl={anchorEl}
+              open={Boolean(anchorEl)}
+              onClose={handleMenuClose}
+              onClick={(e) => e.stopPropagation()}
+              PaperProps={{ sx: { boxShadow: '0 8px 30px rgba(0,0,0,0.08)', borderRadius: 2, border: '1px solid #E2E8F0', minWidth: 120 } }}
+            >
+              {isMyPost ? [
+                <MenuItem key="edit"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAnchorEl(null);
+                    navigate(`/edit/${feed.id}`);
+                  }}
+                  sx={{ fontSize: '0.8rem', color: '#475569', gap: 1 }}>
+                  <Edit sx={{ fontSize: 15, color: '#94A3B8' }} /> 수정하기
+                </MenuItem>,
+                <MenuItem key="delete"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAnchorEl(null);
+                    setDeleteOpen(true);
+                  }}
+                  sx={{ fontSize: '0.8rem', color: '#EF4444', gap: 1 }}>
+                  <Delete sx={{ fontSize: 15, color: '#EF4444' }} /> 삭제하기
+                </MenuItem>,
+              ] : [
+                <MenuItem key="report"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAnchorEl(null);
+                    setReportOpen(true);
+                  }}
+                  sx={{ fontSize: '0.8rem', color: '#475569', gap: 1 }}>
+                  <Flag sx={{ fontSize: 15, color: '#94A3B8' }} /> 신고하기
+                </MenuItem>,
+              ]}
+            </Menu>
           </Box>
         </Box>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Chip
-            label={tag}
-            size="small"
-            sx={{
-              backgroundColor: tagBg,
-              color: tagColor,
-              fontWeight: 700,
-              fontSize: '0.7rem',
-              height: 22,
-              border: `1px solid ${tagColor}22`,
-            }}
-          />
-          <IconButton size="small" onClick={(e) => setAnchorEl(e.currentTarget)}>
-            <MoreHoriz sx={{ fontSize: 18, color: '#94A3B8' }} />
-          </IconButton>
-          <Menu
-            anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}
-            PaperProps={{ sx: { boxShadow: '0 8px 30px rgba(0,0,0,0.08)', borderRadius: 2, border: '1px solid #E2E8F0', minWidth: 120 } }}
-          >
-            <MenuItem sx={{ fontSize: '0.8rem', color: '#64748B' }}>공유하기</MenuItem>
-            <MenuItem sx={{ fontSize: '0.8rem', color: '#64748B' }}>신고하기</MenuItem>
-          </Menu>
+        {/* Image */}
+        {imageList.length > 0 && (
+          <Box sx={{ width: '100%', paddingTop: '52%', position: 'relative', borderRadius: 1.5, overflow: 'hidden', mb: 2 }}>
+            <Box component="img"
+              src={imageList[0].startsWith('http') ? imageList[0] : `${API}${imageList[0]}`} 
+              alt={feed.title}
+              sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          </Box>
+        )}
+
+        {/* Title */}
+        <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#0F172A', mb: 1, lineHeight: 1.4, letterSpacing: '-0.01em' }}>
+          {feed.title}
+        </Typography>
+
+        {/* Description */}
+        <Typography
+          sx={{
+            color: '#64748B', fontSize: '0.85rem', lineHeight: 1.75,
+            display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+          }}
+          dangerouslySetInnerHTML={{ __html: resolveImageSrc(feed.description || '') }}
+        />
+
+        {/* Actions */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2.5, pt: 2, borderTop: '1px solid #F1F5F9' }}>
+          <Stack direction="row" spacing={0.5}>
+            {/* 좋아요 */}
+            <Button
+              size="small"
+              startIcon={
+                <Box sx={{
+                  display: 'flex', alignItems: 'center',
+                  animation: likeAnim ? 'heartPop 0.45s ease both' : 'none'
+                }}>
+                  {liked
+                    ? <Favorite sx={{ fontSize: 16, color: '#EF4444' }} />
+                    : <FavoriteBorderOutlined sx={{ fontSize: 16 }} />
+                  }
+                </Box>
+              }
+              onClick={handleLike}
+              sx={{
+                color: liked ? '#EF4444' : '#64748B',
+                fontWeight: 600, fontSize: '0.8rem', textTransform: 'none',
+                px: 1.2, borderRadius: 1.5, minWidth: 0,
+                '&:hover': { backgroundColor: '#FEF2F2', color: '#EF4444' },
+                transition: 'color 0.15s, background 0.15s',
+              }}
+            >
+              {likeCount}
+            </Button>
+
+            <Button
+              size="small"
+              startIcon={<ChatBubbleOutline sx={{ fontSize: 16 }} />}
+              onClick={(e) => { e.stopPropagation(); onOpenDetail(feed); }}
+              sx={{
+                color: '#64748B', fontWeight: 600, fontSize: '0.8rem', textTransform: 'none',
+                px: 1.2, borderRadius: 1.5, minWidth: 0,
+                '&:hover': { backgroundColor: '#EFF6FF', color: '#2563EB' },
+                transition: 'all 0.15s',
+              }}
+            >
+              {feed.commentCount ?? 0}
+            </Button>
+          </Stack>
+
+          <Stack direction="row" spacing={0.5} alignItems="center">
+            <Tooltip title="링크 복사" placement="top">
+              <IconButton size="small" onClick={handleShare}
+                sx={{ color: '#94A3B8', '&:hover': { color: '#2563EB' }, transition: 'color 0.15s' }}>
+                <ShareOutlined sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+
+            {/* 북마크 */}
+            <IconButton size="small" onClick={handleBookmark} sx={{ transition: 'color 0.15s' }}>
+              <Box sx={{ animation: bookmarkAnim ? 'bookmarkPop 0.45s ease both' : 'none', display: 'flex' }}>
+                {bookmarked
+                  ? <Bookmark sx={{ fontSize: 19, color: '#2563EB' }} />
+                  : <BookmarkBorderOutlined sx={{ fontSize: 19, color: '#94A3B8' }} />
+                }
+              </Box>
+            </IconButton>
+          </Stack>
         </Box>
+
+        {(feed.commentCount ?? 0) > 0 && (
+          <Typography
+            onClick={(e) => { e.stopPropagation(); onOpenDetail(feed); }}
+            sx={{ color: '#CBD5E1', fontSize: '0.78rem', mt: 1, cursor: 'pointer', fontWeight: 500, '&:hover': { color: '#2563EB' }, transition: 'color 0.15s' }}
+          >
+            댓글 {feed.commentCount}개 모두 보기
+          </Typography>
+        )}
       </Box>
 
-      {/* Image */}
-      {imageList.length > 0 && (
-        <Box
-          sx={{ width: '100%', paddingTop: '56.25%', position: 'relative', borderRadius: 1.5, overflow: 'hidden', mb: 2, cursor: 'pointer' }}
-          onClick={() => onOpenDetail(feed)}
-        >
-          <Box
-            component="img"
-            src={resolveImageSrc(imageList[0])}
-            alt={feed.title}
-            sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-        </Box>
-      )}
+      {/* 공유 토스트 */}
+      <Snackbar open={shareOpen} autoHideDuration={2000} onClose={() => setShareOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity="success" icon={<Check fontSize="inherit" />}
+          sx={{ fontWeight: 600, fontSize: '0.85rem', borderRadius: 2, boxShadow: '0 4px 20px rgba(15,23,42,0.12)' }}>
+          링크가 클립보드에 복사되었습니다!
+        </Alert>
+      </Snackbar>
 
-      {/* Title */}
-      <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#0F172A', mb: 1, lineHeight: 1.4, letterSpacing: '-0.01em' }}>
-        {feed.title}
-      </Typography>
-
-      {/* Description */}
-      <Typography
-        sx={{
-          color: '#475569', fontSize: '0.85rem', lineHeight: 1.75,
-          display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-        }}
-        dangerouslySetInnerHTML={{ __html: resolveImageSrc(feed.description || '') }}
+      {/* 삭제 확인 모달 */}
+      <ConfirmModal
+        open={deleteOpen}
+        title="게시글 삭제"
+        message="이 게시글을 삭제하시겠습니까? 삭제한 게시글은 복구할 수 없습니다."
+        confirmLabel="삭제"
+        confirmColor="#EF4444"
+        onConfirm={handleDeleteConfirm}
+        onClose={() => setDeleteOpen(false)}
       />
 
-      {/* Code block (if present) */}
-      {feed.code && <CodeBlock code={feed.code} />}
+      {/* 신고 모달 */}
+      <ReportModal
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        postId={feed.id}
+        token={token}
+        onSuccess={() => setReportSuccessOpen(true)}
+        onDuplicate={() => setReportDuplicateOpen(true)}
+      />
 
-      {/* Actions */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2.5, pt: 2, borderTop: '1px solid #F1F5F9' }}>
-        <Stack direction="row" spacing={0.5}>
-          <Button
-            size="small"
-            startIcon={
-              liked
-                ? <Favorite sx={{ fontSize: 16, color: '#EF4444' }} />
-                : <FavoriteBorderOutlined sx={{ fontSize: 16 }} />
-            }
-            onClick={handleLike}
-            sx={{
-              color: liked ? '#EF4444' : '#64748B',
-              fontWeight: 600, fontSize: '0.8rem', textTransform: 'none',
-              px: 1.2, borderRadius: 1.5,
-              '&:hover': { backgroundColor: '#FEF2F2', color: '#EF4444' },
-            }}
-          >
-            {likeCount}
-          </Button>
-
-          <Button
-            size="small"
-            startIcon={<ChatBubbleOutline sx={{ fontSize: 16 }} />}
-            onClick={() => onOpenDetail(feed)}
-            sx={{
-              color: '#64748B', fontWeight: 600, fontSize: '0.8rem', textTransform: 'none',
-              px: 1.2, borderRadius: 1.5,
-              '&:hover': { backgroundColor: '#EFF6FF', color: '#2563EB' },
-            }}
-          >
-            {feed.commentCount ?? 0}
-          </Button>
-        </Stack>
-
-        <IconButton size="small" onClick={handleBookmark}>
-          {bookmarked
-            ? <Bookmark sx={{ fontSize: 18, color: '#2563EB' }} />
-            : <BookmarkBorderOutlined sx={{ fontSize: 18, color: '#94A3B8' }} />
-          }
-        </IconButton>
-      </Box>
-
-      {/* 댓글 more link */}
-      {(feed.commentCount ?? 0) > 0 && (
-        <Typography
-          onClick={() => onOpenDetail(feed)}
-          sx={{
-            color: '#94A3B8', fontSize: '0.82rem', mt: 1, cursor: 'pointer', fontWeight: 500,
-            '&:hover': { color: '#2563EB' }, transition: 'color 0.15s'
-          }}
-        >
-          댓글 {feed.commentCount}개 모두 보기
-        </Typography>
-      )}
-    </Box>
-  );
-};
-
-// ──────────────────────────────────────────
-//  Detail Dialog  (이미지 + 댓글)
-// ──────────────────────────────────────────
-const DetailDialog = ({ open, feed, token, onClose }) => {
-  const [comments, setComments] = useState([]);
-  const [newComment, setNewComment] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!open || !feed) return;
-    setNewComment('');
-    setLoading(true);
-
-    fetch(`http://localhost:3010/feed/${feed.id}/comments`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}` },
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data.success) setComments(data.comments ?? []);
-        else setComments([]);
-      })
-      .catch(() => setComments([]))
-      .finally(() => setLoading(false));
-  }, [open, feed, token]);
-
-  const handleAddComment = async () => {
-    if (!newComment.trim()) return;
-    const optimistic = { id: Date.now(), writer: '나', text: newComment };
-    setComments(c => [...c, optimistic]);
-    setNewComment('');
-
-    try {
-      const response = await fetch(`http://localhost:3010/feed/${feed.id}/comment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ text: newComment }),
-      });
-      const data = await response.json();
-      if (response.ok && data.success) {
-        setComments(c => c.map(cm => cm.id === optimistic.id ? data.comment : cm));
-      }
-    } catch (err) {
-      // optimistic comment stays
-    }
-  };
-
-  const imageList = feed?.images ? feed.images.split(',') : [];
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      fullWidth
-      maxWidth="md"
-      PaperProps={{
-        sx: {
-          borderRadius: { xs: 0, md: 2 },
-          overflow: 'hidden',
-          height: { xs: '100%', md: '620px' },
-          maxHeight: '100%',
-          m: { xs: 0, md: 4 },
-          border: '1px solid #E2E8F0',
-          boxShadow: '0 24px 64px rgba(15,23,42,0.15)',
-        }
-      }}
-    >
-      <Box sx={{ display: 'flex', height: '100%', flexDirection: { xs: 'column', md: 'row' } }}>
-
-        {/* Left — image */}
-        <Box sx={{
-          flex: 1.4,
-          backgroundColor: '#0F172A',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          position: 'relative',
-          minHeight: { xs: '40vh', md: '100%' },
-        }}>
-          {imageList.length > 0 ? (
-            <Box
-              component="img"
-              src={resolveImageSrc(imageList[0])}
-              alt={feed?.title}
-              sx={{ width: '100%', height: '100%', objectFit: 'contain', position: 'absolute' }}
-            />
-          ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, opacity: 0.3 }}>
-              <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '2rem' }}>{'<>'}</Typography>
-              <Typography sx={{ color: '#fff', fontSize: '0.78rem' }}>이미지 없음</Typography>
-            </Box>
-          )}
-          {/* Close btn (mobile) */}
-          <IconButton
-            onClick={onClose}
-            sx={{
-              position: 'absolute', top: 12, left: 12,
-              backgroundColor: 'rgba(15,23,42,0.6)', color: '#FFFFFF',
-              '&:hover': { backgroundColor: 'rgba(15,23,42,0.8)' },
-              display: { xs: 'flex', md: 'none' },
-            }}
-          >
-            <Close />
-          </IconButton>
-        </Box>
-
-        {/* Right — comments */}
-        <Box sx={{
-          flex: 1,
-          display: 'flex', flexDirection: 'column',
-          width: { md: '380px', xs: '100%' },
-          backgroundColor: '#FFFFFF',
-          borderLeft: { md: '1px solid #E2E8F0', xs: 'none' },
-        }}>
-
-          {/* Header */}
-          <Box sx={{ p: 2, borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Stack direction="row" spacing={1.5} alignItems="center">
-              <Avatar sx={{ backgroundColor: '#0F172A', width: 32, height: 32, fontSize: '0.8rem', fontWeight: 800 }}>
-                {getInitial(feed?.writer)}
-              </Avatar>
-              <Typography sx={{ fontWeight: 800, fontSize: '0.9rem', color: '#0F172A' }}>
-                {feed?.writer || 'Unknown'}
-              </Typography>
-            </Stack>
-            <IconButton onClick={onClose} sx={{ color: '#64748B', display: { xs: 'none', md: 'flex' } }}>
-              <Close />
-            </IconButton>
-          </Box>
-
-          {/* Original post content */}
-          <Box sx={{ p: 2, display: 'flex', gap: 1.5, borderBottom: '1px solid #F1F5F9' }}>
-            <Avatar sx={{ backgroundColor: '#0F172A', width: 32, height: 32, fontSize: '0.8rem', fontWeight: 800, flexShrink: 0 }}>
-              {getInitial(feed?.writer)}
-            </Avatar>
-            <Box>
-              <Typography sx={{ fontSize: '0.88rem', color: '#0F172A', lineHeight: 1.5 }}>
-                <Box component="span" sx={{ fontWeight: 800, mr: 1 }}>{feed?.writer}</Box>
-                {feed?.title}
-              </Typography>
-              <Typography
-                sx={{ fontSize: '0.83rem', color: '#475569', mt: 0.5, lineHeight: 1.6 }}
-                dangerouslySetInnerHTML={{ __html: resolveImageSrc(feed?.description || '') }}
-              />
-            </Box>
-          </Box>
-
-          {/* Comments list */}
-          <Box sx={{ flex: 1, overflowY: 'auto' }}>
-            {loading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                <CircularProgress size={22} sx={{ color: '#2563EB' }} />
-              </Box>
-            ) : (
-              <List sx={{ p: 0 }}>
-                {comments.length === 0 && (
-                  <Box sx={{ textAlign: 'center', py: 4 }}>
-                    <Typography sx={{ color: '#94A3B8', fontSize: '0.82rem' }}>첫 댓글을 남겨보세요!</Typography>
-                  </Box>
-                )}
-                {comments.map((comment) => (
-                  <ListItem key={comment.id} sx={{ px: 2, py: 1.5, alignItems: 'flex-start' }}>
-                    <ListItemAvatar sx={{ minWidth: 44 }}>
-                      <Avatar sx={{ width: 30, height: 30, backgroundColor: '#2563EB', fontSize: '0.75rem', fontWeight: 800 }}>
-                        {getInitial(comment.writer)}
-                      </Avatar>
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={
-                        <Typography sx={{ fontSize: '0.85rem', color: '#0F172A', lineHeight: 1.5 }}>
-                          <Box component="span" sx={{ fontWeight: 700, mr: 0.8 }}>{comment.writer}</Box>
-                          {comment.text}
-                        </Typography>
-                      }
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            )}
-          </Box>
-
-          {/* Comment input */}
-          <Box sx={{ p: 2, borderTop: '1px solid #E2E8F0', backgroundColor: '#FFFFFF' }}>
-            <Box sx={{
-              display: 'flex', alignItems: 'center', gap: 1,
-              backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0',
-              borderRadius: 1.5, px: 1.5, py: 0.8,
-              '&:focus-within': { borderColor: '#2563EB', backgroundColor: '#fff' },
-              transition: 'all 0.2s',
-            }}>
-              <Avatar sx={{ width: 24, height: 24, fontSize: '0.6rem', backgroundColor: '#2563EB', flexShrink: 0 }}>나</Avatar>
-              <InputBase
-                placeholder="댓글 달기..."
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAddComment(); }}
-                sx={{ flex: 1, fontSize: '0.85rem', color: '#0F172A' }}
-              />
-              <Button
-                onClick={handleAddComment}
-                disabled={!newComment.trim()}
-                sx={{
-                  color: '#2563EB', fontWeight: 800, fontSize: '0.8rem',
-                  minWidth: 'auto', p: 0, textTransform: 'none',
-                  '&:disabled': { color: '#94A3B8' },
-                }}
-              >
-                게시
-              </Button>
-            </Box>
-          </Box>
-        </Box>
-      </Box>
-    </Dialog>
+      <Snackbar open={reportSuccessOpen} autoHideDuration={2500} onClose={() => setReportSuccessOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity="success" icon={<Check fontSize="inherit" />}
+          sx={{ fontWeight: 600, fontSize: '0.85rem', borderRadius: 2, boxShadow: '0 4px 20px rgba(15,23,42,0.12)' }}>
+          신고가 접수되었습니다.
+        </Alert>
+      </Snackbar>
+      <Snackbar open={reportDuplicateOpen} autoHideDuration={2500} onClose={() => setReportDuplicateOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity="warning" icon={<FlagOutlined fontSize="inherit" />}
+          sx={{ fontWeight: 600, fontSize: '0.85rem', borderRadius: 2, boxShadow: '0 4px 20px rgba(15,23,42,0.12)' }}>
+          이미 신고한 게시글입니다.
+        </Alert>
+      </Snackbar>
+    </>
   );
 };
 
 // ──────────────────────────────────────────
 //  Sidebar
 // ──────────────────────────────────────────
-const Sidebar = () => {
+const Sidebar = ({ trending, suggestions, loadingTrending, loadingSuggestions, token }) => {
   const [followed, setFollowed] = useState({});
+
+  const handleFollow = async (s) => {
+    const prev = followed[s.USER_ID] || 'NONE';
+    setFollowed(f => ({ ...f, [s.USER_ID]: prev === 'NONE' ? 'OPTIMISTIC' : 'NONE' }));
+    try {
+      const res = await fetch(`${API}/user/follow/${s.USER_ID}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setFollowed(f => ({ ...f, [s.USER_ID]: data.status })); // 'NONE' | 'PENDING' | 'ACCEPTED'
+      }
+    } catch {
+      setFollowed(f => ({ ...f, [s.USER_ID]: prev }));
+    }
+  };
 
   return (
     <Stack spacing={2.5}>
       {/* Trending */}
       <Box sx={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 2, p: 2.5 }}>
-        <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: '#0F172A', mb: 2, letterSpacing: '-0.01em' }}>
-          🔥 트렌딩 태그
-        </Typography>
-        <Stack spacing={1.5}>
-          {TRENDING.map((t, i) => (
-            <Box key={t.tag} sx={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              cursor: 'pointer',
-              '&:hover .tag-label': { color: '#2563EB' },
-            }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography sx={{ color: '#CBD5E1', fontWeight: 700, fontSize: '0.72rem', width: 16 }}>{i + 1}</Typography>
-                <Typography className="tag-label" sx={{ fontWeight: 600, fontSize: '0.83rem', color: '#0F172A', transition: 'color 0.15s' }}>
-                  {t.tag}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          <LocalFireDepartment sx={{ fontSize: 15, color: '#F97316' }} />
+          <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: '#0F172A', letterSpacing: '-0.01em' }}>
+            트렌딩 태그
+          </Typography>
+        </Box>
+
+        {loadingTrending ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+            <CircularProgress size={18} sx={{ color: '#2563EB' }} />
+          </Box>
+        ) : trending.length === 0 ? (
+          <Typography sx={{ color: '#CBD5E1', fontSize: '0.8rem', textAlign: 'center', py: 1 }}>
+            트렌딩 태그가 없습니다.
+          </Typography>
+        ) : (
+          <Stack spacing={1.5}>
+            {trending.map((t, i) => (
+              <Box key={t.TAG_NAME || t.tag} sx={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                cursor: 'pointer', '&:hover .tag-label': { color: '#2563EB' },
+              }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography sx={{ color: '#E2E8F0', fontWeight: 700, fontSize: '0.72rem', width: 16 }}>{i + 1}</Typography>
+                  <Typography className="tag-label" sx={{ fontWeight: 600, fontSize: '0.83rem', color: '#475569', transition: 'color 0.15s' }}>
+                    #{t.TAG_NAME || t.tag}
+                  </Typography>
+                </Box>
+                <Typography sx={{ color: '#CBD5E1', fontSize: '0.72rem' }}>
+                  {(t.POST_COUNT || t.count || 0).toLocaleString()}
                 </Typography>
               </Box>
-              <Typography sx={{ color: '#94A3B8', fontSize: '0.72rem' }}>{t.count}</Typography>
-            </Box>
-          ))}
-        </Stack>
+            ))}
+          </Stack>
+        )}
       </Box>
 
       {/* Suggestions */}
       <Box sx={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 2, p: 2.5 }}>
-        <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: '#0F172A', mb: 2, letterSpacing: '-0.01em' }}>
-          👥 팔로우 추천
-        </Typography>
-        <Stack spacing={2}>
-          {SUGGESTIONS.map(s => (
-            <Box key={s.handle} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
-                <Avatar src={s.avatar} sx={{ width: 32, height: 32 }} />
-                <Box>
-                  <Typography sx={{ fontWeight: 700, fontSize: '0.82rem', color: '#0F172A', lineHeight: 1.2 }}>{s.name}</Typography>
-                  <Typography sx={{ color: '#94A3B8', fontSize: '0.72rem' }}>{s.role}</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          <PeopleAlt sx={{ fontSize: 15, color: '#64748B' }} />
+          <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: '#0F172A', letterSpacing: '-0.01em' }}>
+            팔로우 추천
+          </Typography>
+        </Box>
+
+        {loadingSuggestions ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+            <CircularProgress size={18} sx={{ color: '#2563EB' }} />
+          </Box>
+        ) : suggestions.length === 0 ? (
+          <Typography sx={{ color: '#CBD5E1', fontSize: '0.8rem', textAlign: 'center', py: 1 }}>
+            추천 사용자가 없습니다.
+          </Typography>
+        ) : (
+          <Stack spacing={2}>
+            {suggestions.map(s => (
+              <Box key={s.USER_ID || s.handle} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+                  <Avatar
+                    src={resolveAvatarSrc(s.AVATAR || s.avatar)}
+                    sx={{ width: 32, height: 32, backgroundColor: '#0F172A', fontWeight: 800, fontSize: '0.8rem' }}
+                  >
+                    {getInitial(s.NICKNAME || s.name)}
+                  </Avatar>
+                  <Box>
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.82rem', color: '#0F172A', lineHeight: 1.2 }}>
+                      {s.NICKNAME || s.name}
+                    </Typography>
+                    <Typography sx={{ color: '#CBD5E1', fontSize: '0.72rem' }}>
+                      {s.BIO_SHORT || s.role || ''}
+                    </Typography>
+                  </Box>
                 </Box>
+                <Button
+                  size="small"
+                  onClick={() => handleFollow(s)}
+                  sx={{
+                    fontSize: '0.72rem', fontWeight: 700, textTransform: 'none',
+                    minWidth: 0, px: 1.5, py: 0.4, borderRadius: 1,
+                    ...({
+                      ACCEPTED: { backgroundColor: '#0F172A', color: '#fff', boxShadow: 'none', '&:hover': { backgroundColor: '#2563EB' } },
+                      PENDING: { backgroundColor: '#F1F5F9', color: '#64748B', boxShadow: 'none', border: '1px solid #E2E8F0' },
+                      OPTIMISTIC: { backgroundColor: '#F1F5F9', color: '#64748B', boxShadow: 'none', border: '1px solid #E2E8F0' },
+                      NONE: { border: '1px solid #E2E8F0', color: '#475569', backgroundColor: 'transparent', '&:hover': { borderColor: '#CBD5E1' } },
+                    }[followed[s.USER_ID] || 'NONE']),
+                  }}
+                >
+                  {{ ACCEPTED: '팔로잉', PENDING: '요청됨', OPTIMISTIC: '요청됨', NONE: '팔로우' }[followed[s.USER_ID] || 'NONE']}
+                </Button>
               </Box>
-              <Button
-                size="small"
-                onClick={() => setFollowed(f => ({ ...f, [s.handle]: !f[s.handle] }))}
-                sx={{
-                  fontSize: '0.72rem', fontWeight: 700, textTransform: 'none',
-                  minWidth: 0, px: 1.5, py: 0.4, borderRadius: 1,
-                  ...(followed[s.handle]
-                    ? { backgroundColor: '#0F172A', color: '#fff', boxShadow: 'none', '&:hover': { backgroundColor: '#2563EB' } }
-                    : { border: '1px solid #E2E8F0', color: '#0F172A', backgroundColor: 'transparent', '&:hover': { borderColor: '#0F172A' } }
-                  ),
-                }}
-              >
-                {followed[s.handle] ? '팔로잉' : '팔로우'}
-              </Button>
-            </Box>
-          ))}
-        </Stack>
+            ))}
+          </Stack>
+        )}
       </Box>
 
-      <Typography sx={{ color: '#CBD5E1', fontSize: '0.68rem', lineHeight: 1.8, px: 0.5 }}>
+      <Typography sx={{ color: '#E2E8F0', fontSize: '0.68rem', lineHeight: 1.8, px: 0.5 }}>
         CtrlE · 이용약관 · 개인정보처리방침<br />
         © 2025 CtrlE Inc. All rights reserved.
       </Typography>
     </Stack>
-  );
-};
-
-// ──────────────────────────────────────────
-//  NewPostModal
-// ──────────────────────────────────────────
-const NewPostModal = ({ token, onClose, onSuccess }) => {
-  let navigate = useNavigate();
-  const [text, setText] = useState('');
-  const [title, setTitle] = useState('');
-  const [selectedTag, setSelectedTag] = useState('Bug Fix');
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async () => {
-    if (!text.trim()) return;
-    setLoading(true);
-    try {
-      const response = await fetch('http://localhost:3010/feed/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ title, description: text, tag: selectedTag }),
-      });
-      const data = await response.json();
-      if (response.ok && data.success) {
-        onSuccess?.();
-        onClose();
-      } else {
-        // 실패해도 일단 닫기
-        onClose();
-      }
-    } catch (err) {
-      onClose();
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Box
-      sx={{
-        position: 'fixed', inset: 0, zIndex: 200,
-        backgroundColor: 'rgba(15,23,42,0.5)',
-        backdropFilter: 'blur(4px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        p: 2,
-        animation: 'fadeUp 0.2s ease',
-      }}
-      onClick={onClose}
-    >
-      <Box
-        sx={{
-          backgroundColor: '#fff', borderRadius: 2.5,
-          border: '1px solid #E2E8F0',
-          boxShadow: '0 24px 64px rgba(15,23,42,0.15)',
-          width: '100%', maxWidth: 560, p: 3,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Button
-          variant="contained"
-          startIcon={<Add sx={{ fontSize: 16 }} />}
-          onClick={() => navigate('/register')} // 💡 페이지 이동으로 변경
-          sx={{
-            backgroundColor: '#0F172A', color: '#fff', textTransform: 'none',
-            fontWeight: 700, fontSize: '0.8rem', px: 2, py: 0.9, borderRadius: 1.5,
-            boxShadow: 'none',
-            '&:hover': { backgroundColor: '#2563EB', boxShadow: '0 4px 14px rgba(37,99,235,0.25)', transform: 'translateY(-1px)' },
-            transition: 'all 0.2s',
-          }}
-        >
-          새 게시물
-        </Button>
-
-        {/* Tag chips */}
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-          {TAG_FILTERS.slice(1).map(t => (
-            <Chip
-              key={t.label}
-              label={t.label}
-              size="small"
-              onClick={() => setSelectedTag(t.label)}
-              sx={{
-                fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer',
-                backgroundColor: selectedTag === t.label ? '#0F172A' : '#F1F5F9',
-                color: selectedTag === t.label ? '#fff' : '#64748B',
-                border: 'none',
-                '&:hover': { backgroundColor: selectedTag === t.label ? '#2563EB' : '#E2E8F0' },
-              }}
-            />
-          ))}
-        </Box>
-
-        {/* Title */}
-        <InputBase
-          placeholder="제목을 입력하세요"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          fullWidth
-          sx={{
-            fontWeight: 700, fontSize: '0.95rem', color: '#0F172A',
-            backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0',
-            borderRadius: 1.5, px: 1.5, py: 1, mb: 1.5,
-            '&:focus-within': { borderColor: '#2563EB', backgroundColor: '#fff' },
-            transition: 'all 0.2s',
-          }}
-        />
-
-        {/* Body */}
-        <InputBase
-          multiline
-          rows={5}
-          fullWidth
-          placeholder="버그 상황, 해결 방법, 인사이트를 공유하세요..."
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          sx={{
-            fontSize: '0.88rem', color: '#0F172A', lineHeight: 1.75,
-            backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0',
-            borderRadius: 1.5, p: 1.5, mb: 2,
-            '&:focus-within': { borderColor: '#2563EB', backgroundColor: '#fff' },
-            transition: 'all 0.2s',
-            alignItems: 'flex-start',
-          }}
-        />
-
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography sx={{ color: '#94A3B8', fontSize: '0.75rem' }}>
-            {text.length} / 1000자
-          </Typography>
-          <Stack direction="row" spacing={1}>
-            <Button
-              size="small" onClick={onClose}
-              sx={{ color: '#64748B', textTransform: 'none', fontWeight: 600, fontSize: '0.83rem' }}
-            >
-              취소
-            </Button>
-            <Button
-              size="small"
-              variant="contained"
-              endIcon={loading ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <ArrowUpward sx={{ fontSize: 15 }} />}
-              disabled={!text.trim() || loading}
-              onClick={handleSubmit}
-              sx={{
-                backgroundColor: '#0F172A', color: '#fff', textTransform: 'none',
-                fontWeight: 700, fontSize: '0.83rem', px: 2, boxShadow: 'none', borderRadius: 1.5,
-                '&:hover': { backgroundColor: '#2563EB' },
-                '&.Mui-disabled': { backgroundColor: '#E2E8F0', color: '#94A3B8' },
-              }}
-            >
-              게시하기
-            </Button>
-          </Stack>
-        </Box>
-      </Box>
-    </Box>
   );
 };
 
@@ -892,29 +963,36 @@ export default function Feed() {
   const navigate = useNavigate();
   const token = localStorage.getItem('accessToken');
 
+  const myNickname = (() => {
+    try {
+      const payload = JSON.parse(decodeURIComponent(escape(atob(token.split('.')[1]))));
+      return payload.nickname || null;
+    } catch { return null; }
+  })();
+
   const [feeds, setFeeds] = useState([]);
-  const [activeTag, setActiveTag] = useState('전체');
+  const [activeFilter, setActiveFilter] = useState('전체');
   const [loadingFeeds, setLoadingFeeds] = useState(true);
 
-  // Detail dialog state
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedFeed, setSelectedFeed] = useState(null);
+  // Sidebar
+  const [trending, setTrending] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [loadingTrending, setLoadingTrending] = useState(true);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(true);
 
-  // New post modal state
-  const [showNewPost, setShowNewPost] = useState(false);
+  // Notification
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [notiModalOpen, setNotiModalOpen] = useState(false);
 
   // ── loadFeeds ──────────────────────────
   const loadFeeds = useCallback(async () => {
     setLoadingFeeds(true);
     try {
-      const response = await fetch('http://localhost:3010/feed/list', {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${token}` },
+      const response = await fetch(`${API}/feed/list`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
-      if (response.ok && data.success) {
-        setFeeds(data.feeds ?? []);
-      }
+      if (response.ok && data.success) setFeeds(data.feeds ?? []);
     } catch (err) {
       console.error('피드 로드 실패:', err);
     } finally {
@@ -922,47 +1000,101 @@ export default function Feed() {
     }
   }, [token]);
 
-  // ── Auth + OAuth handling ──────────────
+  // ── loadSidebar ────────────────────────
+  const loadSidebar = useCallback(async () => {
+    setLoadingTrending(true);
+    try {
+      const res = await fetch(`${API}/feed/trending`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) setTrending(data.tags ?? []);
+    } catch {
+      setTrending([]);
+    } finally {
+      setLoadingTrending(false);
+    }
+
+    setLoadingSuggestions(true);
+    try {
+      const res = await fetch(`${API}/user/suggestions`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) setSuggestions(data.users ?? []);
+    } catch {
+      setSuggestions([]);
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  }, [token]);
+
+  // ── loadNotifications ──────────────────
+  const loadNotifications = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/notifications`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) setNotificationCount(data.unread_count ?? 0);
+    } catch {
+      setNotificationCount(0);
+    }
+  }, [token]);
+
   useEffect(() => {
     const oauthToken = sessionStorage.getItem('oauthToken');
-
     if (oauthToken) {
       localStorage.setItem('accessToken', oauthToken);
       sessionStorage.removeItem('oauthToken');
-      loadFeeds();
     } else if (!token) {
       navigate('/');
-    } else {
-      loadFeeds();
+      return;
     }
-  }, [token, navigate, loadFeeds]);
+    loadFeeds();
+    loadSidebar();
+    loadNotifications();
+  }, [token, navigate, loadFeeds, loadSidebar, loadNotifications]);
 
-  // ── Handlers ──────────────────────────
   const handleLogout = () => {
     localStorage.removeItem('accessToken');
     navigate('/');
   };
-  const handleOpenDetail = (feed) => {
-    navigate(`/post/${feed.id}`);
-  };
-  const handleCloseDetail = () => {
-    setDialogOpen(false);
-    setSelectedFeed(null);
+
+  const handleOpenDetail = (feed) => navigate(`/post/${feed.id}`);
+
+  const handleNotificationClick = () => {
+    setNotiModalOpen(true);
+    setNotificationCount(0); // 낙관적 초기화
   };
 
-  const filteredFeeds = activeTag === '전체'
-    ? feeds
-    : feeds.filter(f => f.tag === activeTag);
+  const dynamicTagLabels = trending.map(t => t.TAG_NAME || t.tag).filter(Boolean);
+
+  const filteredFeeds = (() => {
+    if (activeFilter === '전체') return feeds;
+    const found = FIXED_CATEGORIES.find(c => c.label === activeFilter);
+    if (found?.value) {
+      return feeds.filter(f => (f.category || f.tag || '') === found.value);
+    }
+    return feeds.filter(f => {
+      const tagArr = Array.isArray(f.tags) ? f.tags : (f.tags ? f.tags.split(',') : []);
+      return tagArr.includes(activeFilter);
+    });
+  })();
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-
       <Box sx={{ minHeight: '100vh', backgroundColor: '#F8FAFC' }}>
 
-        <NavBar onNewPost={() => setShowNewPost(true)} onLogout={handleLogout} />
+        <NavBar
+          onLogout={handleLogout}
+          notificationCount={notificationCount}
+          onNotificationClick={handleNotificationClick}
+          token={token}
+        />
 
-        {/* Tag filter bar */}
+        {/* ── Filter bar ── */}
         <Box sx={{
           borderBottom: '1px solid #E2E8F0',
           backgroundColor: 'rgba(248,250,252,0.9)',
@@ -970,35 +1102,61 @@ export default function Feed() {
           position: 'sticky', top: 57, zIndex: 90,
         }}>
           <Box sx={{ maxWidth: 1200, mx: 'auto', px: { xs: 2, md: 4 } }}>
-            <Stack direction="row" spacing={0} sx={{ overflowX: 'auto', '&::-webkit-scrollbar': { display: 'none' } }}>
-              {TAG_FILTERS.map(t => (
+            <Stack direction="row" spacing={0} alignItems="center"
+              sx={{ overflowX: 'auto', '&::-webkit-scrollbar': { display: 'none' } }}>
+
+              {/* 고정 카테고리 3개 */}
+              {FIXED_CATEGORIES.map(t => (
                 <Button
                   key={t.label}
                   size="small"
                   startIcon={t.icon}
-                  onClick={() => setActiveTag(t.label)}
+                  onClick={() => setActiveFilter(t.label)}
                   sx={{
                     textTransform: 'none',
-                    fontWeight: activeTag === t.label ? 700 : 500,
-                    fontSize: '0.82rem',
-                    whiteSpace: 'nowrap',
-                    px: 2, py: 1.8,
-                    borderRadius: 0,
-                    color: activeTag === t.label ? '#0F172A' : '#94A3B8',
-                    borderBottom: activeTag === t.label ? '2px solid #2563EB' : '2px solid transparent',
+                    fontWeight: activeFilter === t.label ? 700 : 500,
+                    fontSize: '0.82rem', whiteSpace: 'nowrap',
+                    px: 2, py: 1.8, borderRadius: 0,
+                    color: activeFilter === t.label ? '#0F172A' : '#94A3B8',
+                    borderBottom: activeFilter === t.label ? '2px solid #2563EB' : '2px solid transparent',
                     '&:hover': { color: '#0F172A', backgroundColor: 'transparent' },
-                    transition: 'all 0.15s',
-                    minWidth: 'fit-content',
+                    transition: 'all 0.15s', minWidth: 'fit-content',
                   }}
                 >
                   {t.label}
+                </Button>
+              ))}
+
+              {/* 구분선 */}
+              {dynamicTagLabels.length > 0 && (
+                <Box sx={{ width: '1px', height: 18, backgroundColor: '#E2E8F0', mx: 1, flexShrink: 0 }} />
+              )}
+
+              {/* 동적 태그 (trending 기반) */}
+              {dynamicTagLabels.map(label => (
+                <Button
+                  key={label}
+                  size="small"
+                  onClick={() => setActiveFilter(label)}
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: activeFilter === label ? 700 : 400,
+                    fontSize: '0.8rem', whiteSpace: 'nowrap',
+                    px: 1.8, py: 1.8, borderRadius: 0,
+                    color: activeFilter === label ? '#2563EB' : '#94A3B8',
+                    borderBottom: activeFilter === label ? '2px solid #2563EB' : '2px solid transparent',
+                    '&:hover': { color: '#2563EB', backgroundColor: 'transparent' },
+                    transition: 'all 0.15s', minWidth: 'fit-content',
+                  }}
+                >
+                  #{label}
                 </Button>
               ))}
             </Stack>
           </Box>
         </Box>
 
-        {/* Main layout */}
+        {/* ── Main layout ── */}
         <Box sx={{ maxWidth: 1200, mx: 'auto', px: { xs: 2, md: 4 }, py: 4 }}>
           <Box sx={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
 
@@ -1010,18 +1168,20 @@ export default function Feed() {
                 </Box>
               ) : filteredFeeds.length === 0 ? (
                 <Box sx={{ textAlign: 'center', py: 10 }}>
-                  <Typography sx={{ color: '#94A3B8', fontSize: '0.88rem' }}>
-                    {activeTag === '전체' ? '아직 게시물이 없습니다.' : `'${activeTag}' 태그의 게시물이 없습니다.`}
+                  <Typography sx={{ color: '#CBD5E1', fontSize: '0.88rem' }}>
+                    {activeFilter === '전체' ? '아직 게시물이 없습니다.' : `'${activeFilter}' 게시물이 없습니다.`}
                   </Typography>
                 </Box>
               ) : (
                 <Stack spacing={2}>
                   {filteredFeeds.map((feed, i) => (
-                    <Box key={feed.id} sx={{ animationDelay: `${i * 0.05}s` }}>
+                    <Box key={feed.id} sx={{ animationDelay: `${i * 0.04}s` }}>
                       <PostCard
                         feed={feed}
                         token={token}
                         onOpenDetail={handleOpenDetail}
+                        myNickname={myNickname}
+                        onDelete={(id) => setFeeds(prev => prev.filter(f => f.id !== id))}
                       />
                     </Box>
                   ))}
@@ -1030,34 +1190,26 @@ export default function Feed() {
             </Box>
 
             {/* Sidebar */}
-            <Box sx={{
-              width: 280, flexShrink: 0,
-              display: { xs: 'none', lg: 'block' },
-              position: 'sticky', top: 120,
-            }}>
-              <Sidebar />
+            <Box sx={{ width: 280, flexShrink: 0, display: { xs: 'none', lg: 'block' }, position: 'sticky', top: 120 }}>
+              <Sidebar
+                trending={trending}
+                suggestions={suggestions}
+                loadingTrending={loadingTrending}
+                loadingSuggestions={loadingSuggestions}
+                token={token}
+              />
             </Box>
-
           </Box>
         </Box>
       </Box>
 
-      {/* Detail dialog */}
-      <DetailDialog
-        open={dialogOpen}
-        feed={selectedFeed}
+      {/* 알림 모달 */}
+      <NotificationModal
+        open={notiModalOpen}
+        onClose={() => setNotiModalOpen(false)}
         token={token}
-        onClose={handleCloseDetail}
+        navigate={navigate}
       />
-
-      {/* New post modal */}
-      {showNewPost && (
-        <NewPostModal
-          token={token}
-          onClose={() => setShowNewPost(false)}
-          onSuccess={loadFeeds}
-        />
-      )}
     </ThemeProvider>
   );
 }

@@ -43,16 +43,16 @@ const theme = createTheme({
 });
 
 const TAG_META = {
-  'Bug Fix':      { color: '#DC2626', bg: '#FEF2F2', icon: <BugReport sx={{ fontSize: 11 }} /> },
-  'React':        { color: '#2563EB', bg: '#EFF6FF', icon: <Code sx={{ fontSize: 11 }} /> },
-  'TypeScript':   { color: '#7C3AED', bg: '#F5F3FF', icon: <Code sx={{ fontSize: 11 }} /> },
+  'Bug Fix': { color: '#DC2626', bg: '#FEF2F2', icon: <BugReport sx={{ fontSize: 11 }} /> },
+  'React': { color: '#2563EB', bg: '#EFF6FF', icon: <Code sx={{ fontSize: 11 }} /> },
+  'TypeScript': { color: '#7C3AED', bg: '#F5F3FF', icon: <Code sx={{ fontSize: 11 }} /> },
   'Architecture': { color: '#D97706', bg: '#FFFBEB', icon: <Rocket sx={{ fontSize: 11 }} /> },
-  'Tip':          { color: '#059669', bg: '#ECFDF5', icon: <Lightbulb sx={{ fontSize: 11 }} /> },
-  'DevOps':       { color: '#0891B2', bg: '#ECFEFF', icon: <TrendingUp sx={{ fontSize: 11 }} /> },
-  'General':      { color: '#64748B', bg: '#F1F5F9', icon: null },
-  'ERROR':        { color: '#DC2626', bg: '#FEF2F2', icon: <BugReport sx={{ fontSize: 11 }} /> },
-  'QUESTION':     { color: '#2563EB', bg: '#EFF6FF', icon: <Code sx={{ fontSize: 11 }} /> },
-  'FREE':         { color: '#059669', bg: '#ECFDF5', icon: <Lightbulb sx={{ fontSize: 11 }} /> },
+  'Tip': { color: '#059669', bg: '#ECFDF5', icon: <Lightbulb sx={{ fontSize: 11 }} /> },
+  'DevOps': { color: '#0891B2', bg: '#ECFEFF', icon: <TrendingUp sx={{ fontSize: 11 }} /> },
+  'General': { color: '#64748B', bg: '#F1F5F9', icon: null },
+  'ERROR': { color: '#DC2626', bg: '#FEF2F2', icon: <BugReport sx={{ fontSize: 11 }} /> },
+  'QUESTION': { color: '#2563EB', bg: '#EFF6FF', icon: <Code sx={{ fontSize: 11 }} /> },
+  'FREE': { color: '#059669', bg: '#ECFDF5', icon: <Lightbulb sx={{ fontSize: 11 }} /> },
 };
 
 const getInitial = (name) => (name ? name.charAt(0).toUpperCase() : '?');
@@ -333,15 +333,55 @@ const PostList = ({ posts, onPostClick }) => (
   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
     {posts.map((post, i) => {
       const meta = tagMeta(post.tag);
+
       return (
-        <Box key={post.id} onClick={() => onPostClick(post.id)} sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 2, p: 2.5, gap: 2, cursor: 'pointer', animation: `fadeUp 0.4s ease ${i * 0.05}s both`, transition: 'all 0.2s', '&:hover': { borderColor: '#CBD5E1', boxShadow: '0 4px 16px rgba(15,23,42,0.06)' } }}>
+        <Box key={post.id} onClick={() => onPostClick(post.id)}
+          sx={{
+            display: 'flex', flexDirection: 'row', alignItems: 'flex-start',
+            backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 2,
+            p: 2.5, gap: 2, cursor: 'pointer',
+            animation: `fadeUp 0.4s ease ${i * 0.05}s both`, transition: 'all 0.2s',
+            '&:hover': { borderColor: '#CBD5E1', boxShadow: '0 4px 16px rgba(15,23,42,0.06)' }
+          }}>
+
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Box sx={{ mb: 1 }}><Chip label={post.tag} size="small" sx={{ backgroundColor: meta.bg, color: meta.color, fontWeight: 700, fontSize: '0.62rem', height: 16 }} /></Box>
-            <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#0F172A', mb: 1 }}>{post.title}</Typography>
-            <Typography sx={{ fontSize: '0.82rem', color: '#64748B', lineHeight: 1.6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} dangerouslySetInnerHTML={{ __html: post.description }} />
+            <Box sx={{ mb: 1 }}>
+              <Chip label={post.tag} size="small"
+                sx={{ backgroundColor: meta.bg, color: meta.color, fontWeight: 700, fontSize: '0.62rem', height: 16 }} />
+            </Box>
+            <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#0F172A', mb: 1 }}>
+              {post.title}
+            </Typography>
+            <Typography
+              sx={{
+                fontSize: '0.82rem', color: '#64748B', lineHeight: 1.6,
+                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
+              }}
+              dangerouslySetInnerHTML={{ __html: post.description }}
+            />
           </Box>
-          {post.image ? <Box component="img" src={post.image} alt={post.title} sx={{ width: 90, height: 90, borderRadius: 1.5, flexShrink: 0, objectFit: 'cover', border: '1px solid #E2E8F0', display: 'block' }} />
-            : <Box sx={{ width: 90, height: 90, borderRadius: 1.5, flexShrink: 0, overflow: 'hidden', border: `1px solid ${meta.color}22` }}><TextPreviewCard text={post.description} color={meta.color} bg={meta.bg} height={90} /></Box>}
+
+          <Box sx={{
+            width: 90, height: 90, flexShrink: 0, borderRadius: 1.5,
+            overflow: 'hidden', border: `1px solid ${post.image ? '#E2E8F0' : meta.color + '22'}`,
+          }}>
+            {post.image ? (
+              <Box
+                component="img"
+                src={post.image}
+                alt=""
+                onError={(e) => {
+                  if (e.target && e.target.parentElement) {
+                    e.target.style.display = 'none';
+                  }
+                }}
+                sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              />
+            ) : (
+              <TextPreviewCard text={post.description} color={meta.color} bg={meta.bg} height={90} />
+            )}
+          </Box>
+
         </Box>
       );
     })}
@@ -394,26 +434,31 @@ export default function Mypage() {
         const data = await res.json();
         if (data.success) {
           setUser({
-            name:      data.user.NICKNAME    || '사용자',
-            handle:    `@${data.user.NICKNAME || 'user'}`,
-            role:      data.user.BIO_SHORT    || '',
-            bio:       data.user.BIO          || '',
-            github:    data.user.GITHUB       || '',
-            website:   data.user.WEBSITE      || '',
-            avatar:    data.user.AVATAR ? `${API}${data.user.AVATAR}` : null,
+            name: data.user.NICKNAME || '사용자',
+            handle: `@${data.user.NICKNAME || 'user'}`,
+            role: data.user.BIO_SHORT || '',
+            bio: data.user.BIO || '',
+            github: data.user.GITHUB || '',
+            website: data.user.WEBSITE || '',
+            avatar: data.user.AVATAR ? `${API}${data.user.AVATAR}` : null,
             postCount: data.posts.length,
-            followers: data.user.FOLLOWER_CNT  ?? 0,
+            followers: data.user.FOLLOWER_CNT ?? 0,
             following: data.user.FOLLOWING_CNT ?? 0,
           });
           const formattedPosts = data.posts.map(p => ({
             ...p,
-            id:           p.id || p.POST_ID,
-            title:        p.title || p.TITLE || '',
-            description:  p.description || p.CONTENT || '',
-            tag:          p.tag || 'General',
-            likes:        p.likes ?? 0,
+            id: p.id || p.POST_ID,
+            title: p.title || p.TITLE || '',
+            description: p.description || p.CONTENT || '',
+            tag: p.tag || 'General',
+            likes: p.likes ?? 0,
             commentCount: p.commentCount ?? 0,
-            image:        (p.images && p.images.trim()) ? p.images.split(',')[0].trim() : null,
+            image: (p.images && p.images.trim())
+              ? (() => {
+                const url = p.images.trim();
+                return url.startsWith('http') ? url : `${API}${url}`;
+              })()
+              : null,
           }));
           setPosts(formattedPosts);
         }

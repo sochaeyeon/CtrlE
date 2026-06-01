@@ -11,6 +11,10 @@ require('./passport');
 const userRouter = require("./routes/user");
 const authRouter = require("./routes/auth");
 const feedRouter = require("./routes/feed");
+const notificationRouter = require('./routes/notifications');
+const exploreRouter = require('./routes/explore');
+const messagesRouter = require('./routes/messages');
+
 const db = require("./db");
 
 const app = express();
@@ -26,6 +30,9 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use("/user", userRouter);
 app.use("/api/auth", authRouter);
 app.use("/feed", feedRouter);
+app.use('/notifications', notificationRouter);
+app.use('/explore', exploreRouter);
+app.use('/messages', messagesRouter);
 
 async function startServer() {
   try {
