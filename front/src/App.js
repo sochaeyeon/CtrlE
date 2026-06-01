@@ -12,6 +12,7 @@ import PostDetail from './components/PostDetail';
 import EditPost from './components/EditPost';
 import UserProfile from './components/UserProfile';
 import Messages from './components/Messages';
+import NotificationSidebar from './components/NotificationSidebar';
 
 function App() {
   const location = useLocation();
@@ -32,7 +33,7 @@ function App() {
           <Route path="/post/:postId" element={<PostDetail />} />
           <Route path="/edit/:postId" element={<EditPost />} />
           <Route path="/user/:nickname" element={<UserProfile />} />
-         <Route path="/messages" element={<Messages />} />
+          <Route path="/messages" element={<Messages />} />
           <Route path="/messages/room/:roomId" element={<Messages />} />
         </Routes>
       </Box>

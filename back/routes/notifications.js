@@ -4,7 +4,6 @@ const oracledb = require('oracledb');
 const db = require('../db');
 const auth = require('../middlewares/auth');
 
-// GET /notifications - 내 알림 목록
 router.get('/', auth, async (req, res) => {
     const userId = req.user?.userId ?? req.user?.id;
     const conn = await db.getConnection();
@@ -12,9 +11,13 @@ router.get('/', auth, async (req, res) => {
         const result = await conn.execute(
             `SELECT n.noti_id, n.sender_id, n.noti_type, n.target_type,
                     n.target_id, n.is_read, n.created_at,
-                    u.nickname as sender_name,
+                    u.nickname as sender_nickname,
                     (select image_url from profile_images
-                     where user_id = u.user_id and is_main = 'Y' and rownum = 1) as sender_avatar
+                     where user_id = u.user_id and is_main = 'Y' and rownum = 1) as sender_avatar,
+                    (select case when count(*) > 0 then 'Y' else 'N' end 
+                     from follows 
+                     where follower_id = :userId and following_id = n.sender_id) as is_following,
+                    null as target_image
              from notifications n
              left join users u on u.user_id = n.sender_id
              where n.receiver_id = :userId

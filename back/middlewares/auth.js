@@ -1,7 +1,8 @@
 const jwt = require('jsonwebtoken');
+const db = require('../db');
 require("dotenv").config();
 
-const JWT_SECRET = process.env.JWT_SECRET; 
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const jwtAuthentication = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -14,6 +15,14 @@ const jwtAuthentication = (req, res, next) => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         req.user = decoded; // 해독된 정보 (userId 등)
+
+        db.getConnection().then(conn => {
+            conn.execute(
+                `UPDATE USERS SET LAST_ACTIVE = SYSDATE WHERE USER_ID = :userId`,
+                { userId: decoded.userId ?? decoded.id },
+                { autoCommit: true }
+            ).finally(() => conn.close());
+        }).catch(() => { });
         next();
     } catch (err) {
         console.error("토큰 검증 에러:", err); // 터미널에서 어떤 에러인지 정확히 볼 수 있게 로그 추가

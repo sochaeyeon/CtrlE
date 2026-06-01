@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box, Avatar, Typography, createTheme, ThemeProvider, CssBaseline,
@@ -6,13 +6,14 @@ import {
   CircularProgress, Paper, Badge, Stack, Menu, MenuItem, Dialog,
   DialogTitle, DialogContent, DialogActions, Button, Switch,
   FormControlLabel, AvatarGroup, Grid, Checkbox, Popover, Select,
-  Collapse, Snackbar, Alert
+  Collapse, Snackbar, Alert,
 } from '@mui/material';
 import {
   Search, Close, MailOutline, SendRounded, ImageOutlined, GroupOutlined,
   ArrowBack, SentimentSatisfiedAlt, MoreVert, InfoOutlined, ExitToApp,
   ReportGmailerrorred, DeleteOutline, EditOutlined, AddCircleOutline,
-  AttachFile, ExpandMore, ExpandLess, PeopleOutline, NotificationsOff
+  AttachFile, ExpandMore, ExpandLess, PeopleOutline, NotificationsOff,
+  ArrowBackIos, ArrowForwardIos, BookmarkOutlined
 } from '@mui/icons-material';
 
 const API = 'http://localhost:3010';
@@ -42,6 +43,10 @@ const theme = createTheme({
           60% { transform: scale(1.15); opacity: 1; }
           100% { transform: scale(1); opacity: 1; }
         }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
       `
     }
   }
@@ -49,13 +54,32 @@ const theme = createTheme({
 
 const getInitial = (name) => (name ? name.charAt(0).toUpperCase() : '?');
 const getAvatarColor = () => '#0F172A';
+
 const formatTime = (dateStr) => {
   if (!dateStr) return '';
   const date = new Date(dateStr);
   const now = new Date();
-  const isToday = date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+  const isToday =
+    date.getDate() === now.getDate() &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear();
   if (isToday) return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
   return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+};
+
+const formatDateLabel = (dateStr) => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diff = Math.floor((now - date) / 86400000);
+  if (diff === 0) return '오늘';
+  if (diff === 1) return '어제';
+  return date.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+};
+
+const isSameDay = (a, b) => {
+  const da = new Date(a), db = new Date(b);
+  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
 };
 
 const formatActivity = (lastActiveAt) => {
@@ -64,46 +88,67 @@ const formatActivity = (lastActiveAt) => {
   if (diff < 60) return '방금 전 활동';
   if (diff < 3600) return `${Math.floor(diff / 60)}분 전 활동`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전 활동`;
-  // 7일 이상이면 null 대신 날짜 표시
   return new Date(lastActiveAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) + ' 활동';
 };
 
-const GroupAvatar = ({ avatars, nicknames = [], size = 42, roomImage }) => {
+// ── FIX 4: null 사진 GroupAvatar — 채팅방 목록과 동일한 스타일 ──
+const GroupAvatar = ({ avatars, nicknames = [], size = 42, roomImage, onClick }) => {
   if (roomImage) {
-    return <Avatar src={roomImage.startsWith('http') ? roomImage : `${API}${roomImage}`} sx={{ width: size, height: size }} />;
+    return (
+      <Avatar
+        src={roomImage.startsWith('http') ? roomImage : `${API}${roomImage}`}
+        sx={{ width: size, height: size, cursor: onClick ? 'pointer' : 'default' }}
+        onClick={onClick}
+      />
+    );
   }
   const list = (avatars || []).slice(0, 4);
   const nameList = (nicknames || []).slice(0, 4);
   const count = Math.max(list.length, nameList.length);
 
+  // FIX 4: null 사진일 때 채팅방 목록의 그룹 아이콘과 동일한 스타일
   if (count === 0) {
     return (
-      <Avatar sx={{ width: size, height: size, backgroundColor: '#E2E8F0', color: '#94A3B8' }}>
-        <GroupOutlined fontSize="small" />
+      <Avatar
+        sx={{
+          width: size, height: size,
+          backgroundColor: '#0F172A',
+          cursor: onClick ? 'pointer' : 'default'
+        }}
+        onClick={onClick}
+      >
+        <GroupOutlined fontSize="small" sx={{ color: '#fff' }} />
       </Avatar>
     );
   }
 
   if (count === 1) {
     return list[0] ? (
-      <Avatar src={`${API}${list[0]}`} sx={{ width: size, height: size }} />
+      <Avatar src={`${API}${list[0]}`} sx={{ width: size, height: size, cursor: onClick ? 'pointer' : 'default' }} onClick={onClick} />
     ) : (
-      <Avatar sx={{ width: size, height: size, backgroundColor: getAvatarColor(nameList[0]), fontSize: size * 0.4, fontWeight: 800 }}>
+      <Avatar
+        sx={{ width: size, height: size, backgroundColor: getAvatarColor(nameList[0]), fontSize: size * 0.4, fontWeight: 800, cursor: onClick ? 'pointer' : 'default' }}
+        onClick={onClick}
+      >
         {getInitial(nameList[0])}
       </Avatar>
     );
   }
 
   return (
-    <Box sx={{
-      width: size, height: size,
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gridTemplateRows: count > 2 ? '1fr 1fr' : '1fr',
-      borderRadius: '50%',
-      overflow: 'hidden',
-      flexShrink: 0
-    }}>
+    <Box
+      onClick={onClick}
+      sx={{
+        width: size, height: size,
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gridTemplateRows: count > 2 ? '1fr 1fr' : '1fr',
+        borderRadius: '50%',
+        overflow: 'hidden',
+        flexShrink: 0,
+        cursor: onClick ? 'pointer' : 'default'
+      }}
+    >
       {Array.from({ length: Math.min(count, 4) }).map((_, i) => (
         list[i] ? (
           <Box key={i} component="img" src={`${API}${list[i]}`}
@@ -121,6 +166,125 @@ const GroupAvatar = ({ avatars, nicknames = [], size = 42, roomImage }) => {
           </Box>
         )
       ))}
+    </Box>
+  );
+};
+
+// ── FIX 1 & 2: 이미지 뷰어 모달 (확대 + 갤러리 탐색) ──
+const ImageViewerModal = ({ open, onClose, imageUrl, allImages = [], initialIndex = 0 }) => {
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+
+  useEffect(() => {
+    if (open) setCurrentIndex(initialIndex);
+  }, [open, initialIndex]);
+
+  const handlePrev = (e) => {
+    e.stopPropagation();
+    setCurrentIndex(prev => (prev > 0 ? prev - 1 : allImages.length - 1));
+  };
+
+  const handleNext = (e) => {
+    e.stopPropagation();
+    setCurrentIndex(prev => (prev < allImages.length - 1 ? prev + 1 : 0));
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKey = (e) => {
+      if (e.key === 'ArrowLeft') setCurrentIndex(prev => (prev > 0 ? prev - 1 : allImages.length - 1));
+      if (e.key === 'ArrowRight') setCurrentIndex(prev => (prev < allImages.length - 1 ? prev + 1 : 0));
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [open, allImages.length, onClose]);
+
+  const currentSrc = allImages.length > 0
+    ? allImages[currentIndex]
+    : imageUrl;
+
+  const resolvedSrc = currentSrc
+    ? (currentSrc.startsWith('blob:') || currentSrc.startsWith('http') ? currentSrc : `${API}${currentSrc}`)
+    : '';
+
+  if (!open) return null;
+
+  return (
+    <Box
+      onClick={onClose}
+      sx={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        backgroundColor: 'rgba(0,0,0,0.92)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        animation: 'fadeIn 0.18s ease',
+      }}
+    >
+      {/* 닫기 버튼 */}
+      <IconButton
+        onClick={onClose}
+        sx={{ position: 'absolute', top: 16, right: 16, color: '#fff', backgroundColor: 'rgba(255,255,255,0.1)', '&:hover': { backgroundColor: 'rgba(255,255,255,0.2)' } }}
+      >
+        <Close />
+      </IconButton>
+
+      {/* 이전 버튼 */}
+      {allImages.length > 1 && (
+        <IconButton
+          onClick={handlePrev}
+          sx={{ position: 'absolute', left: 16, color: '#fff', backgroundColor: 'rgba(255,255,255,0.1)', '&:hover': { backgroundColor: 'rgba(255,255,255,0.2)' }, zIndex: 1 }}
+        >
+          <ArrowBackIos />
+        </IconButton>
+      )}
+
+      {/* 이미지 */}
+      <Box
+        component="img"
+        src={resolvedSrc}
+        onClick={(e) => e.stopPropagation()}
+        sx={{
+          maxWidth: '90vw', maxHeight: '90vh',
+          objectFit: 'contain',
+          borderRadius: 2,
+          boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
+          userSelect: 'none',
+        }}
+      />
+
+      {/* 다음 버튼 */}
+      {allImages.length > 1 && (
+        <IconButton
+          onClick={handleNext}
+          sx={{ position: 'absolute', right: 16, color: '#fff', backgroundColor: 'rgba(255,255,255,0.1)', '&:hover': { backgroundColor: 'rgba(255,255,255,0.2)' }, zIndex: 1 }}
+        >
+          <ArrowForwardIos />
+        </IconButton>
+      )}
+
+      {/* 인디케이터 */}
+      {allImages.length > 1 && (
+        <Box sx={{ position: 'absolute', bottom: 20, display: 'flex', gap: 0.8 }}>
+          {allImages.map((_, i) => (
+            <Box
+              key={i}
+              onClick={(e) => { e.stopPropagation(); setCurrentIndex(i); }}
+              sx={{
+                width: i === currentIndex ? 20 : 6, height: 6,
+                borderRadius: 3,
+                backgroundColor: i === currentIndex ? '#fff' : 'rgba(255,255,255,0.4)',
+                transition: 'all 0.2s', cursor: 'pointer',
+              }}
+            />
+          ))}
+        </Box>
+      )}
+
+      {/* 카운터 */}
+      {allImages.length > 1 && (
+        <Typography sx={{ position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem', fontWeight: 600 }}>
+          {currentIndex + 1} / {allImages.length}
+        </Typography>
+      )}
     </Box>
   );
 };
@@ -264,19 +428,22 @@ const STICKER_LIST = [
   { id: 's16', emoji: '🤩', label: '눈별' },
 ];
 
-const isStickerMessage = (msg) => msg?.IS_DELETED !== 'Y' && (msg?.IS_STICKER === true || (typeof msg?.MESSAGE === 'string' && msg.MESSAGE.startsWith('__STICKER__')));
+const isStickerMessage = (msg) =>
+  msg?.IS_DELETED !== 'Y' &&
+  (msg?.IS_STICKER === true || (typeof msg?.MESSAGE === 'string' && msg.MESSAGE.startsWith('__STICKER__')));
+
 const getStickerEmoji = (msg) => {
   if (msg?.IS_STICKER && msg?.MESSAGE) return msg.MESSAGE;
-  if (typeof msg?.MESSAGE === 'string' && msg.MESSAGE.startsWith('__STICKER__')) return msg.MESSAGE.replace('__STICKER__', '');
+  if (typeof msg?.MESSAGE === 'string' && msg.MESSAGE.startsWith('__STICKER__'))
+    return msg.MESSAGE.replace('__STICKER__', '');
   return null;
 };
 
 // ────────────────────────────────────────────────
-// [FIX 2] 참여자 목록 - 검색 가능한 모달
+// 참여자 목록 모달
 // ────────────────────────────────────────────────
 const ParticipantsModal = ({ open, onClose, participants, loading, onClickUser }) => {
   const [query, setQuery] = useState('');
-
   const filtered = participants.filter(p =>
     p.NICKNAME?.toLowerCase().includes(query.toLowerCase())
   );
@@ -300,15 +467,11 @@ const ParticipantsModal = ({ open, onClose, participants, loading, onClickUser }
           <Close sx={{ fontSize: 18 }} />
         </IconButton>
       </Box>
-
-      {/* 검색창 */}
       <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid #F1F5F9' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', backgroundColor: '#F1F5F9', borderRadius: 2, px: 1.5, py: 0.8 }}>
           <Search sx={{ color: '#94A3B8', fontSize: 18, mr: 1 }} />
           <InputBase
-            fullWidth
-            placeholder="참여자 검색..."
-            value={query}
+            fullWidth placeholder="참여자 검색..." value={query}
             onChange={(e) => setQuery(e.target.value)}
             sx={{ fontSize: '0.88rem', color: '#0F172A' }}
           />
@@ -319,12 +482,9 @@ const ParticipantsModal = ({ open, onClose, participants, loading, onClickUser }
           )}
         </Box>
       </Box>
-
       <Box sx={{ flex: 1, overflowY: 'auto' }}>
         {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-            <CircularProgress size={24} />
-          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={24} /></Box>
         ) : filtered.length === 0 ? (
           <Box sx={{ py: 4, textAlign: 'center' }}>
             <Typography sx={{ fontSize: '0.82rem', color: '#94A3B8' }}>
@@ -335,18 +495,14 @@ const ParticipantsModal = ({ open, onClose, participants, loading, onClickUser }
           <List disablePadding>
             {filtered.map((p, idx) => (
               <ListItem
-                button
-                key={p.USER_ID}
+                button key={p.USER_ID}
                 onClick={() => { onClickUser(p.NICKNAME); onClose(); }}
-                sx={{
-                  py: 1.2, px: 2.5,
-                  borderBottom: idx < filtered.length - 1 ? '1px solid #F8FAFC' : 'none',
-                  '&:hover': { backgroundColor: '#F8FAFC' }
-                }}
+                sx={{ py: 1.2, px: 2.5, borderBottom: idx < filtered.length - 1 ? '1px solid #F8FAFC' : 'none', '&:hover': { backgroundColor: '#F8FAFC' } }}
               >
                 <ListItemAvatar sx={{ minWidth: 46 }}>
+                  {/* FIX 6: 사용자 아바타 올바르게 표시 */}
                   <Avatar
-                    src={p.AVATAR ? `${API}${p.AVATAR}` : null}
+                    src={p.AVATAR ? (p.AVATAR.startsWith('http') ? p.AVATAR : `${API}${p.AVATAR}`) : undefined}
                     sx={{ width: 36, height: 36, fontSize: '0.8rem', backgroundColor: '#0F172A', fontWeight: 800 }}
                   >
                     {getInitial(p.NICKNAME)}
@@ -416,41 +572,74 @@ export default function Messages() {
   const [typingUsers, setTypingUsers] = useState([]);
   const [stickerAnchorEl, setStickerAnchorEl] = useState(null);
 
-  // [FIX 2] 참여자 모달 상태
   const [participantsModalOpen, setParticipantsModalOpen] = useState(false);
   const [participants, setParticipants] = useState([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
 
   const [readAtMap, setReadAtMap] = useState({});
 
+  // FIX 1 & 2: 이미지 뷰어 상태
+  const [imageViewer, setImageViewer] = useState({ open: false, url: null, allImages: [], index: 0, isGallery: false });
+
   const fileInputRef = useRef(null);
   const searchWrapRef = useRef(null);
   const debounceRef = useRef(null);
   const newChatDebounceRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const chatContainerRef = useRef(null);
   const typingTimerRef = useRef(null);
-
-  const [reportModal, setReportModal] = useState({ open: false, messageId: null });
-  const [reportReason, setReportReason] = useState('');
-  const [reportDetail, setReportDetail] = useState('');
 
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [reportSuccessOpen, setReportSuccessOpen] = useState(false);
 
   const [roomNameEdit, setRoomNameEdit] = useState('');
   const [roomImageFile, setRoomImageFile] = useState(null);
+  const [roomImagePreview, setRoomImagePreview] = useState(null);
   const roomImageRef = useRef(null);
 
   const [roomNameSavedOpen, setRoomNameSavedOpen] = useState(false);
   const [deleteRoomImage, setDeleteRoomImage] = useState(false);
 
+  const [peerProfile, setPeerProfile] = useState(null);
+  const [peerProfileDismissed, setPeerProfileDismissed] = useState(false);
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    const saved = localStorage.getItem('sidebarCollapsed');
+    return saved === 'true';
+  });
+
   useEffect(() => {
-    if (settingsOpen && isGroup) setRoomNameEdit(roomInfo?.ROOM_NAME || '');
+    localStorage.setItem('sidebarCollapsed', sidebarCollapsed);
+  }, [sidebarCollapsed]);
+
+  const [blockModalOpen, setBlockModalOpen] = useState(false);
+
+  const settingsChangedByMeRef = useRef(false);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+
+
+  useEffect(() => {
+    if (roomInfo?.BLOCK_STATUS) {
+      setBlockModalOpen(true);
+    }
+  }, [roomInfo?.BLOCK_STATUS]);
+
+  const isOnline = roomInfo?.TARGET_LAST_ACTIVE && (Date.now() - new Date(roomInfo.TARGET_LAST_ACTIVE).getTime() < 60000);
+  const blockStatus = roomInfo?.BLOCK_STATUS;
+  const isBlocked = !!blockStatus;
+  const blockText = blockStatus === 'ME'
+    ? '당신이 차단한 사용자입니다. 차단을 해제하기 전까지 메시지를 보낼 수 없습니다.'
+    : '해당 사용자가 당신을 차단했습니다. 메시지를 주고받을 수 없습니다.';
+
+  useEffect(() => {
+    if (settingsOpen && isGroup) {
+      setRoomNameEdit(roomInfo?.ROOM_NAME || '');
+      setRoomImageFile(null);
+      setRoomImagePreview(null);
+      setDeleteRoomImage(false);
+    }
   }, [settingsOpen]);
 
-  // ────────────────────────────────────────────────
-  // [FIX 3] 시스템 메시지 전송 헬퍼
-  // ────────────────────────────────────────────────
   const sendSystemMessage = async (text) => {
     if (!roomId || !token) return;
     try {
@@ -462,14 +651,32 @@ export default function Messages() {
     } catch { }
   };
 
+  const handleRoomImageChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setRoomImageFile(file);
+    setRoomImagePreview(URL.createObjectURL(file));
+    setDeleteRoomImage(false);
+    e.target.value = '';
+  };
+
+  // FIX 5: null값 저장 막기
   const handleSaveRoomInfo = async () => {
+    const trimmedName = roomNameEdit.trim();
+    // 이름이 비어있고 이미지 변경도 없으면 저장 막기
+    if (!trimmedName && !roomImageFile && !deleteRoomImage) {
+      return;
+    }
+    // 이름이 비어있으면 저장 막기
+    if (!trimmedName) {
+      return;
+    }
+
     const prevName = roomInfo?.ROOM_NAME || '';
     try {
       const formData = new FormData();
-      formData.append('roomName', roomNameEdit);
+      formData.append('roomName', trimmedName);
       if (roomImageFile) formData.append('roomImage', roomImageFile);
-
-      // 이미지 삭제 플래그
       if (deleteRoomImage) formData.append('deleteImage', 'true');
 
       const res = await fetch(`${API}/messages/${roomId}/room-info`, {
@@ -484,13 +691,14 @@ export default function Messages() {
           ROOM_NAME: data.roomName,
           ROOM_IMAGE: data.imageUrl ?? (deleteRoomImage ? null : prev.ROOM_IMAGE)
         }));
-        setRoomNameSavedOpen(true); // 토스트
-        if (roomNameEdit && roomNameEdit !== prevName) {
-          await sendSystemMessage(`${myNickname}님이 채팅방 이름을 "${roomNameEdit}"(으)로 변경했습니다.`);
+        setRoomImageFile(null);
+        setRoomImagePreview(null);
+        setRoomNameSavedOpen(true);
+        if (trimmedName && trimmedName !== prevName) {
+          await sendSystemMessage(`${myNickname}님이 채팅방 이름을 "${trimmedName}"(으)로 변경했습니다.`);
         }
         if (roomImageFile) {
           await sendSystemMessage(`${myNickname}님이 채팅방 사진을 변경했습니다.`);
-          setRoomImageFile(null);
         }
         if (deleteRoomImage) {
           setDeleteRoomImage(false);
@@ -514,8 +722,16 @@ export default function Messages() {
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, typingUsers]);
+    const container = chatContainerRef.current;
+    if (!container) return;
+
+    const savedScroll = sessionStorage.getItem(`scroll_${roomId}`);
+
+    if (savedScroll && container.scrollTop === 0 && messages.length > 0) {
+      container.scrollTop = Number(savedScroll);
+    }
+  }, [messages, roomId]);
+
 
   useEffect(() => {
     if (!token) return navigate('/');
@@ -556,29 +772,36 @@ export default function Messages() {
         const data = await res.json();
         if (data.success) {
           setRoomInfo(data.room);
-
-          // ────────────────────────────────────────────────
-          // [FIX 1] 삭제된 메시지 보존: polling 결과 merge 시
-          // 기존 IS_DELETED:'Y' 상태를 서버 결과로 덮어쓰되,
-          // 서버에서도 IS_DELETED:'Y'로 내려오므로 그대로 반영.
-          // 단, optimistic으로 삭제 처리한 메시지가
-          // 다음 polling에서 IS_DELETED:'N'으로 오버라이트되지 않도록
-          // 로컬 삭제 상태를 우선 적용.
-          // ────────────────────────────────────────────────
+          // FIX 3: 메시지 업데이트 시 새 메시지만 추가 (기존 상태 유지로 깜빡임 방지)
           setMessages(prev => {
             const localDeletedIds = new Set(
               prev.filter(m => m.IS_DELETED === 'Y').map(m => m.MESSAGE_ID)
             );
             const incoming = data.messages || [];
-            return incoming.map(serverMsg => {
+            const prevIds = new Set(prev.map(m => m.MESSAGE_ID));
+
+            // 기존 메시지 업데이트 + 새 메시지 추가
+            const updated = incoming.map(serverMsg => {
               if (localDeletedIds.has(serverMsg.MESSAGE_ID)) {
                 return { ...serverMsg, IS_DELETED: 'Y', MESSAGE: '', IMAGE_URL: null, FILE_URL: null, IS_STICKER: false };
               }
+              // 옵티미스틱 메시지(숫자 ID)는 서버 메시지로 대체하지 않음
               return serverMsg;
             });
-          });
 
+            const optimisticMessages = prev.filter(m => {
+              if (typeof m.MESSAGE_ID !== 'number' || m.MESSAGE_ID <= Date.now() - 15000) return false;
+
+              if (m.IMAGE_URL || m.FILE_URL) {
+                return !incoming.some(s => s.SENDER_NICKNAME === myNickname && (s.IMAGE_URL || s.FILE_URL) && new Date(s.SENT_AT).getTime() > Date.now() - 20000);
+              }
+              return !incoming.find(s => s.MESSAGE === m.MESSAGE && s.SENDER_NICKNAME === m.SENDER_NICKNAME && !s.IMAGE_URL);
+            });
+
+            return [...updated, ...optimisticMessages];
+          });
           if (data.readAtMap) setReadAtMap(data.readAtMap);
+
           setChatRooms(prev => prev.map(r => r.ROOM_ID === parseInt(roomId) ? { ...r, UNREAD_COUNT: 0 } : r));
         } else {
           navigate('/messages');
@@ -587,6 +810,17 @@ export default function Messages() {
         setLoadingChat(false);
       }
     };
+
+    if (!isGroup) {  // roomInfo가 없을 수 있으니 아래처럼 별도 fetch
+      setPeerProfile(null);
+      setPeerProfileDismissed(false);
+      fetch(`${API}/messages/${roomId}/peer-profile`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }).then(r => r.json()).then(d => {
+        if (d.success) setPeerProfile(d.peer);
+      }).catch(() => { });
+    }
+
     fetchChatData();
     const interval = setInterval(fetchChatData, 3000);
 
@@ -601,9 +835,8 @@ export default function Messages() {
         }
       } catch { }
     }, 1500);
-    const participantInterval = setInterval(() => {
-      fetchParticipants();
-    }, 3000);
+
+    const participantInterval = setInterval(() => { fetchParticipants(); }, 3000);
 
     return () => {
       clearInterval(interval);
@@ -612,7 +845,6 @@ export default function Messages() {
     };
   }, [roomId, token, navigate, myNickname]);
 
-  // [FIX 2] 참여자 목록 불러오기
   const fetchParticipants = async () => {
     if (!roomId || !token) return;
     setParticipantsLoading(true);
@@ -638,9 +870,8 @@ export default function Messages() {
     fetch(`${API}/messages/${roomId}/typing`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ isTyping: true, nickname: myNickname }) // 닉네임 포함
+      body: JSON.stringify({ isTyping: true, nickname: myNickname })
     }).catch(() => { });
-
     typingTimerRef.current = setTimeout(() => {
       fetch(`${API}/messages/${roomId}/typing`, {
         method: 'POST',
@@ -649,6 +880,7 @@ export default function Messages() {
       }).catch(() => { });
     }, 1500);
   };
+
   const handleSearchChange = (val) => {
     setSearchQuery(val);
     clearTimeout(debounceRef.current);
@@ -707,6 +939,23 @@ export default function Messages() {
         setCreateChatOpen(false);
         setSelectedUsers([]);
         setNewChatSearchQuery('');
+        setNewChatSearchResults([]);
+        navigate(`/messages/room/${data.roomId}`);
+      }
+    } catch (err) { }
+  };
+
+  const handleStartChatFromSearch = async (user) => {
+    setSearchOpen(false);
+    setSearchQuery('');
+    try {
+      const res = await fetch(`${API}/messages/room`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ targetNicknames: [user.NICKNAME] })
+      });
+      const data = await res.json();
+      if (data.success) {
         navigate(`/messages/room/${data.roomId}`);
       }
     } catch (err) { }
@@ -720,10 +969,9 @@ export default function Messages() {
     if (editingMessageId && !customMessage) {
       const currentEditId = editingMessageId;
       setMessages(prev => prev.map(m =>
-        m.MESSAGE_ID === currentEditId
-          ? { ...m, MESSAGE: msgToSend, IS_EDITED: 'Y' }
-          : m
+        m.MESSAGE_ID === currentEditId ? { ...m, MESSAGE: msgToSend, IS_EDITED: 'Y' } : m
       ));
+      setPeerProfileDismissed(true);
       setNewMessage('');
       setEditingMessageId(null);
       try {
@@ -748,6 +996,15 @@ export default function Messages() {
     setMessages(prev => [...prev, optimisticMsg]);
     if (!customMessage) setNewMessage('');
 
+    setChatRooms(prev => prev.map(r => r.ROOM_ID === parseInt(roomId) ? {
+      ...r,
+      LAST_MESSAGE: msgToSend,
+      LAST_MESSAGE_AT: new Date().toISOString(),
+      LAST_IS_STICKER: extraFields.IS_STICKER || false,
+      LAST_HAS_IMAGE: false,
+      LAST_HAS_FILE: false
+    } : r));
+
     try {
       await fetch(`${API}/messages/${roomId}/send`, {
         method: 'POST',
@@ -755,6 +1012,8 @@ export default function Messages() {
         body: JSON.stringify({ message: optimisticMsg.MESSAGE, ...extraFields })
       });
     } catch (err) { }
+
+    setTimeout(scrollToBottom, 50);
   };
 
   const handleStickerSelect = (sticker) => {
@@ -766,7 +1025,6 @@ export default function Messages() {
     const file = e.target.files[0];
     if (!file) return;
     const isImage = file.type.startsWith('image/');
-
     const localUrl = URL.createObjectURL(file);
     const optimisticMsg = {
       MESSAGE_ID: Date.now(),
@@ -780,7 +1038,6 @@ export default function Messages() {
       READ_BY: []
     };
     setMessages(prev => [...prev, optimisticMsg]);
-
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -856,9 +1113,10 @@ export default function Messages() {
     handleCloseMessageOption();
     openConfirm('모든 사람에게서 삭제', '이 메시지를 모든 사람의 화면에서 삭제하시겠습니까?', async () => {
       if (!targetId) return;
-      // [FIX 1] optimistic 삭제 — polling이 덮어써도 localDeletedIds로 보존됨
       setMessages(prev => prev.map(m =>
-        m.MESSAGE_ID === targetId ? { ...m, IS_DELETED: 'Y', MESSAGE: '', IMAGE_URL: null, FILE_URL: null, IS_STICKER: false } : m
+        m.MESSAGE_ID === targetId
+          ? { ...m, IS_DELETED: 'Y', MESSAGE: '', IMAGE_URL: null, FILE_URL: null, IS_STICKER: false }
+          : m
       ));
       setConfirmModal({ open: false });
       try {
@@ -910,6 +1168,8 @@ export default function Messages() {
   const handleLeaveRoom = () => {
     openConfirm('채팅방 나가기', '채팅방을 나가면 대화 내용이 모두 삭제됩니다. 계속하시겠습니까?', async () => {
       try {
+        await sendSystemMessage(`${myNickname}님이 채팅방을 나갔습니다.`);
+
         await fetch(`${API}/messages/${roomId}/leave`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` }
@@ -937,18 +1197,24 @@ export default function Messages() {
 
   const getBubbleColors = (isMe) => {
     if (bubbleStyle === 'outlined') {
-      return isMe ? { bg: 'transparent', text: '#2563EB', border: '1px solid #2563EB' } : { bg: 'transparent', text: '#0F172A', border: '1px solid #E2E8F0' };
+      return isMe
+        ? { bg: 'transparent', text: '#2563EB', border: '1px solid #2563EB' }
+        : { bg: 'transparent', text: '#0F172A', border: '1px solid #E2E8F0' };
     }
-    return isMe ? { bg: '#2563EB', text: '#fff', border: 'none' } : { bg: '#fff', text: '#0F172A', border: '1px solid #E2E8F0' };
+    return isMe
+      ? { bg: '#2563EB', text: '#fff', border: 'none' }
+      : { bg: '#fff', text: '#0F172A', border: '1px solid #E2E8F0' };
   };
 
   useEffect(() => {
     if (!roomId || !token) return;
-
     const fetchSettings = async () => {
       try {
-        const res = await fetch(`${API}/messages/${roomId}/settings`, {
-          headers: { Authorization: `Bearer ${token}` }
+        const res = await fetch(`${API}/messages/${roomId}/settings?t=${Date.now()}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Cache-Control': 'no-cache'
+          }
         });
         const data = await res.json();
         if (data.success) {
@@ -957,12 +1223,13 @@ export default function Messages() {
         }
       } catch { }
     };
-    fetchSettings();
 
-  }, [roomId, token, navigate, myNickname]);
+    fetchSettings();
+    const interval = setInterval(fetchSettings, 3000);
+    return () => clearInterval(interval);
+  }, [roomId, token]);
 
   const settingsSaveTimer = useRef(null);
-
   const saveSettings = (bgColor, bubble) => {
     clearTimeout(settingsSaveTimer.current);
     settingsSaveTimer.current = setTimeout(async () => {
@@ -976,23 +1243,17 @@ export default function Messages() {
     }, 500);
   };
 
-  // [FIX 3] 설정 변경 시 시스템 메시지 전송
   const handleBgColorChange = async (color) => {
     setChatBgColor(color);
     saveSettings(color, bubbleStyle);
-    // 배경색 변경 알림 (색상 이름 매핑)
     const colorNames = {
-      '#F8FAFC': '기본',
-      '#EFF6FF': '파란색',
-      '#FEF2F2': '빨간색',
-      '#F0FDF4': '초록색',
-      '#FFFBEB': '노란색',
-      '#F5F3FF': '보라색',
-      '#FAFAFA': '흰색',
-      '#18181B': '어두운 색',
+      '#F8FAFC': '기본', '#EFF6FF': '파란색', '#FEF2F2': '빨간색',
+      '#F0FDF4': '초록색', '#FFFBEB': '노란색', '#F5F3FF': '보라색',
+      '#FAFAFA': '흰색', '#18181B': '어두운 색',
     };
-    const colorLabel = colorNames[color] || color;
-    await sendSystemMessage(`${myNickname}님이 채팅방 배경색을 ${colorLabel}으로 변경했습니다.`);
+    await sendSystemMessage(`${myNickname}님이 채팅방 배경색을 ${colorNames[color] || color}으로 변경했습니다.`);
+    settingsChangedByMeRef.current = true;
+    setTimeout(() => { settingsChangedByMeRef.current = false; }, 4000);
   };
 
   const handleBubbleStyleChange = async (style) => {
@@ -1000,6 +1261,8 @@ export default function Messages() {
     saveSettings(chatBgColor, style);
     const styleNames = { rounded: '둥근 모서리', sharp: '각진 모서리', outlined: '테두리형' };
     await sendSystemMessage(`${myNickname}님이 말풍선 스타일을 "${styleNames[style] || style}"(으)로 변경했습니다.`);
+    settingsChangedByMeRef.current = true;
+    setTimeout(() => { settingsChangedByMeRef.current = false; }, 4000);
   };
 
   const isGroup = roomInfo?.ROOM_TYPE === 'GROUP';
@@ -1010,154 +1273,254 @@ export default function Messages() {
   const lastReadMsg = myMessages.slice().reverse().find(m => m.IS_READ === 'Y');
   const lastReadMsgId = lastReadMsg ? lastReadMsg.MESSAGE_ID : null;
 
-  const activityLabel = !isGroup && roomInfo?.TARGET_LAST_ACTIVE ? formatActivity(roomInfo.TARGET_LAST_ACTIVE) : null;
+  const activityLabel = !isGroup && roomInfo?.TARGET_LAST_ACTIVE
+    ? formatActivity(roomInfo.TARGET_LAST_ACTIVE)
+    : null;
 
   useEffect(() => {
-    if (roomId && isGroup) {
-      fetchParticipants();
-    }
+    if (roomId && isGroup) fetchParticipants();
   }, [roomId, isGroup]);
 
   const processedMessages = messages.map(m => ({ ...m, READ_BY: [] }));
-
   if (isGroup && participants.length > 0) {
     participants.forEach(p => {
       if (p.NICKNAME === myNickname) return;
-      // 해당 유저가 마지막으로 본 메시지 찾기 (값이 없으면 0으로 처리)
-      const revIdx = processedMessages.slice().reverse().findIndex(m => new Date(m.SENT_AT) <= new Date(p.LAST_ACTIVE || 0));
-      if (revIdx !== -1) {
-        const realIdx = processedMessages.length - 1 - revIdx;
-        // 이미 들어간 사람인지 중복 체크 후 아바타 추가
-        if (!processedMessages[realIdx].READ_BY.find(r => r.nickname === p.NICKNAME)) {
-          processedMessages[realIdx].READ_BY.push({ nickname: p.NICKNAME, avatar: p.AVATAR ? `${API}${p.AVATAR}` : null });
+      if (!p.LAST_READ_AT) return;
+      const readTime = new Date(p.LAST_READ_AT).getTime();
+      // 이 참여자가 읽은 마지막 메시지 찾기
+      let lastReadIdx = -1;
+      for (let i = processedMessages.length - 1; i >= 0; i--) {
+        if (new Date(processedMessages[i].SENT_AT).getTime() <= readTime) {
+          lastReadIdx = i;
+          break;
+        }
+      }
+      if (lastReadIdx !== -1) {
+        if (!processedMessages[lastReadIdx].READ_BY.find(r => r.nickname === p.NICKNAME)) {
+          processedMessages[lastReadIdx].READ_BY.push({
+            nickname: p.NICKNAME,
+            avatar: p.AVATAR ? (p.AVATAR.startsWith('http') ? p.AVATAR : `${API}${p.AVATAR}`) : null
+          });
         }
       }
     });
   }
+
+  const currentRoomImageSrc = roomImagePreview
+    ? roomImagePreview
+    : (roomInfo?.ROOM_IMAGE
+      ? (roomInfo.ROOM_IMAGE.startsWith('http') ? roomInfo.ROOM_IMAGE : `${API}${roomInfo.ROOM_IMAGE}`)
+      : null);
+
+  // FIX 2: 설정 패널의 이미지 갤러리용 URL 목록
+  const allAttachmentImages = messages
+    .filter(m => m.IMAGE_URL && m.IS_DELETED !== 'Y')
+    .map(m => m.IMAGE_URL.startsWith('blob:') || m.IMAGE_URL.startsWith('http') ? m.IMAGE_URL : `${API}${m.IMAGE_URL}`);
+
+  // FIX 1: 채팅 내 이미지 클릭 핸들러
+  const handleChatImageClick = (imageUrl) => {
+    const resolved = imageUrl.startsWith('blob:') || imageUrl.startsWith('http') ? imageUrl : `${API}${imageUrl}`;
+    setImageViewer({ open: true, url: resolved, allImages: [], index: 0, isGallery: false });
+  };
+
+  // FIX 2: 설정 갤러리 이미지 클릭 핸들러
+  const handleGalleryImageClick = (index) => {
+    setImageViewer({ open: true, url: allAttachmentImages[index], allImages: allAttachmentImages, index, isGallery: true });
+  };
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box sx={{ display: 'flex', height: 'calc(100vh - 48px)', backgroundColor: '#fff', borderRadius: 3, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
 
-        {/* 채팅방 목록 */}
-        <Box sx={{ width: { xs: '100%', md: 360 }, borderRight: { md: '1px solid #E2E8F0' }, display: { xs: roomId ? 'none' : 'flex', md: 'flex' }, flexDirection: 'column', backgroundColor: '#fff' }}>
-          <Box sx={{ p: 2.5, borderBottom: '1px solid #E2E8F0' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Box sx={{
+          width: sidebarCollapsed ? 0 : { xs: '100%', md: 360 },
+          flexShrink: 0,
+          overflow: 'hidden',
+          transition: 'width 0.25s ease',
+          borderRight: { md: '1px solid #E2E8F0' },
+          display: { xs: roomId ? 'none' : 'flex', md: 'flex' },
+          flexDirection: 'column',
+          backgroundColor: '#fff'
+        }}>
+          <Box sx={{ width: { xs: '100vw', md: 360 }, display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, px: 2, pt: 2, flexShrink: 0 }}>
               <Typography sx={{ fontWeight: 800, fontSize: '1.25rem', color: '#0F172A' }}>메시지</Typography>
-              <IconButton onClick={() => { setCreateChatOpen(true); handleNewChatSearch(''); }} sx={{ color: '#0F172A', backgroundColor: '#F1F5F9' }}>
-                <AddCircleOutline fontSize="small" />
-              </IconButton>
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                <IconButton onClick={() => { setCreateChatOpen(true); handleNewChatSearch(''); }} sx={{ color: '#0F172A', backgroundColor: '#F1F5F9' }}>
+                  <AddCircleOutline fontSize="small" />
+                </IconButton>
+                <IconButton onClick={() => setSidebarCollapsed(true)} sx={{ color: '#0F172A', backgroundColor: '#F1F5F9' }}>
+                  <ArrowBackIos fontSize="small" sx={{ ml: 0.5 }} />
+                </IconButton>
+              </Box>
             </Box>
-            <Box ref={searchWrapRef} sx={{ position: 'relative' }}>
+
+            <Box ref={searchWrapRef} sx={{ position: 'relative', px: 2, mb: 1, flexShrink: 0 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', backgroundColor: '#F1F5F9', borderRadius: 2.5, px: 1.5, py: 1 }}>
                 <Search sx={{ color: '#94A3B8', fontSize: 20, mr: 1 }} />
-                <InputBase fullWidth placeholder="검색..." value={searchQuery} onChange={(e) => handleSearchChange(e.target.value)} onFocus={() => { setSearchOpen(true); if (searchResults.length === 0) handleSearchChange(searchQuery); }} sx={{ fontSize: '0.9rem', color: '#0F172A' }} />
-                {isSearching ? <CircularProgress size={16} sx={{ color: '#94A3B8', ml: 1 }} /> : searchQuery && <IconButton size="small" onClick={() => handleSearchChange('')} sx={{ color: '#94A3B8', p: 0.2 }}><Close sx={{ fontSize: 16 }} /></IconButton>}
+                <InputBase
+                  fullWidth placeholder="검색..." value={searchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  onFocus={() => { setSearchOpen(true); if (searchResults.length === 0) handleSearchChange(searchQuery); }}
+                  sx={{ fontSize: '0.9rem', color: '#0F172A' }}
+                />
+                {isSearching
+                  ? <CircularProgress size={16} sx={{ color: '#94A3B8', ml: 1 }} />
+                  : searchQuery && (
+                    <IconButton size="small" onClick={() => handleSearchChange('')} sx={{ color: '#94A3B8', p: 0.2 }}>
+                      <Close sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  )
+                }
               </Box>
               {searchOpen && (
                 <Paper elevation={4} sx={{ position: 'absolute', top: '100%', left: 0, right: 0, mt: 1, zIndex: 10, borderRadius: 2, overflow: 'hidden' }}>
                   <List disablePadding>
                     {searchResults.length > 0 ? searchResults.map((user, idx) => (
-                      <ListItem button key={user.USER_ID} onClick={() => { setSearchOpen(false); navigate(`/messages/room/${user.ROOM_ID || 'new'}`); }} sx={{ py: 1.2, px: 2, borderBottom: idx < searchResults.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
+                      <ListItem
+                        button key={user.USER_ID}
+                        onClick={() => handleStartChatFromSearch(user)}
+                        sx={{ py: 1.2, px: 2, borderBottom: idx < searchResults.length - 1 ? '1px solid #F1F5F9' : 'none' }}
+                      >
                         <ListItemAvatar sx={{ minWidth: 46 }}>
-                          <Avatar src={user.AVATAR ? `${API}${user.AVATAR}` : null} sx={{ width: 34, height: 34, backgroundColor: '#0F172A', fontSize: '0.8rem' }}>{getInitial(user.NICKNAME)}</Avatar>
+                          <Avatar src={user.AVATAR ? `${API}${user.AVATAR}` : null} sx={{ width: 34, height: 34, backgroundColor: '#0F172A', fontSize: '0.8rem' }}>
+                            {getInitial(user.NICKNAME)}
+                          </Avatar>
                         </ListItemAvatar>
-                        <ListItemText primary={<Typography sx={{ fontWeight: 700, fontSize: '0.85rem' }}>{user.NICKNAME}</Typography>} secondary={<Typography sx={{ fontSize: '0.7rem', color: '#64748B' }}>{user.BIO_SHORT || `@${user.NICKNAME}`}</Typography>} sx={{ m: 0 }} />
+                        <ListItemText
+                          primary={<Typography sx={{ fontWeight: 700, fontSize: '0.85rem' }}>{user.NICKNAME}</Typography>}
+                          secondary={<Typography sx={{ fontSize: '0.7rem', color: '#64748B' }}>{user.BIO_SHORT || `@${user.NICKNAME}`}</Typography>}
+                          sx={{ m: 0 }}
+                        />
                       </ListItem>
-                    )) : <Box sx={{ py: 3, textAlign: 'center' }}><Typography sx={{ color: '#94A3B8', fontSize: '0.8rem' }}>결과 없음</Typography></Box>}
+                    )) : (
+                      <Box sx={{ py: 3, textAlign: 'center' }}>
+                        <Typography sx={{ color: '#94A3B8', fontSize: '0.8rem' }}>결과 없음</Typography>
+                      </Box>
+                    )}
                   </List>
                 </Paper>
               )}
             </Box>
-          </Box>
-
-          <Box sx={{ flex: 1, overflowY: 'auto' }}>
-            {loadingRooms ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={24} /></Box>
-            ) : chatRooms.length === 0 ? (
-              <Box sx={{ textAlign: 'center', py: 6 }}><Typography sx={{ fontSize: '0.85rem', color: '#64748B' }}>대화가 없습니다.</Typography></Box>
-            ) : (
-              <List disablePadding>
-                {chatRooms.map((room) => {
-                  const isActive = parseInt(roomId) === room.ROOM_ID;
-                  const isMuted = mutedRooms[room.ROOM_ID];
-                  let lastMsgPreview = room.LAST_MESSAGE || '';
-                  if (!lastMsgPreview) lastMsgPreview = room.LAST_HAS_IMAGE ? '📷 사진' : room.LAST_HAS_FILE ? '📎 파일' : '';
-
-                  return (
-                    <ListItem button key={room.ROOM_ID} onClick={() => navigate(`/messages/room/${room.ROOM_ID}`)} sx={{ py: 1.8, px: 2.5, backgroundColor: isActive ? '#F1F5F9' : 'transparent', transition: 'all 0.15s', '&:hover': { backgroundColor: '#F8FAFC' } }}>
-                      <ListItemAvatar sx={{ minWidth: 54 }}>
-                        <Badge color="error" variant="dot" invisible={!room.UNREAD_COUNT} sx={{ '& .MuiBadge-badge': { right: 4, top: 4 } }}>
-                          {room.ROOM_TYPE === 'GROUP' ? (
-                            <GroupAvatar avatars={room.PARTICIPANT_AVATARS} nicknames={room.PARTICIPANT_NICKNAMES} size={36} />
-                          ) : (
-                            <Avatar src={room.TARGET_AVATAR ? `${API}${room.TARGET_AVATAR}` : null} sx={{ width: 42, height: 42, backgroundColor: getAvatarColor(room.TARGET_NICKNAME), fontWeight: 800 }}>
-                              {getInitial(room.TARGET_NICKNAME)}
-                            </Avatar>
-                          )}
-                        </Badge>
-                      </ListItemAvatar>
-                      <ListItemText
-                        primary={
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.2 }}>
-                            <Typography sx={{ fontWeight: isActive ? 800 : 700, fontSize: '0.9rem', color: '#0F172A', display: 'flex', alignItems: 'center' }}>
-                              {room.TARGET_NICKNAME || (room.ROOM_TYPE === 'GROUP' ? '그룹 채팅방' : '')}
-                              {isMuted && <NotificationsOff sx={{ fontSize: 13, color: '#94A3B8', ml: 0.5 }} />}
-                            </Typography>
-                            <Typography sx={{ fontSize: '0.7rem', color: '#94A3B8' }}>{formatTime(room.LAST_MESSAGE_AT)}</Typography>
-                          </Box>
-                        }
-                        // 기존 lastMsgPreview 문자열 방식 대신 별도 렌더링
-                        // ListItemText secondary 부분을 아래로 교체
-
-                        secondary={
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, maxWidth: '70%' }}>
-                              {room.LAST_IS_STICKER && <SentimentSatisfiedAlt sx={{ fontSize: 13, color: '#94A3B8', flexShrink: 0 }} />}
-                              {room.LAST_HAS_IMAGE && !room.LAST_IS_STICKER && <ImageOutlined sx={{ fontSize: 13, color: '#94A3B8', flexShrink: 0 }} />}
-                              {room.LAST_HAS_FILE && !room.LAST_IS_STICKER && !room.LAST_HAS_IMAGE && <AttachFile sx={{ fontSize: 13, color: '#94A3B8', flexShrink: 0 }} />}
-                              <Typography sx={{
-                                fontSize: '0.8rem',
-                                color: room.UNREAD_COUNT ? '#0F172A' : '#64748B',
-                                fontWeight: room.UNREAD_COUNT ? 700 : 400,
-                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
-                              }}>
-                                {room.LAST_IS_STICKER ? '이모티콘을 보냈습니다.'
-                                  : room.LAST_HAS_IMAGE ? '사진을 보냈습니다.'
-                                    : room.LAST_HAS_FILE ? '파일을 보냈습니다.'
-                                      : room.LAST_MESSAGE || ''}
-                              </Typography>
-                            </Box>
-                            {room.UNREAD_COUNT > 0 && (
-                              <Box sx={{ backgroundColor: '#EF4444', color: '#fff', fontSize: '0.6rem', fontWeight: 800, px: 0.6, py: 0.1, borderRadius: 10 }}>
-                                {room.UNREAD_COUNT}
-                              </Box>
+            <Box sx={{ flex: 1, overflowY: 'auto' }}>
+              {loadingRooms ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={24} /></Box>
+              ) : chatRooms.length === 0 ? (
+                <Box sx={{ textAlign: 'center', py: 6 }}>
+                  <Typography sx={{ fontSize: '0.85rem', color: '#64748B' }}>대화가 없습니다.</Typography>
+                </Box>
+              ) : (
+                <List disablePadding>
+                  {chatRooms.map((room) => {
+                    const isActive = parseInt(roomId) === room.ROOM_ID;
+                    const isMuted = mutedRooms[room.ROOM_ID];
+                    return (
+                      <ListItem
+                        button key={room.ROOM_ID}
+                        onClick={() => navigate(`/messages/room/${room.ROOM_ID}`)}
+                        sx={{ py: 1.8, px: 2.5, backgroundColor: isActive ? '#F1F5F9' : 'transparent', transition: 'all 0.15s', '&:hover': { backgroundColor: '#F8FAFC' } }}
+                      >
+                        <ListItemAvatar sx={{ minWidth: 54 }}>
+                          <Badge color="error" variant="dot" invisible={!room.UNREAD_COUNT} sx={{ '& .MuiBadge-badge': { right: 4, top: 4 } }}>
+                            {room.ROOM_TYPE === 'GROUP' ? (
+                              <GroupAvatar avatars={room.PARTICIPANT_AVATARS} nicknames={room.PARTICIPANT_NICKNAMES} roomImage={room.ROOM_IMAGE} size={42} />
+                            ) : (
+                              <Avatar src={room.TARGET_AVATAR ? `${API}${room.TARGET_AVATAR}` : null} sx={{ width: 42, height: 42, backgroundColor: getAvatarColor(room.TARGET_NICKNAME), fontWeight: 800 }}>
+                                {getInitial(room.TARGET_NICKNAME)}
+                              </Avatar>
                             )}
-                          </Box>
-                        }
-                        sx={{ m: 0 }}
-                      />
-                    </ListItem>
-                  );
-                })}
-              </List>
-            )}
+                          </Badge>
+                        </ListItemAvatar>
+                        <ListItemText
+                          primary={
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.2 }}>
+                              <Typography sx={{ fontWeight: isActive ? 800 : 700, fontSize: '0.9rem', color: '#0F172A', display: 'flex', alignItems: 'center' }}>
+                                {room.TARGET_NICKNAME || (room.ROOM_TYPE === 'GROUP' ? (room.ROOM_NAME || '그룹 채팅방') : '')}
+                                {isMuted && <NotificationsOff sx={{ fontSize: 13, color: '#94A3B8', ml: 0.5 }} />}
+                              </Typography>
+                              <Typography sx={{ fontSize: '0.7rem', color: '#94A3B8' }}>{formatTime(room.LAST_MESSAGE_AT)}</Typography>
+                            </Box>
+                          }
+                          secondary={
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              {/* 입력 중 상태 확인 */}
+                              {isActive && typingUsers.length > 0 ? (
+                                <Typography sx={{ fontSize: '0.8rem', color: '#64748B', fontWeight: 600, fontStyle: 'italic' }}>
+                                  {typingUsers[0]}님이 입력 중...
+                                </Typography>
+                              ) : (
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, maxWidth: '70%' }}>
+                                  {room.LAST_IS_STICKER && <SentimentSatisfiedAlt sx={{ fontSize: 13, color: '#94A3B8', flexShrink: 0 }} />}
+                                  {room.LAST_HAS_IMAGE && !room.LAST_IS_STICKER && <ImageOutlined sx={{ fontSize: 13, color: '#94A3B8', flexShrink: 0 }} />}
+                                  {room.LAST_HAS_FILE && !room.LAST_IS_STICKER && !room.LAST_HAS_IMAGE && <AttachFile sx={{ fontSize: 13, color: '#94A3B8', flexShrink: 0 }} />}
+                                  <Typography sx={{ fontSize: '0.8rem', color: room.UNREAD_COUNT ? '#0F172A' : '#64748B', fontWeight: room.UNREAD_COUNT ? 700 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {room.LAST_IS_STICKER ? '이모티콘을 보냈습니다.'
+                                      : room.LAST_HAS_IMAGE ? '사진을 보냈습니다.'
+                                        : room.LAST_HAS_FILE ? '파일을 보냈습니다.'
+                                          : room.LAST_MESSAGE || ''}
+                                  </Typography>
+                                </Box>
+                              )}
+
+                              {room.UNREAD_COUNT > 0 && (
+                                <Box sx={{ backgroundColor: '#EF4444', color: '#fff', fontSize: '0.6rem', fontWeight: 800, px: 0.6, py: 0.1, borderRadius: 10 }}>
+                                  {room.UNREAD_COUNT}
+                                </Box>
+                              )}
+                            </Box>
+                          }
+                          sx={{ m: 0 }}
+                        />
+                      </ListItem>
+                    );
+                  })}
+                </List>
+              )}
+            </Box>
           </Box>
         </Box>
 
-        {/* 채팅 영역 */}
         <Box
-          sx={{ flex: 1, display: { xs: roomId ? 'flex' : 'none', md: 'flex' }, flexDirection: 'column', transition: 'background-color 0.3s', position: 'relative' }}
+          sx={{ flex: 1, display: { xs: roomId ? 'flex' : 'none', md: 'flex' }, flexDirection: 'column', transition: 'background-color 0.3s', position: 'relative', minWidth: 0 }}
           style={{ backgroundColor: chatBgColor }}
         >
+          {sidebarCollapsed && (
+            <Box
+              onClick={() => setSidebarCollapsed(false)}
+              sx={{
+                position: 'absolute',
+                top: 80, // 채팅 헤더 바로 아래쪽
+                left: 0,
+                zIndex: 50,
+                backgroundColor: '#fff',
+                border: '1px solid #E2E8F0',
+                borderLeft: 'none',
+                borderRadius: '0 8px 8px 0',
+                py: 1.5,
+                px: 0.5,
+                cursor: 'pointer',
+                boxShadow: '4px 4px 12px rgba(15,23,42,0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s',
+                '&:hover': { backgroundColor: '#F8FAFC', width: 36 },
+                width: 32,
+              }}
+            >
+              <ArrowForwardIos sx={{ color: '#0F172A', fontSize: 16 }} />
+            </Box>
+          )}
           {!roomId ? (
             <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <Box sx={{ width: 80, height: 80, borderRadius: '50%', border: '2px solid #0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}><MailOutline sx={{ fontSize: 40, color: '#0F172A' }} /></Box>
+              <Box sx={{ width: 80, height: 80, borderRadius: '50%', border: '2px solid #0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
+                <MailOutline sx={{ fontSize: 40, color: '#0F172A' }} />
+              </Box>
               <Typography sx={{ fontWeight: 800, fontSize: '1.2rem', color: '#0F172A', mb: 1 }}>내 메시지</Typography>
               <Typography sx={{ fontSize: '0.85rem', color: '#64748B' }}>친구나 그룹에게 비공개 사진과 메시지를 보내보세요.</Typography>
             </Box>
-          ) : loadingChat ? (
+         ) : (loadingChat || !roomInfo) ? (
             <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CircularProgress /></Box>
           ) : (
             <>
@@ -1174,30 +1537,51 @@ export default function Messages() {
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1.5 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <IconButton size="small" onClick={() => navigate('/messages')} sx={{ color: '#64748B', display: { md: 'none' }, mr: 1 }}><ArrowBack /></IconButton>
+
                       {isGroup ? (
-                        <Box sx={{ mr: 1.5 }}>
-                          <GroupAvatar avatars={roomInfo?.PARTICIPANT_AVATARS} nicknames={roomInfo?.PARTICIPANT_NICKNAMES} />
+                        <Box sx={{ mr: 1, cursor: 'pointer' }} onClick={() => setSettingsOpen(true)}>
+                          <GroupAvatar
+                            avatars={roomInfo?.PARTICIPANT_AVATARS}
+                            nicknames={roomInfo?.PARTICIPANT_NICKNAMES}
+                            roomImage={roomInfo?.ROOM_IMAGE}
+                            onClick={() => setSettingsOpen(true)}
+                          />
                         </Box>
                       ) : (
-                        <Avatar
-                          src={displayAvatar ? `${API}${displayAvatar}` : undefined}
-                          onClick={() => navigate(`/user/${displayTitle}`)}
-                          sx={{ width: 36, height: 36, backgroundColor: '#0F172A', color: '#fff', fontWeight: 800, mr: 1.5, cursor: 'pointer' }}
-                        >
-                          {getInitial(displayTitle)}
-                        </Avatar>
+                        <Box sx={{ mr: 1 }}>
+                          <Badge
+                            color="success"
+                            variant="dot"
+                            invisible={!isOnline}
+                            overlap="circular"
+                            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                            sx={{ '& .MuiBadge-badge': { backgroundColor: '#22C55E', border: '2px solid #fff', width: 12, height: 12, borderRadius: '50%' } }}
+                          >
+                            <Avatar
+                              src={displayAvatar ? (displayAvatar.startsWith('http') ? displayAvatar : `${API}${displayAvatar}`) : undefined}
+                              onClick={() => navigate(`/user/${displayTitle}`)}
+                              sx={{ width: 36, height: 36, backgroundColor: '#0F172A', color: '#fff', fontWeight: 800, cursor: 'pointer' }}
+                            >
+                              {getInitial(displayTitle)}
+                            </Avatar>
+                          </Badge>
+                        </Box>
                       )}
-                      <Box>
+
+                      <Box sx={{ ml: 0.5 }}>
                         <Typography
                           sx={{ fontWeight: 800, fontSize: '0.95rem', color: '#0F172A', cursor: 'pointer' }}
                           onClick={() => isGroup ? setSettingsOpen(true) : navigate(`/user/${displayTitle}`)}
                         >
                           {displayTitle}
                         </Typography>
-                        {activityLabel && (
-                          <Typography sx={{ fontSize: '0.7rem', color: '#22C55E', fontWeight: 600 }}>{activityLabel}</Typography>
+
+                        {(isOnline || activityLabel) && !isGroup && (
+                          <Typography sx={{ fontSize: '0.7rem', color: isOnline ? '#22C55E' : '#64748B', fontWeight: 600 }}>
+                            {isOnline ? '현재 접속 중' : activityLabel}
+                          </Typography>
                         )}
-                        {/* [FIX 2] 그룹 참여자 수 — 클릭하면 모달 오픈 */}
+
                         {isGroup && (
                           <Box
                             onClick={handleOpenParticipantsModal}
@@ -1217,156 +1601,284 @@ export default function Messages() {
                 </Box>
               )}
 
-              <Box sx={{ flex: 1, overflowY: 'auto', p: 2, display: 'flex', flexDirection: 'column', gap: 0.8, mt: deleteMode ? 7 : 0 }}>
-                {processedMessages.map((msg, idx) => {
-                  // [FIX 3] 시스템 메시지 렌더링
-                  if (msg.IS_SYSTEM === true || msg.IS_SYSTEM === 'Y') {
-                    return (
-                      <Box key={msg.MESSAGE_ID || idx} sx={{ display: 'flex', justifyContent: 'center', my: 0.5 }}>
-                        <Box sx={{
-                          px: 2, py: 0.6,
-                          backgroundColor: 'rgba(0,0,0,0.06)',
-                          borderRadius: 10,
-                          backdropFilter: 'blur(4px)',
-                        }}>
-                          <Typography sx={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 500, textAlign: 'center' }}>
-                            {msg.MESSAGE}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    );
-                  }
+              <Box
+                ref={chatContainerRef}
+                onScroll={(e) => {
+                  sessionStorage.setItem(`scroll_${roomId}`, e.target.scrollTop);
+                  const el = e.target;
+                  setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 200);
+                }}
+                sx={{
+                  flex: 1, overflowY: 'auto', p: 2, display: 'flex', flexDirection: 'column', gap: 0.8, mt: deleteMode ? 7 : 0,
+                  '&::-webkit-scrollbar': { display: 'none' },
+                  scrollbarWidth: 'none',
+                }}
+              >
+                {!isGroup && peerProfile && !peerProfileDismissed && messages.length === 0 && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4, gap: 1.5 }}>
+                    {/* 프로필 이미지 (클릭 시 이동) */}
+                    <Avatar
+                      src={peerProfile.AVATAR ? (peerProfile.AVATAR.startsWith('http') ? peerProfile.AVATAR : `${API}${peerProfile.AVATAR}`) : undefined}
+                      onClick={() => navigate(`/user/${peerProfile.NICKNAME}`)}
+                      sx={{ width: 80, height: 80, fontSize: '2rem', backgroundColor: '#0F172A', fontWeight: 800, cursor: 'pointer', transition: 'opacity 0.2s', '&:hover': { opacity: 0.8 } }}
+                    >
+                      {getInitial(peerProfile.NICKNAME)}
+                    </Avatar>
 
+                    {/* 닉네임 (클릭 시 이동) */}
+                    <Typography
+                      onClick={() => navigate(`/user/${peerProfile.NICKNAME}`)}
+                      sx={{ fontWeight: 800, fontSize: '1.15rem', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+                    >
+                      {peerProfile.NICKNAME}
+                    </Typography>
+
+                    {/* 몇 분 전 활동 추가 */}
+                    {peerProfile.LAST_ACTIVE && (
+                      <Typography sx={{ fontSize: '0.75rem', color: '#22C55E', fontWeight: 600, mt: -1 }}>
+                        {formatActivity(peerProfile.LAST_ACTIVE)}
+                      </Typography>
+                    )}
+
+                    {peerProfile.BIO_SHORT && (
+                      <Typography sx={{ fontSize: '0.85rem', color: '#64748B' }}>{peerProfile.BIO_SHORT}</Typography>
+                    )}
+
+                    <Stack direction="row" spacing={3} sx={{ my: 1 }}>
+                      {[['게시물', peerProfile.POST_CNT], ['팔로워', peerProfile.FOLLOWER_CNT], ['팔로잉', peerProfile.FOLLOWING_CNT]].map(([label, val]) => (
+                        <Box key={label} sx={{ textAlign: 'center' }}>
+                          <Typography sx={{ fontWeight: 800, fontSize: '1rem' }}>{val ?? 0}</Typography>
+                          <Typography sx={{ fontSize: '0.72rem', color: '#64748B' }}>{label}</Typography>
+                        </Box>
+                      ))}
+                    </Stack>
+
+                    {/* 문구 변경 및 '대화를 시작해보세요!' 추가 */}
+                    <Typography sx={{ fontSize: '0.85rem', color: '#64748B', textAlign: 'center', mt: 1, lineHeight: 1.6 }}>
+                      {peerProfile.I_FOLLOW === 'ACCEPTED' && peerProfile.THEY_FOLLOW === 'ACCEPTED'
+                        ? '서로 팔로우하고 있습니다.'
+                        : peerProfile.I_FOLLOW === 'ACCEPTED'
+                          ? '내가 팔로우하고 있습니다.'
+                          : peerProfile.THEY_FOLLOW === 'ACCEPTED'
+                            ? '상대방이 팔로우하고 있습니다.'
+                            : '서로 팔로우하고 있지 않습니다.'}
+                      <br />
+                      <span style={{ fontWeight: 700, color: '#0F172A' }}>대화를 시작해보세요!</span>
+                    </Typography>
+                  </Box>
+                )}
+                {processedMessages.map((msg, idx) => {
+                  const prevMsg = idx > 0 ? processedMessages[idx - 1] : null;
+                  const showDateDivider = !prevMsg || !isSameDay(prevMsg.SENT_AT, msg.SENT_AT);
+                  const isSystem = msg.IS_SYSTEM === true || msg.IS_SYSTEM === 'Y';
                   const isMe = msg.SENDER_NICKNAME === myNickname;
                   const currentMin = new Date(msg.SENT_AT).setSeconds(0, 0);
-                  const nextMsg = messages[idx + 1];
-                  const prevMsg = messages[idx - 1];
+                  const nextMsg = processedMessages[idx + 1];
                   const nextMin = nextMsg ? new Date(nextMsg.SENT_AT).setSeconds(0, 0) : null;
-                  const isFirstInGroup = !prevMsg || prevMsg.SENDER_NICKNAME !== msg.SENDER_NICKNAME || prevMsg.IS_SYSTEM === true || prevMsg.IS_SYSTEM === 'Y';
+                  const isFirstInGroup = !prevMsg || prevMsg.SENDER_NICKNAME !== msg.SENDER_NICKNAME || prevMsg.IS_SYSTEM === true || prevMsg.IS_SYSTEM === 'Y' || showDateDivider;
                   const isLastInGroup = !nextMsg || nextMsg.SENDER_NICKNAME !== msg.SENDER_NICKNAME || nextMsg.IS_SYSTEM === true || nextMsg.IS_SYSTEM === 'Y' || currentMin !== nextMin;
                   const showAvatar = !isMe && isFirstInGroup;
                   const colors = getBubbleColors(isMe);
-
                   const isSticker = isStickerMessage(msg);
                   const stickerEmoji = isSticker ? getStickerEmoji(msg) : null;
-
                   const readAt = readAtMap[msg.MESSAGE_ID];
 
                   return (
-                    <Box key={msg.MESSAGE_ID || idx} onClick={() => handleRowClick(msg.MESSAGE_ID)} sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-end', gap: 1, '&:hover .msg-options': { opacity: deleteMode ? 0 : 1 }, cursor: deleteMode ? 'pointer' : 'default', width: '100%', mb: isLastInGroup ? 1.5 : 0 }}>
-                      {deleteMode && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, flexShrink: 0 }}>
-                          <Checkbox
-                            checked={selectedDeleteIds.includes(msg.MESSAGE_ID)}
-                            onChange={() => toggleSelectDelete(msg.MESSAGE_ID)}
-                            onClick={(e) => e.stopPropagation()}
-                            sx={{ p: 0 }}
-                          />
+                    <React.Fragment key={msg.MESSAGE_ID || idx}>
+                      {showDateDivider && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, my: 1.5 }}>
+                          <Box sx={{ flex: 1, height: '1px', backgroundColor: '#E2E8F0' }} />
+                          <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                            {formatDateLabel(msg.SENT_AT)}
+                          </Typography>
+                          <Box sx={{ flex: 1, height: '1px', backgroundColor: '#E2E8F0' }} />
                         </Box>
                       )}
-                      <Box sx={{ flex: 1, display: 'flex', flexDirection: isMe ? 'row-reverse' : 'row', alignItems: 'flex-end', gap: 1 }}>
-                        <Box sx={{ width: 36, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
-                          {showAvatar && !isMe && (
-                            <Avatar
-                              src={msg.SENDER_AVATAR ? `${API}${msg.SENDER_AVATAR}` : undefined}
-                              onClick={(e) => { e.stopPropagation(); navigate(`/user/${msg.SENDER_NICKNAME}`); }}
-                              sx={{ width: 32, height: 32, backgroundColor: getAvatarColor(msg.SENDER_NICKNAME), fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer' }}
-                            >
-                              {getInitial(msg.SENDER_NICKNAME)}
-                            </Avatar>
-                          )}
+
+                      {isSystem ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', my: 0.5 }}>
+                          <Box sx={{ px: 2, py: 0.6, backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 10, backdropFilter: 'blur(4px)' }}>
+                            <Typography sx={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 500, textAlign: 'center' }}>
+                              {msg.MESSAGE}
+                            </Typography>
+                          </Box>
                         </Box>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: isSticker ? 120 : '70%' }}>
-                          {showAvatar && !isMe && <Typography sx={{ fontSize: '0.75rem', color: '#64748B', mb: 0.5, ml: 0.5, fontWeight: 600 }}>{msg.SENDER_NICKNAME}</Typography>}
-                          <Stack direction={isMe ? 'row-reverse' : 'row'} alignItems="flex-end" spacing={0.5}>
-                            {isSticker ? (
-                              <Box sx={{ fontSize: '4rem', lineHeight: 1, animation: 'stickerBounce 0.4s ease', userSelect: 'none', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.15))' }}>
-                                {stickerEmoji}
-                              </Box>
-                            ) : (
-                              <Box sx={{ px: 2, py: 1.2, backgroundColor: colors.bg, color: colors.text, border: colors.border, borderRadius: getBubbleBorderRadius(isMe), boxShadow: bubbleStyle === 'outlined' ? 'none' : '0 2px 8px rgba(0,0,0,0.02)', wordBreak: 'break-word', position: 'relative' }}>
-                                {msg.IS_DELETED === 'Y' ? (
-                                  <Typography sx={{ fontSize: '0.85rem', color: isMe ? 'rgba(255,255,255,0.5)' : '#94A3B8', fontStyle: 'italic' }}>
-                                    삭제된 메시지입니다.
-                                  </Typography>
+                      ) : (
+                        <Box
+                          onClick={() => handleRowClick(msg.MESSAGE_ID)}
+                          sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-end', gap: 1, '&:hover .msg-options': { opacity: deleteMode ? 0 : 1 }, cursor: deleteMode ? 'pointer' : 'default', width: '100%', mb: isLastInGroup ? 1.5 : 0 }}
+                        >
+                          {deleteMode && (
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, flexShrink: 0 }}>
+                              <Checkbox
+                                checked={selectedDeleteIds.includes(msg.MESSAGE_ID)}
+                                onChange={() => toggleSelectDelete(msg.MESSAGE_ID)}
+                                onClick={(e) => e.stopPropagation()}
+                                sx={{ p: 0 }}
+                              />
+                            </Box>
+                          )}
+                          <Box sx={{ flex: 1, display: 'flex', flexDirection: isMe ? 'row-reverse' : 'row', alignItems: 'flex-end', gap: 1 }}>
+                            {/* 보낸 사람 아바타 */}
+                            <Box sx={{ width: 36, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
+                              {showAvatar && !isMe && (
+                                <Avatar
+                                  src={msg.SENDER_AVATAR ? (msg.SENDER_AVATAR.startsWith('http') ? msg.SENDER_AVATAR : `${API}${msg.SENDER_AVATAR}`) : undefined}
+                                  onClick={(e) => { e.stopPropagation(); navigate(`/user/${msg.SENDER_NICKNAME}`); }}
+                                  sx={{ width: 32, height: 32, backgroundColor: '#0F172A', fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer' }}
+                                >
+                                  {getInitial(msg.SENDER_NICKNAME)}
+                                </Avatar>
+                              )}
+                            </Box>
+
+                            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: isSticker ? 120 : '70%' }}>
+                              {showAvatar && !isMe && (
+                                <Typography sx={{ fontSize: '0.75rem', color: '#64748B', mb: 0.5, ml: 0.5, fontWeight: 600 }}>
+                                  {msg.SENDER_NICKNAME}
+                                </Typography>
+                              )}
+                              <Stack direction={isMe ? 'row-reverse' : 'row'} alignItems="flex-end" spacing={0.5}>
+                                {/* 1. 말풍선 (가장 안쪽) */}
+                                {isSticker ? (
+                                  <Box sx={{ fontSize: '4rem', lineHeight: 1, animation: 'stickerBounce 0.4s ease', userSelect: 'none', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.15))' }}>
+                                    {stickerEmoji}
+                                  </Box>
                                 ) : (
-                                  <>
-                                    {msg.IMAGE_URL && (
-                                      <Box
-                                        component="img"
-                                        src={msg.IMAGE_URL.startsWith('blob:') || msg.IMAGE_URL.startsWith('http') ? msg.IMAGE_URL : `${API}${msg.IMAGE_URL}`}
-                                        sx={{ maxWidth: 240, maxHeight: 240, borderRadius: 1.5, display: 'block', mb: msg.MESSAGE ? 1 : 0, cursor: 'pointer' }}
-                                        onClick={() => window.open(msg.IMAGE_URL.startsWith('blob:') || msg.IMAGE_URL.startsWith('http') ? msg.IMAGE_URL : `${API}${msg.IMAGE_URL}`, '_blank')}
-                                      />
+                                  <Box sx={{ px: 2, py: 1.2, backgroundColor: colors.bg, color: colors.text, border: colors.border, borderRadius: getBubbleBorderRadius(isMe), boxShadow: bubbleStyle === 'outlined' ? 'none' : '0 2px 8px rgba(0,0,0,0.02)', wordBreak: 'break-word', position: 'relative' }}>
+                                    {msg.IS_DELETED === 'Y' ? (
+                                      <Typography sx={{ fontSize: '0.85rem', color: isMe ? 'rgba(255,255,255,0.5)' : '#94A3B8', fontStyle: 'italic' }}>
+                                        삭제된 메시지입니다.
+                                      </Typography>
+                                    ) : (
+                                      <>
+                                        {msg.IMAGE_URL && (
+                                          <Box
+                                            component="img"
+                                            src={msg.IMAGE_URL.startsWith('blob:') || msg.IMAGE_URL.startsWith('http') ? msg.IMAGE_URL : `${API}${msg.IMAGE_URL}`}
+                                            sx={{ maxWidth: 240, maxHeight: 240, borderRadius: 1.5, display: 'block', mb: msg.MESSAGE ? 1 : 0, cursor: 'zoom-in', transition: 'opacity 0.15s', '&:hover': { opacity: 0.9 } }}
+                                            onClick={(e) => { e.stopPropagation(); handleChatImageClick(msg.IMAGE_URL); }}
+                                          />
+                                        )}
+                                        {msg.FILE_URL && !msg.IMAGE_URL && (
+                                          <Box
+                                            component="a"
+                                            href={msg.FILE_URL.startsWith('blob:') || msg.FILE_URL.startsWith('http') ? msg.FILE_URL : `${API}${msg.FILE_URL}`}
+                                            target="_blank" rel="noreferrer"
+                                            sx={{ display: 'flex', alignItems: 'center', gap: 1, color: isMe ? '#fff' : '#2563EB', textDecoration: 'none', mb: msg.MESSAGE ? 1 : 0 }}
+                                          >
+                                            <AttachFile fontSize="small" />
+                                            <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{msg.FILE_NAME || '파일'}</Typography>
+                                          </Box>
+                                        )}
+                                        {msg.MESSAGE && msg.MESSAGE.trim() && (
+                                          <Typography sx={{ fontSize: '0.92rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{msg.MESSAGE}</Typography>
+                                        )}
+                                        {msg.IS_EDITED === 'Y' && (
+                                          <Typography sx={{ fontSize: '0.62rem', color: isMe ? 'rgba(255,255,255,0.6)' : '#94A3B8', mt: 0.3 }}>수정됨</Typography>
+                                        )}
+                                      </>
                                     )}
-                                    {msg.FILE_URL && !msg.IMAGE_URL && (
-                                      <Box
-                                        component="a"
-                                        href={msg.FILE_URL.startsWith('blob:') || msg.FILE_URL.startsWith('http') ? msg.FILE_URL : `${API}${msg.FILE_URL}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        sx={{ display: 'flex', alignItems: 'center', gap: 1, color: isMe ? '#fff' : '#2563EB', textDecoration: 'none', mb: msg.MESSAGE ? 1 : 0 }}
-                                      >
-                                        <AttachFile fontSize="small" />
-                                        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{msg.FILE_NAME || '파일'}</Typography>
-                                      </Box>
-                                    )}
-                                    {msg.MESSAGE && msg.MESSAGE.trim() && (
-                                      <Typography sx={{ fontSize: '0.92rem', lineHeight: 1.5 }}>{msg.MESSAGE}</Typography>
-                                    )}
-                                    {msg.IS_EDITED === 'Y' && (
-                                      <Typography sx={{ fontSize: '0.62rem', color: isMe ? 'rgba(255,255,255,0.6)' : '#94A3B8', mt: 0.3 }}>
-                                        수정됨
+                                  </Box>
+                                )}
+
+                                {/* 2. 시간 및 읽음 표시 (말풍선 바로 옆으로 이동) */}
+                                {isLastInGroup && (
+                                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', mb: 0.5 }}>
+                                    {isMe && !isGroup && msg.MESSAGE_ID === lastReadMsgId && (
+                                      <Typography sx={{ fontSize: '0.65rem', color: '#2563EB', fontWeight: 700, mb: 0.2 }}>
+                                        읽음{readAt ? ` ${formatTime(readAt)}` : ''}
                                       </Typography>
                                     )}
-                                  </>
+                                    <Typography sx={{ fontSize: '0.65rem', color: '#94A3B8', minWidth: 40, textAlign: isMe ? 'right' : 'left' }}>
+                                      {formatTime(msg.SENT_AT)}
+                                    </Typography>
+                                  </Box>
                                 )}
-                              </Box>
-                            )}
-                            {!deleteMode && (
-                              <IconButton className="msg-options" size="small" onClick={(e) => handleMessageOptionClick(e, msg)} sx={{ opacity: 0, transition: 'opacity 0.2s', color: '#94A3B8' }}><MoreVert fontSize="small" /></IconButton>
-                            )}
-                            {isLastInGroup && (
-                              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', mb: 0.5 }}>
-                                {isMe && !isGroup && msg.MESSAGE_ID === lastReadMsgId && (
-                                  <Typography sx={{ fontSize: '0.65rem', color: '#2563EB', fontWeight: 700, mb: 0.2 }}>
-                                    읽음{readAt ? ` ${formatTime(readAt)}` : ''}
-                                  </Typography>
+
+                                {/* 3. 점 세개 옵션 메뉴 (가장 바깥쪽, 호버 시 나타남) */}
+                                {!deleteMode && (
+                                  <IconButton className="msg-options" size="small" onClick={(e) => handleMessageOptionClick(e, msg)} sx={{ opacity: 0, transition: 'opacity 0.2s', color: '#94A3B8', mb: 0.5 }}>
+                                    <MoreVert fontSize="small" />
+                                  </IconButton>
                                 )}
-                                {isMe && isGroup && msg.READ_BY && msg.READ_BY.length > 0 && (
-                                  <AvatarGroup max={4} sx={{ '& .MuiAvatar-root': { width: 14, height: 14, fontSize: '0.5rem', border: '1px solid #fff' }, mb: 0.2 }}>
-                                    {msg.READ_BY.map((r, i) => <Avatar key={i} src={r.avatar} />)}
-                                  </AvatarGroup>
-                                )}
-                                <Typography sx={{ fontSize: '0.65rem', color: '#94A3B8', minWidth: 40, textAlign: isMe ? 'right' : 'left' }}>{formatTime(msg.SENT_AT)}</Typography>
-                              </Box>
-                            )}
-                          </Stack>
+                              </Stack>
+                              {/* 그룹 읽음 아바타 */}
+                              {isMe && isGroup && msg.READ_BY && msg.READ_BY.length > 0 && (
+                                <Box sx={{ display: 'flex', flexDirection: 'row', gap: 0.4, mt: 0.5, justifyContent: 'flex-end' }}>
+                                  {msg.READ_BY.slice(0, 5).map((r, i) => (
+                                    <Avatar
+                                      key={i}
+                                      src={r.avatar || undefined}
+                                      sx={{
+                                        width: 24, height: 24, // 👈 18에서 24로 크기 증가
+                                        fontSize: '0.65rem',   // 👈 0.5에서 0.65로 폰트 크기 증가
+                                        fontWeight: 800,
+                                        border: '1.5px solid #fff',
+                                        backgroundColor: '#0F172A',
+                                        boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+                                      }}
+                                    >
+                                      {getInitial(r.nickname)}
+                                    </Avatar>
+                                  ))}
+                                </Box>
+                              )}
+                            </Box>
+                          </Box>
+                        </Box>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+
+                {/* 타이핑 인디케이터 */}
+                {typingUsers.map((nickname) => {
+                  const typingParticipant = participants.find(p => p.NICKNAME === nickname);
+                  const avatarSrc = typingParticipant?.AVATAR ? (typingParticipant.AVATAR.startsWith('http') ? typingParticipant.AVATAR : `${API}${typingParticipant.AVATAR}`) : undefined;
+                  return (
+                    <Box key={nickname} sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-end', gap: 1, width: '100%' }}>
+                      {deleteMode && <Box sx={{ width: 40, flexShrink: 0 }} />}
+                      <Box sx={{ width: 36, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
+                        <Avatar
+                          src={avatarSrc}
+                          sx={{ width: 32, height: 32, backgroundColor: '#0F172A', fontSize: '0.7rem', fontWeight: 800 }}
+                        >
+                          {getInitial(nickname)}
+                        </Avatar>
+                      </Box>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                        {isGroup && (
+                          <Typography sx={{ fontSize: '0.68rem', color: '#94A3B8', mb: 0.3, ml: 0.5, fontWeight: 600 }}>
+                            {nickname}
+                          </Typography>
+                        )}
+                        <Box sx={{ px: 2, py: 1.8, backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: '0px 16px 16px 16px', display: 'flex', gap: 0.5 }}>
+                          {['-0.32s', '-0.16s', '0s'].map((delay, i) => (
+                            <Box key={i} sx={{ width: 6, height: 6, backgroundColor: '#94A3B8', borderRadius: '50%', animation: 'typingBounce 1.4s infinite ease-in-out both', animationDelay: delay }} />
+                          ))}
                         </Box>
                       </Box>
                     </Box>
                   );
                 })}
-
-                {/* 타이핑 인디케이터 */}
-                {typingUsers.length > 0 && (
-                  <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-end', gap: 1, width: '100%' }}>
-                    {deleteMode && <Box sx={{ width: 40, flexShrink: 0 }} />}
-                    <Box sx={{ width: 36, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
-                      <Avatar sx={{ width: 32, height: 32, backgroundColor: '#E2E8F0' }} />
-                    </Box>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                      {isGroup && typingUsers.length > 0 && (
-                        <Typography sx={{ fontSize: '0.68rem', color: '#94A3B8', mb: 0.3, ml: 0.5 }}>
-                          {typingUsers.join(', ')}
-                        </Typography>
-                      )}
-                      <Box sx={{ px: 2, py: 1.8, backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: '0px 16px 16px 16px', display: 'flex', gap: 0.5 }}>
-                        {['-0.32s', '-0.16s', '0s'].map((delay, i) => (
-                          <Box key={i} sx={{ width: 6, height: 6, backgroundColor: '#94A3B8', borderRadius: '50%', animation: 'typingBounce 1.4s infinite ease-in-out both', animationDelay: delay }} />
-                        ))}
-                      </Box>
-                    </Box>
+                {showScrollBtn && (
+                  <Box
+                    onClick={scrollToBottom}
+                    sx={{
+                      position: 'absolute', bottom: 90, right: 24, zIndex: 30,
+                      width: 40, height: 40, borderRadius: '50%',
+                      backgroundColor: 'rgba(255,255,255,0.9)',
+                      color: '#0F172A',
+                      backdropFilter: 'blur(8px)',
+                      border: '1px solid #E2E8F0',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                      animation: 'fadeIn 0.2s ease',
+                      '&:hover': { backgroundColor: '#F1F5F9' }
+                    }}
+                  >
+                    <ExpandMore sx={{ fontSize: 24 }} />
                   </Box>
                 )}
                 <div ref={messagesEndRef} />
@@ -1379,51 +1891,55 @@ export default function Messages() {
                 </Box>
               )}
 
-              <Box component="form" onSubmit={handleSend} sx={{ p: 2, backgroundColor: '#fff', borderTop: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: 1 }}>
-                <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept="image/*,video/*,*/*" onChange={handleFileUpload} />
-                <IconButton sx={{ color: '#94A3B8' }} onClick={() => fileInputRef.current?.click()}>
-                  <ImageOutlined />
-                </IconButton>
-                <IconButton sx={{ color: '#94A3B8' }} onClick={(e) => setStickerAnchorEl(e.currentTarget)}><SentimentSatisfiedAlt /></IconButton>
-                <Popover
-                  open={Boolean(stickerAnchorEl)}
-                  anchorEl={stickerAnchorEl}
-                  onClose={() => setStickerAnchorEl(null)}
-                  anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-                  transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-                  PaperProps={{ sx: { p: 1.5, borderRadius: 3, mb: 1, boxShadow: '0 8px 32px rgba(0,0,0,0.15)', border: '1px solid #E2E8F0' } }}
-                >
-                  <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: 700, mb: 1, px: 0.5 }}>이모티콘</Typography>
-                  <Grid container spacing={0.5} sx={{ width: 280 }}>
-                    {STICKER_LIST.map(sticker => (
-                      <Grid item xs={3} key={sticker.id}>
-                        <Box
-                          onClick={() => handleStickerSelect(sticker)}
-                          sx={{
-                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                            p: 1, borderRadius: 2, cursor: 'pointer', transition: 'all 0.15s',
-                            '&:hover': { backgroundColor: '#F1F5F9', transform: 'scale(1.15)' }
-                          }}
-                        >
-                          <Box sx={{ fontSize: '2.2rem', lineHeight: 1 }}>{sticker.emoji}</Box>
-                          <Typography sx={{ fontSize: '0.6rem', color: '#94A3B8', mt: 0.3 }}>{sticker.label}</Typography>
-                        </Box>
-                      </Grid>
-                    ))}
-                  </Grid>
-                </Popover>
-                <InputBase
-                  fullWidth
-                  placeholder="메시지 입력..."
-                  value={newMessage}
-                  onChange={(e) => handleTypingInput(e.target.value)}
-                  onPaste={handlePaste}
-                  sx={{ backgroundColor: '#F1F5F9', px: 2, py: 1.2, borderRadius: 3, fontSize: '0.95rem', color: '#0F172A' }}
-                />
-                <IconButton type="submit" disabled={!newMessage.trim()} sx={{ backgroundColor: newMessage.trim() ? '#2563EB' : '#E2E8F0', color: '#fff', '&:hover': { backgroundColor: '#1D4ED8' }, transition: 'all 0.2s', p: 1.2 }}>
-                  <SendRounded sx={{ fontSize: 20 }} />
-                </IconButton>
-              </Box>
+              {isBlocked ? (
+                <Box sx={{ p: 2, backgroundColor: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', flexShrink: 0, minHeight: 74 }}>
+                  <Typography sx={{ fontSize: '0.85rem', color: '#64748B', fontWeight: 600 }}>
+                    {blockText}
+                  </Typography>
+                </Box>
+              ) : (
+                <Box component="form" onSubmit={handleSend} sx={{ p: 2, backgroundColor: '#fff', borderTop: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+                  <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept="image/*,video/*,*/*" onChange={handleFileUpload} />
+                  <IconButton sx={{ color: '#94A3B8' }} onClick={() => fileInputRef.current?.click()}><ImageOutlined /></IconButton>
+                  <IconButton sx={{ color: '#94A3B8' }} onClick={(e) => setStickerAnchorEl(e.currentTarget)}><SentimentSatisfiedAlt /></IconButton>
+
+                  <Popover
+                    open={Boolean(stickerAnchorEl)}
+                    anchorEl={stickerAnchorEl}
+                    onClose={() => setStickerAnchorEl(null)}
+                    anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+                    transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+                    PaperProps={{ sx: { p: 1.5, borderRadius: 3, mb: 1, boxShadow: '0 8px 32px rgba(0,0,0,0.15)', border: '1px solid #E2E8F0' } }}
+                  >
+                    <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: 700, mb: 1, px: 0.5 }}>이모티콘</Typography>
+                    <Grid container spacing={0.5} sx={{ width: 280 }}>
+                      {STICKER_LIST.map(sticker => (
+                        <Grid item xs={3} key={sticker.id}>
+                          <Box
+                            onClick={() => handleStickerSelect(sticker)}
+                            sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 1, borderRadius: 2, cursor: 'pointer', transition: 'all 0.15s', '&:hover': { backgroundColor: '#F1F5F9', transform: 'scale(1.15)' } }}
+                          >
+                            <Box sx={{ fontSize: '2.2rem', lineHeight: 1 }}>{sticker.emoji}</Box>
+                            <Typography sx={{ fontSize: '0.6rem', color: '#94A3B8', mt: 0.3 }}>{sticker.label}</Typography>
+                          </Box>
+                        </Grid>
+                      ))}
+                    </Grid>
+                  </Popover>
+
+                  <InputBase
+                    fullWidth
+                    placeholder="메시지 입력..."
+                    value={newMessage}
+                    onChange={(e) => handleTypingInput(e.target.value)}
+                    onPaste={handlePaste}
+                    sx={{ backgroundColor: '#F1F5F9', px: 2, py: 1.2, borderRadius: 3, fontSize: '0.95rem', color: '#0F172A' }}
+                  />
+                  <IconButton type="submit" disabled={!newMessage.trim()} sx={{ backgroundColor: newMessage.trim() ? '#2563EB' : '#E2E8F0', color: '#fff', '&:hover': { backgroundColor: '#1D4ED8' }, transition: 'all 0.2s', p: 1.2 }}>
+                    <SendRounded sx={{ fontSize: 20 }} />
+                  </IconButton>
+                </Box>
+              )}
             </>
           )}
         </Box>
@@ -1431,10 +1947,22 @@ export default function Messages() {
 
       {/* 메시지 옵션 메뉴 */}
       <Menu anchorEl={anchorElMessage} open={Boolean(anchorElMessage)} onClose={handleCloseMessageOption} PaperProps={{ sx: { borderRadius: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', minWidth: 150 } }}>
-        {selectedMessage && selectedMessage.SENDER_NICKNAME === myNickname && <MenuItem onClick={handleEditMessageClick} sx={{ fontSize: '0.85rem' }}><EditOutlined fontSize="small" sx={{ mr: 1, color: '#64748B' }} /> 수정</MenuItem>}
-        {selectedMessage && selectedMessage.SENDER_NICKNAME === myNickname && <MenuItem onClick={handleDeleteMessageForAll} sx={{ fontSize: '0.85rem' }}><DeleteOutline fontSize="small" sx={{ mr: 1, color: '#64748B' }} /> 모든 사람에게서 삭제</MenuItem>}
-        {selectedMessage && <MenuItem onClick={handleDeleteMessageForMe} sx={{ fontSize: '0.85rem' }}><DeleteOutline fontSize="small" sx={{ mr: 1, color: '#64748B' }} /> 나에게서만 삭제</MenuItem>}
-        {selectedMessage && selectedMessage.SENDER_NICKNAME !== myNickname && (
+        {selectedMessage?.SENDER_NICKNAME === myNickname && (
+          <MenuItem onClick={handleEditMessageClick} sx={{ fontSize: '0.85rem' }}>
+            <EditOutlined fontSize="small" sx={{ mr: 1, color: '#64748B' }} /> 수정
+          </MenuItem>
+        )}
+        {selectedMessage?.SENDER_NICKNAME === myNickname && (
+          <MenuItem onClick={handleDeleteMessageForAll} sx={{ fontSize: '0.85rem' }}>
+            <DeleteOutline fontSize="small" sx={{ mr: 1, color: '#64748B' }} /> 모든 사람에게서 삭제
+          </MenuItem>
+        )}
+        {selectedMessage && (
+          <MenuItem onClick={handleDeleteMessageForMe} sx={{ fontSize: '0.85rem' }}>
+            <DeleteOutline fontSize="small" sx={{ mr: 1, color: '#64748B' }} /> 나에게서만 삭제
+          </MenuItem>
+        )}
+        {selectedMessage?.SENDER_NICKNAME !== myNickname && (
           <MenuItem onClick={handleReportMessage} sx={{ fontSize: '0.85rem', color: '#EF4444' }}>
             <ReportGmailerrorred fontSize="small" sx={{ mr: 1 }} /> 신고
           </MenuItem>
@@ -1442,7 +1970,7 @@ export default function Messages() {
       </Menu>
 
       {/* 새 채팅 다이얼로그 */}
-      <Dialog open={createChatOpen} onClose={() => setCreateChatOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3, minHeight: 400 } }}>
+      <Dialog open={createChatOpen} onClose={() => { setCreateChatOpen(false); setSelectedUsers([]); setNewChatSearchQuery(''); setNewChatSearchResults([]); }} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3, minHeight: 400 } }}>
         <DialogTitle sx={{ fontWeight: 800, fontSize: '1.1rem', textAlign: 'center', borderBottom: '1px solid #E2E8F0', pb: 1.5 }}>새 채팅</DialogTitle>
         <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column' }}>
           <Box sx={{ p: 2, borderBottom: '1px solid #E2E8F0' }}>
@@ -1459,79 +1987,108 @@ export default function Messages() {
             {newChatSearchResults.map(user => (
               <ListItem button key={user.USER_ID} onClick={() => toggleUserSelection(user)} sx={{ py: 1 }}>
                 <Checkbox checked={!!selectedUsers.find(u => u.USER_ID === user.USER_ID)} sx={{ p: 0, mr: 2 }} />
-                <ListItemAvatar sx={{ minWidth: 40 }}><Avatar src={user.AVATAR ? `${API}${user.AVATAR}` : null} sx={{ width: 32, height: 32, backgroundColor: '#0F172A', fontSize: '0.75rem', fontWeight: 800 }}>{getInitial(user.NICKNAME)}</Avatar></ListItemAvatar>
+                <ListItemAvatar sx={{ minWidth: 40 }}>
+                  <Avatar src={user.AVATAR ? `${API}${user.AVATAR}` : null} sx={{ width: 32, height: 32, backgroundColor: '#0F172A', fontSize: '0.75rem', fontWeight: 800 }}>
+                    {getInitial(user.NICKNAME)}
+                  </Avatar>
+                </ListItemAvatar>
                 <ListItemText primary={<Typography sx={{ fontSize: '0.85rem', fontWeight: 700 }}>{user.NICKNAME}</Typography>} />
               </ListItem>
             ))}
           </List>
         </DialogContent>
         <DialogActions sx={{ p: 2, borderTop: '1px solid #E2E8F0' }}>
-          <Button fullWidth variant="contained" disabled={selectedUsers.length === 0} onClick={handleStartNewChat} sx={{ borderRadius: 2, fontWeight: 700, py: 1.2, boxShadow: 'none' }}>{selectedUsers.length > 1 ? '단체 채팅 시작' : '개인 채팅 시작'}</Button>
+          <Button fullWidth variant="contained" disabled={selectedUsers.length === 0} onClick={handleStartNewChat} sx={{ borderRadius: 2, fontWeight: 700, py: 1.2, boxShadow: 'none' }}>
+            {selectedUsers.length > 1 ? '단체 채팅 시작' : '개인 채팅 시작'}
+          </Button>
         </DialogActions>
       </Dialog>
 
       {/* 채팅방 설정 */}
       <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 4, backgroundColor: '#F8FAFC' } }}>
         <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 800, fontSize: '1.2rem', borderBottom: '1px solid #E2E8F0', backgroundColor: '#fff', py: 2 }}>
-          채팅방 설정 <IconButton onClick={() => setSettingsOpen(false)} size="small" sx={{ backgroundColor: '#F1F5F9' }}><Close fontSize="small" /></IconButton>
+          채팅방 설정
+          <IconButton onClick={() => setSettingsOpen(false)} size="small" sx={{ backgroundColor: '#F1F5F9' }}><Close fontSize="small" /></IconButton>
         </DialogTitle>
         <DialogContent sx={{ p: 3 }}>
           {isGroup && (
             <Box sx={{ backgroundColor: '#fff', p: 2.5, borderRadius: 3, border: '1px solid #E2E8F0', mb: 2 }}>
               <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', mb: 2 }}>채팅방 정보 수정</Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5, mb: 3 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, mb: 2.5 }}>
                 <Box onClick={() => roomImageRef.current?.click()} sx={{ cursor: 'pointer', position: 'relative' }}>
-                  <GroupAvatar avatars={roomInfo?.PARTICIPANT_AVATARS} nicknames={roomInfo?.PARTICIPANT_NICKNAMES} roomImage={roomInfo?.ROOM_IMAGE} size={64} />
-                  <Box sx={{ position: 'absolute', bottom: 0, right: 0, width: 22, height: 22, backgroundColor: '#2563EB', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff' }}>
+                  {currentRoomImageSrc ? (
+                    <Avatar src={currentRoomImageSrc} sx={{ width: 72, height: 72 }} />
+                  ) : (
+                    <Box sx={{ width: 72, height: 72, borderRadius: '50%', backgroundColor: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <GroupOutlined sx={{ fontSize: 32, color: '#fff' }} />
+                    </Box>
+                  )}
+                  <Box sx={{ position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, backgroundColor: '#2563EB', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff' }}>
                     <EditOutlined sx={{ fontSize: 13, color: '#fff' }} />
                   </Box>
                 </Box>
-                <input type="file" ref={roomImageRef} style={{ display: 'none' }} accept="image/*" onChange={(e) => setRoomImageFile(e.target.files[0])} />
-                <Typography sx={{ fontSize: '0.78rem', color: '#94A3B8' }}>사진을 클릭해서 변경</Typography>
+                <input type="file" ref={roomImageRef} style={{ display: 'none' }} accept="image/*" onChange={handleRoomImageChange} />
+                <Typography sx={{ fontSize: '0.75rem', color: '#94A3B8' }}>사진을 클릭해서 변경</Typography>
+                {(roomInfo?.ROOM_IMAGE || roomImagePreview) && !deleteRoomImage && (
+                  <Button
+                    size="small"
+                    onClick={() => { setDeleteRoomImage(true); setRoomImagePreview(null); setRoomImageFile(null); }}
+                    sx={{ fontSize: '0.72rem', color: '#EF4444', textTransform: 'none', p: 0 }}
+                  >
+                    사진 삭제
+                  </Button>
+                )}
               </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                <Box onClick={() => roomImageRef.current?.click()} sx={{ cursor: 'pointer', position: 'relative' }}>
-                  <GroupAvatar avatars={roomInfo?.PARTICIPANT_AVATARS} nicknames={roomInfo?.PARTICIPANT_NICKNAMES} size={56} />
-                  <Box sx={{ position: 'absolute', bottom: 0, right: 0, width: 20, height: 20, backgroundColor: '#2563EB', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <EditOutlined sx={{ fontSize: 12, color: '#fff' }} />
-                  </Box>
-                </Box>
-                <input type="file" ref={roomImageRef} style={{ display: 'none' }} accept="image/*"
-                  onChange={(e) => setRoomImageFile(e.target.files[0])} />
-                <Typography sx={{ fontSize: '0.78rem', color: '#94A3B8' }}>사진을 클릭해서 변경</Typography>
-              </Box>
+              {/* FIX 5: 빈 이름일 때 저장 버튼 비활성화 + 경고 */}
               <InputBase
                 fullWidth
                 value={roomNameEdit}
                 onChange={(e) => setRoomNameEdit(e.target.value)}
-                placeholder="채팅방 이름"
-                sx={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2, px: 2, py: 1, fontSize: '0.9rem', mb: 1.5 }}
+                placeholder="채팅방 이름을 입력해주세요"
+                sx={{
+                  backgroundColor: '#F8FAFC',
+                  border: `1px solid ${!roomNameEdit.trim() ? '#FCA5A5' : '#E2E8F0'}`,
+                  borderRadius: 2, px: 2, py: 1, fontSize: '0.9rem', mb: 0.5
+                }}
               />
-              <Button fullWidth variant="contained" onClick={handleSaveRoomInfo}
-                sx={{ borderRadius: 2, fontWeight: 700, boxShadow: 'none', py: 1 }}>
+              {!roomNameEdit.trim() && (
+                <Typography sx={{ fontSize: '0.72rem', color: '#EF4444', mb: 1, ml: 0.5 }}>
+                  채팅방 이름은 필수입니다.
+                </Typography>
+              )}
+              <Button
+                fullWidth variant="contained"
+                onClick={handleSaveRoomInfo}
+                disabled={!roomNameEdit.trim()}
+                sx={{
+                  mt: 1, borderRadius: 2, fontWeight: 700, boxShadow: 'none', py: 1,
+                  '&.Mui-disabled': { backgroundColor: '#E2E8F0', color: '#94A3B8' }
+                }}
+              >
                 저장
               </Button>
             </Box>
           )}
+
           <Box sx={{ backgroundColor: '#fff', p: 2.5, borderRadius: 3, border: '1px solid #E2E8F0', mb: 2, boxShadow: '0 2px 12px rgba(0,0,0,0.02)' }}>
-            <FormControlLabel control={<Switch
-              checked={mutedRooms[roomId] || false}
-              onChange={(e) => setMutedRooms(prev => ({ ...prev, [roomId]: e.target.checked }))}
-              color="primary"
-            />} label={<Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>알림 끄기</Typography>} sx={{ m: 0, width: '100%', justifyContent: 'space-between' }} labelPlacement="start" />
+            <FormControlLabel
+              control={<Switch checked={mutedRooms[roomId] || false} onChange={(e) => setMutedRooms(prev => ({ ...prev, [roomId]: e.target.checked }))} color="primary" />}
+              label={<Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>알림 끄기</Typography>}
+              sx={{ m: 0, width: '100%', justifyContent: 'space-between' }} labelPlacement="start"
+            />
           </Box>
+
           <Box sx={{ backgroundColor: '#fff', p: 2.5, borderRadius: 3, border: '1px solid #E2E8F0', mb: 2, boxShadow: '0 2px 12px rgba(0,0,0,0.02)' }}>
             <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', mb: 2 }}>배경색 변경</Typography>
             <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
               {['#F8FAFC', '#EFF6FF', '#FEF2F2', '#F0FDF4', '#FFFBEB', '#F5F3FF', '#FAFAFA', '#18181B'].map(color => (
-                <Box
-                  key={color}
-                  onClick={() => handleBgColorChange(color)}
+                <Box key={color} onClick={() => handleBgColorChange(color)}
                   sx={{ width: 44, height: 44, borderRadius: '50%', backgroundColor: color, border: chatBgColor === color ? '3px solid #2563EB' : '1px solid #CBD5E1', cursor: 'pointer', transition: 'transform 0.1s', '&:hover': { transform: 'scale(1.1)' } }}
                 />
               ))}
             </Stack>
           </Box>
+
           <Box sx={{ backgroundColor: '#fff', p: 2.5, borderRadius: 3, border: '1px solid #E2E8F0', mb: 2, boxShadow: '0 2px 12px rgba(0,0,0,0.02)' }}>
             <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', mb: 2 }}>말풍선 스타일</Typography>
             <Select fullWidth size="small" value={bubbleStyle} onChange={(e) => handleBubbleStyleChange(e.target.value)} sx={{ borderRadius: 2, backgroundColor: '#F8FAFC' }}>
@@ -1540,14 +2097,31 @@ export default function Messages() {
               <MenuItem value="outlined">테두리형</MenuItem>
             </Select>
           </Box>
+
+          {/* FIX 2: 첨부파일 갤러리 — 클릭 시 좌우 화살표로 탐색 */}
           <Box sx={{ backgroundColor: '#fff', p: 2.5, borderRadius: 3, border: '1px solid #E2E8F0', mb: 2, boxShadow: '0 2px 12px rgba(0,0,0,0.02)' }}>
-            <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', mb: 2 }}>모든 첨부파일</Typography>
-            <Grid container spacing={1}>
-              <Grid item xs={3}><Box sx={{ width: '100%', aspectRatio: '1/1', backgroundColor: '#F1F5F9', borderRadius: 2 }} /></Grid>
-              <Grid item xs={3}><Box sx={{ width: '100%', aspectRatio: '1/1', backgroundColor: '#F1F5F9', borderRadius: 2 }} /></Grid>
-            </Grid>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', mb: 1.5 }}>모든 첨부파일</Typography>
+            {allAttachmentImages.length === 0 ? (
+              <Typography sx={{ fontSize: '0.8rem', color: '#94A3B8' }}>첨부된 이미지가 없습니다.</Typography>
+            ) : (
+              <Grid container spacing={1}>
+                {allAttachmentImages.map((imgUrl, i) => (
+                  <Grid item xs={3} key={i}>
+                    <Box
+                      component="img"
+                      src={imgUrl}
+                      sx={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', borderRadius: 2, cursor: 'zoom-in', transition: 'opacity 0.15s', '&:hover': { opacity: 0.8 } }}
+                      onClick={() => handleGalleryImageClick(i)}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+            )}
           </Box>
-          <Button fullWidth variant="outlined" color="error" startIcon={<ExitToApp />} onClick={handleLeaveRoom} sx={{ fontWeight: 800, borderRadius: 2, py: 1.2, backgroundColor: '#fff' }}>채팅방 나가기</Button>
+
+          <Button fullWidth variant="outlined" color="error" startIcon={<ExitToApp />} onClick={handleLeaveRoom} sx={{ fontWeight: 800, borderRadius: 2, py: 1.2, backgroundColor: '#fff' }}>
+            채팅방 나가기
+          </Button>
         </DialogContent>
       </Dialog>
 
@@ -1561,7 +2135,7 @@ export default function Messages() {
         </DialogActions>
       </Dialog>
 
-      {/* [FIX 2] 참여자 목록 모달 */}
+      {/* 참여자 목록 모달 */}
       <ParticipantsModal
         open={participantsModalOpen}
         onClose={() => setParticipantsModalOpen(false)}
@@ -1576,17 +2150,22 @@ export default function Messages() {
         onSuccess={() => setReportSuccessOpen(true)}
       />
 
-      {/* 신고 성공 토스트 */}
-      <Snackbar
-        open={reportSuccessOpen}
-        autoHideDuration={2500}
-        onClose={() => setReportSuccessOpen(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity="success" sx={{ fontWeight: 600, fontSize: '0.85rem', borderRadius: 2 }}>
-          신고가 접수되었습니다.
-        </Alert>
+      {/* FIX 1 & 2: 이미지 뷰어 모달 */}
+      <ImageViewerModal
+        open={imageViewer.open}
+        onClose={() => setImageViewer(prev => ({ ...prev, open: false }))}
+        imageUrl={imageViewer.url}
+        allImages={imageViewer.allImages}
+        initialIndex={imageViewer.index}
+      />
+
+      <Snackbar open={reportSuccessOpen} autoHideDuration={2500} onClose={() => setReportSuccessOpen(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity="success" sx={{ fontWeight: 600, fontSize: '0.85rem', borderRadius: 2 }}>신고가 접수되었습니다.</Alert>
       </Snackbar>
-    </ThemeProvider>
+
+      <Snackbar open={roomNameSavedOpen} autoHideDuration={2000} onClose={() => setRoomNameSavedOpen(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity="success" sx={{ fontWeight: 600, fontSize: '0.85rem', borderRadius: 2 }}>저장되었습니다.</Alert>
+      </Snackbar>
+    </ThemeProvider >
   );
 }

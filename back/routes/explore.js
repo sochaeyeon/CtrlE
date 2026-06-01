@@ -204,11 +204,6 @@ router.get('/search', jwtAuthentication, async (req, res) => {
     }
 });
 
-// ──────────────────────────────────────────────────────────
-//  POST /explore/follow/:targetId — 팔로우 / 언팔로우 토글
-//  FOLLOWS 테이블: FOLLOWER_ID, FOLLOWING_ID, STATUS='ACCEPTED'
-//  언팔로우 시 FOLLOWS 행 삭제 + FOLLOW_REQUESTS도 정리
-// ──────────────────────────────────────────────────────────
 router.post('/follow/:targetId', jwtAuthentication, async (req, res) => {
     const { targetId } = req.params;
     const userId = getUserId(req);

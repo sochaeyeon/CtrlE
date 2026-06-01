@@ -119,9 +119,6 @@ router.get('/rooms', jwtAuthentication, async (req, res) => {
     }
 });
 
-// ─────────────────────────────────────────────
-// POST /messages/room — 채팅방 생성 / 기존 방 반환
-// ─────────────────────────────────────────────
 router.post('/room', jwtAuthentication, async (req, res) => {
     const myId = req.user?.userId ?? req.user?.id;
     const { targetNicknames } = req.body;
@@ -185,6 +182,20 @@ router.post('/room', jwtAuthentication, async (req, res) => {
         }
 
         await conn.commit();
+
+        if (roomType === 'GROUP') {
+            const myNickRes = await conn.execute(
+                `SELECT NICKNAME FROM USERS WHERE USER_ID = :myId`,
+                { myId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+            );
+            const myNick = myNickRes.rows[0]?.NICKNAME || '';
+            const sysMsg = `${myNick}님이 ${targetNicknames.join(', ')}님을 초대했습니다.`;
+            await conn.execute(
+                `INSERT INTO CHAT_MESSAGES (MESSAGE_ID, ROOM_ID, SENDER_ID, MESSAGE, IS_SYSTEM, SENT_AT)
+     VALUES (SEQ_MSG_ID.NEXTVAL, :newRoomId, :myId, :msg, 'Y', SYSDATE)`,
+                { newRoomId, myId, msg: sysMsg }, { autoCommit: true }
+            );
+        }
         res.json({ success: true, roomId: newRoomId });
 
     } catch (err) {
@@ -219,6 +230,7 @@ router.get('/:roomId', jwtAuthentication, async (req, res) => {
             (SELECT COUNT(*) FROM CHAT_MEMBERS WHERE ROOM_ID = r.ROOM_ID) AS MEMBER_COUNT,
                     u.NICKNAME AS TARGET_NICKNAME,
                     u.USER_ID AS TARGET_ID,
+                    u.LAST_ACTIVE AS TARGET_LAST_ACTIVE,
                     (SELECT IMAGE_URL FROM PROFILE_IMAGES WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS TARGET_AVATAR
              FROM CHAT_ROOMS r
              LEFT JOIN CHAT_MEMBERS cm ON r.ROOM_ID = cm.ROOM_ID AND cm.USER_ID != :myId AND r.ROOM_TYPE = 'DIRECT'
@@ -271,6 +283,11 @@ router.get('/:roomId', jwtAuthentication, async (req, res) => {
         await conn.execute(
             `UPDATE CHAT_MESSAGES SET IS_READ = 'Y'
              WHERE ROOM_ID = :roomId AND SENDER_ID != :myId AND IS_READ = 'N'`,
+            { roomId, myId }
+        );
+
+        await conn.execute(
+            `UPDATE CHAT_MEMBERS SET LAST_READ_AT = SYSDATE WHERE ROOM_ID = :roomId AND USER_ID = :myId`,
             { roomId, myId }
         );
         await conn.commit();
@@ -488,9 +505,6 @@ router.delete('/:roomId/leave', jwtAuthentication, async (req, res) => {
     }
 });
 
-// ─────────────────────────────────────────────
-// GET /messages/:roomId/participants — 참여자 목록
-// ─────────────────────────────────────────────
 router.get('/:roomId/participants', jwtAuthentication, async (req, res) => {
     const myId = req.user?.userId ?? req.user?.id;
     const { roomId } = req.params;
@@ -498,12 +512,12 @@ router.get('/:roomId/participants', jwtAuthentication, async (req, res) => {
     try {
         conn = await db.getConnection();
         const result = await conn.execute(
-            `SELECT u.USER_ID, u.NICKNAME,
-                    (SELECT IMAGE_URL FROM PROFILE_IMAGES WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR
-             FROM CHAT_MEMBERS cm
-             JOIN USERS u ON cm.USER_ID = u.USER_ID
-             WHERE cm.ROOM_ID = :roomId
-             ORDER BY cm.JOINED_AT ASC`,
+            `SELECT u.USER_ID, u.NICKNAME, cm.LAST_READ_AT,
+       (SELECT IMAGE_URL FROM PROFILE_IMAGES WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR
+FROM CHAT_MEMBERS cm
+JOIN USERS u ON cm.USER_ID = u.USER_ID
+WHERE cm.ROOM_ID = :roomId
+ORDER BY cm.JOINED_AT ASC`,
             { roomId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
         res.json({ success: true, participants: result.rows });
@@ -517,7 +531,7 @@ router.get('/:roomId/participants', jwtAuthentication, async (req, res) => {
 router.post('/:roomId/typing', jwtAuthentication, (req, res) => {
     const myId = req.user?.userId ?? req.user?.id;
     // 프론트에서 넘어온 nickname을 최우선으로 사용
-    const myNickname = req.body.nickname || req.user?.nickname; 
+    const myNickname = req.body.nickname || req.user?.nickname;
     const { roomId } = req.params;
     const { isTyping } = req.body;
 
@@ -570,25 +584,19 @@ router.get('/:roomId/typing', jwtAuthentication, (req, res) => {
     res.json({ success: true, typingUsers });
 });
 
-// GET /messages/:roomId/settings — 설정 불러오기
+// GET — USER_ID 조건 제거
 router.get('/:roomId/settings', jwtAuthentication, async (req, res) => {
-    const myId = req.user?.userId ?? req.user?.id;
     const { roomId } = req.params;
     let conn;
     try {
         conn = await db.getConnection();
         const result = await conn.execute(
             `SELECT BG_COLOR, BUBBLE_STYLE FROM CHAT_ROOM_SETTINGS
-             WHERE USER_ID = :myId AND ROOM_ID = :roomId`,
-            { myId, roomId },
+             WHERE ROOM_ID = :roomId`,
+            { roomId },
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
-        if (result.rows.length > 0) {
-            res.json({ success: true, settings: result.rows[0] });
-        } else {
-            // 설정 없으면 기본값
-            res.json({ success: true, settings: { BG_COLOR: '#F8FAFC', BUBBLE_STYLE: 'rounded' } });
-        }
+        res.json({ success: true, settings: result.rows[0] || { BG_COLOR: '#F8FAFC', BUBBLE_STYLE: 'rounded' } });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     } finally {
@@ -596,9 +604,8 @@ router.get('/:roomId/settings', jwtAuthentication, async (req, res) => {
     }
 });
 
-// PUT /messages/:roomId/settings — 설정 저장 (UPSERT)
+// PUT — USER_ID 없이 방 단위로 UPSERT
 router.put('/:roomId/settings', jwtAuthentication, async (req, res) => {
-    const myId = req.user?.userId ?? req.user?.id;
     const { roomId } = req.params;
     const { bgColor, bubbleStyle } = req.body;
     let conn;
@@ -606,13 +613,13 @@ router.put('/:roomId/settings', jwtAuthentication, async (req, res) => {
         conn = await db.getConnection();
         await conn.execute(
             `MERGE INTO CHAT_ROOM_SETTINGS s
-             USING DUAL ON (s.USER_ID = :myId AND s.ROOM_ID = :roomId)
+             USING DUAL ON (s.ROOM_ID = :roomId)
              WHEN MATCHED THEN
                  UPDATE SET BG_COLOR = :bgColor, BUBBLE_STYLE = :bubbleStyle, UPDATED_AT = SYSDATE
              WHEN NOT MATCHED THEN
-                 INSERT (USER_ID, ROOM_ID, BG_COLOR, BUBBLE_STYLE, UPDATED_AT)
-                 VALUES (:myId, :roomId, :bgColor, :bubbleStyle, SYSDATE)`,
-            { myId, roomId, bgColor, bubbleStyle },
+                 INSERT (ROOM_ID, BG_COLOR, BUBBLE_STYLE, UPDATED_AT)
+                 VALUES (:roomId, :bgColor, :bubbleStyle, SYSDATE)`,
+            { roomId, bgColor, bubbleStyle },
             { autoCommit: true }
         );
         res.json({ success: true });
@@ -642,6 +649,34 @@ router.put('/:roomId/room-info', jwtAuthentication, upload.single('roomImage'), 
             { autoCommit: true }
         );
         res.json({ success: true, roomName, imageUrl });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (conn) await conn.close();
+    }
+});
+
+router.get('/:roomId/peer-profile', jwtAuthentication, async (req, res) => {
+    const myId = req.user?.userId ?? req.user?.id;
+    const { roomId } = req.params;
+    let conn;
+    try {
+        conn = await db.getConnection();
+        const result = await conn.execute(
+            `SELECT u.USER_ID, u.NICKNAME, u.BIO_SHORT,
+              (SELECT COUNT(*) FROM POSTS WHERE USER_ID = u.USER_ID AND STATUS = 'ACTIVE') AS POST_CNT,
+              (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWER_ID = u.USER_ID AND STATUS = 'ACCEPTED') AS FOLLOWING_CNT,
+              (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWING_ID = u.USER_ID AND STATUS = 'ACCEPTED') AS FOLLOWER_CNT,
+              (SELECT IMAGE_URL FROM PROFILE_IMAGES WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR,
+              (SELECT STATUS FROM FOLLOWS WHERE FOLLOWER_ID = :myId AND FOLLOWING_ID = u.USER_ID) AS I_FOLLOW,
+              (SELECT STATUS FROM FOLLOWS WHERE FOLLOWER_ID = u.USER_ID AND FOLLOWING_ID = :myId2) AS THEY_FOLLOW
+       FROM CHAT_MEMBERS cm
+       JOIN USERS u ON cm.USER_ID = u.USER_ID
+       WHERE cm.ROOM_ID = :roomId AND cm.USER_ID != :myId3`,
+            { myId, myId2: myId, myId3: myId, roomId },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        res.json({ success: true, peer: result.rows[0] || null });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     } finally {

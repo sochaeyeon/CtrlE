@@ -9,6 +9,7 @@ import {
   HomeOutlined, Home, AddBoxOutlined, AddBox, LogoutOutlined, NotificationsNoneOutlined, Notifications,
   SearchOutlined, SettingsOutlined, Settings, MailOutlined, Mail, Menu as MenuIcon, ChevronLeft
 } from '@mui/icons-material';
+import NotificationSidebar from './NotificationSidebar';
 
 const API = 'http://localhost:3010';
 
@@ -60,10 +61,10 @@ const MENU_ITEMS = [
     path: '/messages',
   },
   {
+    id: 'noti',
     text: '알림',
     icon: <NotificationsNoneOutlined sx={{ fontSize: 24 }} />,
     activeIcon: <Notifications sx={{ fontSize: 24 }} />,
-    path: '/notifications',
   },
   {
     text: '새 게시물',
@@ -79,12 +80,13 @@ const MENU_ITEMS = [
   },
 ];
 
-const NavItem = ({ item, isActive, isOpen }) => (
+const NavItem = ({ item, isActive, isOpen, onClick }) => (
   <Tooltip title={!isOpen ? item.text : ''} placement="right" arrow>
     <ListItem
       button
-      component={Link}
-      to={item.path}
+      component={item.path ? Link : 'div'}
+      to={item.path || undefined}
+      onClick={onClick}
       sx={{
         borderRadius: 2.5,
         py: 1.4,
@@ -94,8 +96,8 @@ const NavItem = ({ item, isActive, isOpen }) => (
         position: 'relative',
         backgroundColor: isActive ? '#F1F5F9' : 'transparent',
         color: isActive ? '#0F172A' : '#64748B',
-        whiteSpace: 'nowrap', // 글자가 위아래로 튀는 현상 방지
-        overflow: 'hidden',   // 영역 밖으로 나가는 글자 숨김
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
         transition: 'all 0.2s ease',
         animation: 'fadeIn 0.3s ease both',
         '&:hover': {
@@ -117,7 +119,7 @@ const NavItem = ({ item, isActive, isOpen }) => (
       <ListItemIcon
         className="nav-icon"
         sx={{
-          minWidth: 42, // 고정 크기로 둬서 튀는 현상 방지
+          minWidth: 42,
           justifyContent: 'center',
           transition: 'all 0.2s ease',
           color: 'inherit',
@@ -156,11 +158,17 @@ export default function Menu() {
   const currentPath = location.pathname;
   const token = localStorage.getItem('accessToken');
 
-  // 디폴트를 접힌 상태(false)로 변경
   const [isOpen, setIsOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [notiOpen, setNotiOpen] = useState(false);
   const [user, setUser] = useState({ name: '사용자', handle: '@user', avatar: null });
   const drawerWidth = isOpen ? DRAWER_WIDTH : 80;
+
+  const handleMenuClick = (item) => {
+    if (item.id === 'noti') {
+      setNotiOpen(true);
+    }
+  };
 
   useEffect(() => {
     if (!token) return;
@@ -248,17 +256,17 @@ export default function Menu() {
         <List disablePadding sx={{ px: 0.5 }}>
           {MENU_ITEMS.map(item => (
             <NavItem
-              key={item.path}
+              key={item.text}
               item={item}
-              isActive={currentPath === item.path}
+              isActive={currentPath === item.path || (item.id === 'noti' && notiOpen)}
               isOpen={isOpen}
+              onClick={() => handleMenuClick(item)}
             />
           ))}
         </List>
 
         <Box sx={{ flexGrow: 1 }} />
 
-        {/* 하단 프로필 섹션 (설정 버튼은 위로 올라갔으므로 로그아웃만 남김) */}
         {isOpen ? (
           <Box
             sx={{
@@ -315,7 +323,8 @@ export default function Menu() {
         )}
       </Drawer>
 
-      {/* 로그아웃 모달창 */}
+      <NotificationSidebar open={notiOpen} onClose={() => setNotiOpen(false)} />
+
       <Dialog
         open={logoutOpen}
         onClose={() => setLogoutOpen(false)}
