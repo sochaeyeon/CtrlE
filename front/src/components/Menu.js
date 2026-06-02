@@ -2,181 +2,187 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Drawer, List, ListItem, ListItemText, ListItemIcon, Box, Typography,
-  createTheme, ThemeProvider, CssBaseline, Avatar, Tooltip, Badge, IconButton,
+  CssBaseline, Avatar, Tooltip, Badge, IconButton,
   Dialog, DialogTitle, DialogContent, DialogActions, Button
 } from '@mui/material';
 import {
-  HomeOutlined, Home, AddBoxOutlined, AddBox, LogoutOutlined, NotificationsNoneOutlined, Notifications,
-  SearchOutlined, SettingsOutlined, Settings, MailOutlined, Mail, Menu as MenuIcon, ChevronLeft
+  HomeOutlined, Home, AddBoxOutlined, AddBox, LogoutOutlined,
+  NotificationsNoneOutlined, Notifications,
+  SearchOutlined, SettingsOutlined, Settings,
+  ForumOutlined, Forum,
+  Menu as MenuIcon, ChevronLeft,
+  BarChartOutlined, BarChart,
 } from '@mui/icons-material';
 import NotificationSidebar from './NotificationSidebar';
+import { useColorMode } from '../App';
 
 const API = 'http://localhost:3010';
-
-const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: { main: '#2563EB' },
-    secondary: { main: '#0F172A' },
-    background: { default: '#F8FAFC', paper: '#FFFFFF' },
-    text: { primary: '#0F172A', secondary: '#64748B' },
-  },
-  typography: {
-    fontFamily: '"Plus Jakarta Sans", "Noto Sans KR", sans-serif',
-  },
-  components: {
-    MuiCssBaseline: {
-      styleOverrides: `
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateX(-8px); }
-          to   { opacity: 1; transform: translateX(0); }
-        }
-      `,
-    },
-  },
-});
-
 const DRAWER_WIDTH = 260;
-
 const getInitial = (name) => (name ? name.charAt(0).toUpperCase() : '?');
 
-// 설정(Settings)을 메인 메뉴로 올렸습니다.
 const MENU_ITEMS = [
-  {
-    text: '피드',
-    icon: <HomeOutlined sx={{ fontSize: 24 }} />,
-    activeIcon: <Home sx={{ fontSize: 24 }} />,
-    path: '/feed',
-  },
-  {
-    text: '탐색',
-    icon: <SearchOutlined sx={{ fontSize: 24 }} />,
-    activeIcon: <SearchOutlined sx={{ fontSize: 24 }} />,
-    path: '/explore',
-  },
-  {
-    text: '메시지',
-    icon: <MailOutlined sx={{ fontSize: 24 }} />,
-    activeIcon: <Mail sx={{ fontSize: 24 }} />,
-    path: '/messages',
-  },
-  {
-    id: 'noti',
-    text: '알림',
-    icon: <NotificationsNoneOutlined sx={{ fontSize: 24 }} />,
-    activeIcon: <Notifications sx={{ fontSize: 24 }} />,
-  },
-  {
-    text: '새 게시물',
-    icon: <AddBoxOutlined sx={{ fontSize: 24 }} />,
-    activeIcon: <AddBox sx={{ fontSize: 24 }} />,
-    path: '/register',
-  },
-  {
-    text: '설정',
-    icon: <SettingsOutlined sx={{ fontSize: 24 }} />,
-    activeIcon: <Settings sx={{ fontSize: 24 }} />,
-    path: '/settings',
-  },
+  { text: '피드',      icon: <HomeOutlined sx={{ fontSize: 24 }} />,             activeIcon: <Home sx={{ fontSize: 24 }} />,             path: '/feed' },
+  { text: '탐색',      icon: <SearchOutlined sx={{ fontSize: 24 }} />,           activeIcon: <SearchOutlined sx={{ fontSize: 24 }} />, path: '/explore' },
+  { text: '메시지',    icon: <ForumOutlined sx={{ fontSize: 22 }} />,            activeIcon: <Forum sx={{ fontSize: 22 }} />,            path: '/messages' },
+  { id: 'noti', text: '알림', icon: <NotificationsNoneOutlined sx={{ fontSize: 24 }} />, activeIcon: <Notifications sx={{ fontSize: 24 }} /> },
+  { text: '새 게시물', icon: <AddBoxOutlined sx={{ fontSize: 24 }} />,          activeIcon: <AddBox sx={{ fontSize: 24 }} />,          path: '/register' },
+  { text: '내 활동',   icon: <BarChartOutlined sx={{ fontSize: 24 }} />,         activeIcon: <BarChart sx={{ fontSize: 24 }} />,        path: '/mypage' },
+  { text: '설정',      icon: <SettingsOutlined sx={{ fontSize: 24 }} />,         activeIcon: <Settings sx={{ fontSize: 24 }} />,        path: '/settings' },
 ];
 
-const NavItem = ({ item, isActive, isOpen, onClick }) => (
-  <Tooltip title={!isOpen ? item.text : ''} placement="right" arrow>
-    <ListItem
-      button
-      component={item.path ? Link : 'div'}
-      to={item.path || undefined}
-      onClick={onClick}
+const DarkModeToggle = ({ mode, toggleColorMode, isOpen, colors }) => {
+  const isDark = mode === 'dark';
+
+  const switchEl = (
+    <Box
+      onClick={toggleColorMode}
+      role="switch"
+      aria-checked={isDark}
       sx={{
-        borderRadius: 2.5,
-        py: 1.4,
-        px: isOpen ? 2 : 1,
-        mb: 0.8,
-        justifyContent: isOpen ? 'flex-start' : 'center',
         position: 'relative',
-        backgroundColor: isActive ? '#F1F5F9' : 'transparent',
-        color: isActive ? '#0F172A' : '#64748B',
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        transition: 'all 0.2s ease',
-        animation: 'fadeIn 0.3s ease both',
-        '&:hover': {
-          backgroundColor: '#F8FAFC',
-          color: '#0F172A',
-          transform: 'translateX(2px)',
-          '& .nav-icon': { transform: 'scale(1.08)' },
-        },
-        '&::before': isActive ? {
-          content: '""',
-          position: 'absolute',
-          left: 0, top: '20%', bottom: '20%',
-          width: 4,
-          borderRadius: '0 4px 4px 0',
-          backgroundColor: '#0F172A',
-        } : {},
+        width: 42,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: isDark ? '#FFFFFF' : '#CBD5E1',
+        cursor: 'pointer',
+        flexShrink: 0,
+        transition: 'background-color 0.25s ease',
+        '&:hover': { backgroundColor: isDark ? '#E5E7EB' : '#94A3B8' },
       }}
     >
-      <ListItemIcon
-        className="nav-icon"
+      <Box sx={{
+        position: 'absolute',
+        top: 3,
+        left: isDark ? 21 : 3,
+        width: 18,
+        height: 18,
+        borderRadius: '50%',
+        backgroundColor: isDark ? '#000000' : '#FFFFFF',
+        transition: 'left 0.25s cubic-bezier(0.4,0,0.2,1)',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+      }} />
+    </Box>
+  );
+
+  if (isOpen) {
+    return (
+      <Box
+        onClick={toggleColorMode}
         sx={{
-          minWidth: 42,
-          justifyContent: 'center',
-          transition: 'all 0.2s ease',
-          color: 'inherit',
-          mr: isOpen ? 1.5 : 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          px: 2, py: 1.4, borderRadius: 2.5,
+          border: `1px solid ${colors.border}`,
+          backgroundColor: colors.bg,
+          cursor: 'pointer',
+          transition: 'all 0.2s',
+          '&:hover': { borderColor: colors.borderFocus },
         }}
       >
-        {item.badge ? (
-          <Badge badgeContent={item.badge} color="error">
-            {isActive ? item.activeIcon : item.icon}
-          </Badge>
-        ) : (
-          isActive ? item.activeIcon : item.icon
-        )}
-      </ListItemIcon>
+        <Typography sx={{ fontSize: '0.87rem', fontWeight: 600, color: colors.textSecondary }}>
+          다크 모드
+        </Typography>
+        {switchEl}
+      </Box>
+    );
+  }
 
-      <ListItemText
-        primary={item.text}
+  return (
+    <Tooltip title="다크 모드" placement="right" arrow>
+      <Box sx={{ display: 'flex', justifyContent: 'center', cursor: 'pointer' }}>
+        {switchEl}
+      </Box>
+    </Tooltip>
+  );
+};
+
+const NavItem = ({ item, isActive, isOpen, onClick, colors }) => {
+  return (
+    <Tooltip title={!isOpen ? item.text : ''} placement="right" arrow>
+      <ListItem
+        button
+        component={item.path ? Link : 'div'}
+        to={item.path || undefined}
+        onClick={onClick}
         sx={{
-          opacity: isOpen ? 1 : 0,
-          width: isOpen ? 'auto' : 0,
-          transition: 'opacity 0.2s ease, width 0.2s ease',
-          m: 0,
+          borderRadius: 2.5,
+          py: 1.8,
+          px: isOpen ? 2 : 1,
+          mb: 1.2,
+          justifyContent: isOpen ? 'flex-start' : 'center',
+          position: 'relative',
+          backgroundColor: isActive ? colors.hover : 'transparent',
+          color: isActive ? colors.textPrimary : colors.textSecondary,
+          whiteSpace: 'nowrap', overflow: 'hidden',
+          transition: 'all 0.18s ease',
+          '&:hover': {
+            backgroundColor: isActive ? colors.hover : colors.hover,
+            color: colors.textPrimary,
+            transform: 'translateX(2px)',
+            '& .nav-icon': { transform: 'scale(1.08)' },
+          },
+          '&::before': isActive ? {
+            content: '""',
+            position: 'absolute',
+            left: 0, top: '22%', bottom: '22%',
+            width: 3,
+            borderRadius: '0 3px 3px 0',
+            backgroundColor: colors.textPrimary,
+          } : {},
         }}
-        primaryTypographyProps={{
-          fontSize: '0.95rem',
-          fontWeight: isActive ? 800 : 500,
-        }}
-      />
-    </ListItem>
-  </Tooltip>
-);
+      >
+        <ListItemIcon
+          className="nav-icon"
+          sx={{
+            minWidth: 42,
+            justifyContent: 'center',
+            transition: 'all 0.18s ease',
+            color: 'inherit',
+            mr: isOpen ? 1.5 : 0,
+          }}
+        >
+          {item.badge
+            ? <Badge badgeContent={item.badge} color="error">{isActive ? item.activeIcon : item.icon}</Badge>
+            : (isActive ? item.activeIcon : item.icon)}
+        </ListItemIcon>
+        <ListItemText
+          primary={item.text}
+          sx={{ opacity: isOpen ? 1 : 0, width: isOpen ? 'auto' : 0, transition: 'opacity 0.18s ease', m: 0 }}
+          primaryTypographyProps={{ fontSize: '0.93rem', fontWeight: isActive ? 800 : 500 }}
+        />
+      </ListItem>
+    </Tooltip>
+  );
+};
 
 export default function Menu() {
   const location = useLocation();
   const navigate = useNavigate();
-  const currentPath = location.pathname;
   const token = localStorage.getItem('accessToken');
+  const { mode, toggleColorMode } = useColorMode();
+
+  // Explore 컴포넌트와 동일한 색상 팔레트 적용
+  const colors = {
+    bg:          mode === 'dark' ? '#0F1117' : '#F8FAFC',
+    paper:       mode === 'dark' ? '#1A1D27' : '#FFFFFF',
+    border:      mode === 'dark' ? '#2D3148' : '#E2E8F0',
+    borderFocus: mode === 'dark' ? '#4B5280' : '#CBD5E1',
+    textPrimary: mode === 'dark' ? '#F1F5F9' : '#0F172A',
+    textSecondary: mode === 'dark' ? '#94A3B8' : '#64748B', // textMuted 대응
+    hover:       mode === 'dark' ? '#22253A' : '#F8FAFC',
+  };
 
   const [isOpen, setIsOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [notiOpen, setNotiOpen] = useState(false);
   const [user, setUser] = useState({ name: '사용자', handle: '@user', avatar: null });
-  const drawerWidth = isOpen ? DRAWER_WIDTH : 80;
 
-  const handleMenuClick = (item) => {
-    if (item.id === 'noti') {
-      setNotiOpen(true);
-    }
-  };
+  const drawerWidth = isOpen ? DRAWER_WIDTH : 80;
 
   useEffect(() => {
     if (!token) return;
-    const fetchUser = async () => {
+    (async () => {
       try {
-        const res = await fetch(`${API}/user/mypage/data`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const res = await fetch(`${API}/user/mypage/data`, { headers: { Authorization: `Bearer ${token}` } });
         const data = await res.json();
         if (data.success && data.user) {
           setUser({
@@ -185,137 +191,135 @@ export default function Menu() {
             avatar: data.user.AVATAR ? `${API}${data.user.AVATAR}` : null,
           });
         }
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    fetchUser();
+      } catch (err) { console.error(err); }
+    })();
   }, [token]);
 
-  const handleLogoutClick = (e) => {
-    e.stopPropagation();
-    setLogoutOpen(true);
-  };
-
-  const confirmLogout = () => {
-    setLogoutOpen(false);
-    localStorage.removeItem('accessToken');
-    navigate('/');
-  };
+  const handleMenuClick = (item) => { if (item.id === 'noti') setNotiOpen(true); };
+  const handleLogoutClick = (e) => { e.stopPropagation(); setLogoutOpen(true); };
+  const confirmLogout = () => { setLogoutOpen(false); localStorage.removeItem('accessToken'); navigate('/'); };
 
   return (
-    <ThemeProvider theme={theme}>
+    <>
       <CssBaseline />
       <Drawer
         variant="permanent"
         sx={{
-          width: drawerWidth,
-          flexShrink: 0,
+          width: drawerWidth, flexShrink: 0,
           '& .MuiDrawer-paper': {
             width: drawerWidth,
-            transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+            transition: 'width 0.25s cubic-bezier(0.4,0,0.2,1)',
             boxSizing: 'border-box',
-            borderRight: '1px solid #E2E8F0',
-            backgroundColor: '#FFFFFF',
+            borderRight: `1px solid ${colors.border}`,
+            backgroundColor: `${colors.paper} !important`,
             px: isOpen ? 1.5 : 0.5,
-            py: 3,
-            display: 'flex',
-            flexDirection: 'column',
+            py: 2,
+            display: 'flex', flexDirection: 'column',
             overflowX: 'hidden',
           },
         }}
       >
-        <Box sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: isOpen ? 'space-between' : 'center',
-          mb: 5,
-          px: 1.5,
-        }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: isOpen ? 'space-between' : 'center', mb: 3, px: 1.5 }}>
           {isOpen && (
-            <Box
-              component={Link}
-              to="/feed"
-              sx={{ display: 'flex', alignItems: 'center', gap: 1.2, textDecoration: 'none' }}
-            >
+            <Box component={Link} to="/feed" sx={{ display: 'flex', alignItems: 'center', gap: 1.2, textDecoration: 'none' }}>
               <Box sx={{
                 width: 32, height: 32, borderRadius: 1.2,
-                backgroundColor: '#0F172A',
+                backgroundColor: colors.textPrimary,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '0.85rem' }}>{'<>'}</Typography>
+                <Typography sx={{ color: colors.paper, fontWeight: 900, fontSize: '0.85rem' }}>{'<>'}</Typography>
               </Box>
-              <Typography sx={{ color: '#0F172A', fontWeight: 800, fontSize: '1.3rem' }}>CtrlE</Typography>
+              <Typography sx={{ color: colors.textPrimary, fontWeight: 800, fontSize: '1.3rem' }}>CtrlE</Typography>
             </Box>
           )}
-          <IconButton onClick={() => setIsOpen(!isOpen)}>
+          <IconButton onClick={() => setIsOpen(!isOpen)} sx={{ color: colors.textSecondary }}>
             {isOpen ? <ChevronLeft /> : <MenuIcon />}
           </IconButton>
         </Box>
 
-        <List disablePadding sx={{ px: 0.5 }}>
-          {MENU_ITEMS.map(item => (
-            <NavItem
-              key={item.text}
-              item={item}
-              isActive={currentPath === item.path || (item.id === 'noti' && notiOpen)}
-              isOpen={isOpen}
-              onClick={() => handleMenuClick(item)}
-            />
-          ))}
-        </List>
+        <Box sx={{ flex: 1, px: 0.5 }}>
+          <List disablePadding>
+            {MENU_ITEMS.map(item => (
+              <NavItem
+                key={item.text}
+                item={item}
+                isActive={location.pathname === item.path || (item.id === 'noti' && notiOpen)}
+                isOpen={isOpen}
+                onClick={() => handleMenuClick(item)}
+                colors={colors}
+                mode={mode}
+              />
+            ))}
+          </List>
+        </Box>
 
-        <Box sx={{ flexGrow: 1 }} />
+        <Box sx={{ px: isOpen ? 1 : 0, mb: 2, display: 'flex', justifyContent: isOpen ? 'stretch' : 'center' }}>
+          <DarkModeToggle
+            mode={mode}
+            toggleColorMode={toggleColorMode}
+            isOpen={isOpen}
+            colors={colors}
+          />
+        </Box>
 
         {isOpen ? (
-          <Box
-            sx={{
-              display: 'flex', alignItems: 'center', gap: 1,
-              px: 1.2, py: 1.2,
-              borderRadius: 2.5,
-              border: '1px solid #E2E8F0',
-              backgroundColor: '#F8FAFC',
-              mb: 1,
-              transition: 'all 0.2s',
-              '&:hover': { backgroundColor: '#F1F5F9', borderColor: '#CBD5E1' },
-            }}
-          >
-            <Avatar 
-              onClick={() => navigate('/mypage')} 
-              src={user.avatar} 
-              sx={{ width: 38, height: 38, backgroundColor: '#0F172A', fontSize: '0.9rem', cursor: 'pointer' }}
+          <Box sx={{
+            display: 'flex', alignItems: 'center', gap: 1.5,
+            px: 1.2, py: 1.2, borderRadius: 2.5,
+            border: `1px solid ${colors.border}`,
+            backgroundColor: colors.bg,
+            transition: 'all 0.2s',
+            '&:hover': { borderColor: colors.borderFocus },
+          }}>
+            <Avatar
+              onClick={() => navigate('/mypage')}
+              src={user.avatar}
+              sx={{
+                width: 44, height: 44,
+                backgroundColor: colors.textPrimary,
+                fontSize: '1rem', fontWeight: 800, cursor: 'pointer',
+                border: `2px solid ${colors.border}`,
+              }}
             >
               {getInitial(user.name)}
             </Avatar>
-            
-            <Box onClick={() => navigate('/mypage')} sx={{ flex: 1, minWidth: 0, cursor: 'pointer', ml: 0.5 }}>
-              <Typography sx={{ fontWeight: 800, fontSize: '0.85rem', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <Box onClick={() => navigate('/mypage')} sx={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
+              <Typography sx={{ fontWeight: 800, fontSize: '0.85rem', color: colors.textPrimary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {user.name}
               </Typography>
-              <Typography sx={{ fontSize: '0.72rem', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <Typography sx={{ fontSize: '0.72rem', color: colors.textSecondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {user.handle}
               </Typography>
             </Box>
-
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-              <Tooltip title="로그아웃" placement="bottom" arrow>
-                <IconButton size="small" onClick={handleLogoutClick} sx={{ p: 0.5, color: '#94A3B8', '&:hover': { color: '#EF4444', backgroundColor: '#FEF2F2' } }}>
-                  <LogoutOutlined sx={{ fontSize: 18 }} />
-                </IconButton>
-              </Tooltip>
-            </Box>
+            <Tooltip title="로그아웃" placement="top" arrow>
+              <IconButton
+                size="small"
+                onClick={handleLogoutClick}
+                sx={{ p: 0.5, color: colors.textSecondary, '&:hover': { color: '#EF4444' } }}
+              >
+                <LogoutOutlined sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
           </Box>
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5, mb: 1 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
             <Tooltip title="프로필" placement="right" arrow>
-              <IconButton onClick={() => navigate('/mypage')}>
-                <Avatar src={user.avatar} sx={{ width: 36, height: 36, backgroundColor: '#0F172A', fontSize: '0.85rem' }}>
+              <IconButton onClick={() => navigate('/mypage')} sx={{ p: 0 }}>
+                <Avatar
+                  src={user.avatar}
+                  sx={{
+                    width: 44, height: 44,
+                    backgroundColor: colors.textPrimary,
+                    fontSize: '1rem', fontWeight: 800,
+                    border: `2px solid ${colors.border}`,
+                  }}
+                >
                   {getInitial(user.name)}
                 </Avatar>
               </IconButton>
             </Tooltip>
             <Tooltip title="로그아웃" placement="right" arrow>
-              <IconButton size="small" onClick={handleLogoutClick} sx={{ color: '#94A3B8', '&:hover': { color: '#EF4444' } }}>
+              <IconButton size="small" onClick={handleLogoutClick} sx={{ color: colors.textSecondary, '&:hover': { color: '#EF4444' } }}>
                 <LogoutOutlined sx={{ fontSize: 20 }} />
               </IconButton>
             </Tooltip>
@@ -330,31 +334,31 @@ export default function Menu() {
         onClose={() => setLogoutOpen(false)}
         PaperProps={{
           sx: {
-            borderRadius: 3,
-            px: 1,
-            py: 1,
-            boxShadow: '0 24px 64px rgba(15,23,42,0.1)',
-            minWidth: 320
-          }
+            borderRadius: 3, px: 1, py: 1,
+            boxShadow: '0 24px 64px rgba(0,0,0,0.4)',
+            minWidth: 320,
+            backgroundColor: colors.paper,
+            border: `1px solid ${colors.border}`,
+          },
         }}
       >
-        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.15rem', color: '#0F172A' }}>
-          로그아웃
-        </DialogTitle>
+        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.15rem', color: colors.textPrimary }}>로그아웃</DialogTitle>
         <DialogContent>
-          <Typography sx={{ color: '#475569', fontSize: '0.92rem', mt: 0.5 }}>
+          <Typography sx={{ color: colors.textSecondary, fontSize: '0.92rem', mt: 0.5 }}>
             정말 로그아웃 하시겠습니까?
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setLogoutOpen(false)} sx={{ color: '#64748B', fontWeight: 700, fontSize: '0.88rem' }}>
-            취소
-          </Button>
-          <Button onClick={confirmLogout} variant="contained" sx={{ backgroundColor: '#EF4444', color: '#fff', fontWeight: 800, fontSize: '0.88rem', borderRadius: 1.5, boxShadow: 'none', px: 2.5, '&:hover': { backgroundColor: '#DC2626' } }}>
+          <Button onClick={() => setLogoutOpen(false)} sx={{ color: colors.textSecondary, fontWeight: 700, fontSize: '0.88rem' }}>취소</Button>
+          <Button
+            onClick={confirmLogout}
+            variant="contained"
+            sx={{ backgroundColor: '#EF4444', color: '#fff', fontWeight: 800, fontSize: '0.88rem', borderRadius: 1.5, boxShadow: 'none', px: 2.5, '&:hover': { backgroundColor: '#DC2626' } }}
+          >
             로그아웃
           </Button>
         </DialogActions>
       </Dialog>
-    </ThemeProvider>
+    </>
   );
 }

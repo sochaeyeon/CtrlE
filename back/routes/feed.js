@@ -138,6 +138,8 @@ router.get('/list', jwtAuthentication, async (req, res) => {
     let connection;
     try {
         connection = await db.getConnection();
+
+        // ── 팔로잉 글만 + 뮤트/차단 제외 ──
         const sql = `
             SELECT 
                 p.POST_ID    AS "id",
@@ -159,16 +161,117 @@ router.get('/list', jwtAuthentication, async (req, res) => {
                  WHERE pt.post_id = p.post_id) AS "tags",
                 (SELECT LISTAGG(f.file_url, ',') WITHIN GROUP (ORDER BY f.file_id)
                  FROM attached_files f
-                 WHERE f.target_id = p.post_id AND f.target_type = 'POST') AS "images"
+                 WHERE f.target_id = p.post_id AND f.target_type = 'POST') AS "images",
+                'FOLLOWING' AS "feedType"
+            FROM posts p
+            JOIN users u ON u.user_id = p.user_id
+            LEFT JOIN categories c ON c.category_id = p.category_id
+          WHERE p.status = 'ACTIVE'
+  AND (
+      p.user_id = :userId3
+      OR p.user_id IN (
+          SELECT following_id FROM follows
+          WHERE follower_id = :userId3 AND status = 'ACCEPTED'
+      )
+  )
+  AND p.user_id NOT IN (
+      SELECT muted_id FROM mutes WHERE muter_id = :userId4
+  )
+  AND p.user_id NOT IN (
+      SELECT blocked_id FROM blocks WHERE blocker_id = :userId5
+  )
+ORDER BY p.created_at DESC
+        `;
+
+        const result = await connection.execute(
+            sql,
+            { userId1: userId, userId2: userId, userId3: userId, userId4: userId, userId5: userId },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+
+        const feeds = await Promise.all(result.rows.map(async (row) => {
+            let desc = row.description;
+            if (desc && typeof desc.getData === 'function')
+                desc = await desc.getData();
+            return {
+                ...row,
+                description: desc,
+                liked: row.liked > 0,
+                bookmarked: row.bookmarked > 0,
+                tags: row.tags ? row.tags.split(',') : [],
+            };
+        }));
+
+        res.status(200).json({ success: true, feeds });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (connection) await connection.close();
+    }
+});
+
+
+// =====================================================
+// feed.js 에 아래 라우트 추가 (추천 게시글용)
+// router.delete, router.post 등 기존 라우트들 위에 추가
+// =====================================================
+
+// GET /feed/recommended — 추천 게시글 (공개 계정 + 뮤트/차단 제외)
+router.get('/recommended', jwtAuthentication, async (req, res) => {
+    const userId = getUserId(req);
+    let connection;
+    try {
+        connection = await db.getConnection();
+
+        const sql = `
+            SELECT 
+                p.POST_ID    AS "id",
+                p.TITLE      AS "title",
+                p.CONTENT    AS "description",
+                p.USER_ID    AS "userId",
+                p.CREATED_AT AS "createdAt",
+                c.CATEGORY_NAME AS "category",
+                u.NICKNAME   AS "writer",
+                u.BIO        AS "role",
+                (SELECT image_url FROM profile_images
+                 WHERE user_id = u.user_id AND is_main = 'Y' AND rownum = 1) AS "avatar",
+                (SELECT COUNT(*) FROM post_likes WHERE post_id = p.post_id) AS "likes",
+                (SELECT COUNT(*) FROM post_likes WHERE post_id = p.post_id AND user_id = :userId1) AS "liked",
+                (SELECT COUNT(*) FROM bookmarks  WHERE post_id = p.post_id AND user_id = :userId2) AS "bookmarked",
+                (SELECT COUNT(*) FROM comments   WHERE post_id = p.post_id AND status = 'ACTIVE') AS "commentCount",
+                (SELECT LISTAGG(t.tag_name, ',') WITHIN GROUP (ORDER BY t.tag_id)
+                 FROM post_tags pt JOIN tags t ON t.tag_id = pt.tag_id
+                 WHERE pt.post_id = p.post_id) AS "tags",
+                (SELECT LISTAGG(f.file_url, ',') WITHIN GROUP (ORDER BY f.file_id)
+                 FROM attached_files f
+                 WHERE f.target_id = p.post_id AND f.target_type = 'POST') AS "images",
+                'RECOMMENDED' AS "feedType"
             FROM posts p
             JOIN users u ON u.user_id = p.user_id
             LEFT JOIN categories c ON c.category_id = p.category_id
             WHERE p.status = 'ACTIVE'
+              AND NVL(u.is_private, 'N') = 'N'
+              AND p.user_id != :userId3
+              AND p.user_id NOT IN (
+                  SELECT following_id FROM follows
+                  WHERE follower_id = :userId4 AND status = 'ACCEPTED'
+              )
+              AND p.user_id NOT IN (
+                  SELECT muted_id FROM mutes WHERE muter_id = :userId5
+              )
+              AND p.user_id NOT IN (
+                  SELECT blocked_id FROM blocks WHERE blocker_id = :userId6
+              )
             ORDER BY p.created_at DESC
+            FETCH FIRST 20 ROWS ONLY
         `;
+
         const result = await connection.execute(
             sql,
-            { userId1: userId, userId2: userId },
+            {
+                userId1: userId, userId2: userId, userId3: userId,
+                userId4: userId, userId5: userId, userId6: userId
+            },
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
 

@@ -69,11 +69,19 @@ const formatTime = (dateStr) => {
 
 const formatDateLabel = (dateStr) => {
   if (!dateStr) return '';
+
   const date = new Date(dateStr);
   const now = new Date();
-  const diff = Math.floor((now - date) / 86400000);
-  if (diff === 0) return '오늘';
-  if (diff === 1) return '어제';
+
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const startOfNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const diffDays = Math.round((startOfNow - startOfDate) / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return '오늘';
+  if (diffDays === 1) return '어제';
+  if (diffDays === 2) return '그저께'; // 필요 시 추가
+
   return date.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
 };
 
@@ -233,7 +241,6 @@ const ImageViewerModal = ({ open, onClose, imageUrl, allImages = [], initialInde
           onClick={handlePrev}
           sx={{ position: 'absolute', left: 16, color: '#fff', backgroundColor: 'rgba(255,255,255,0.1)', '&:hover': { backgroundColor: 'rgba(255,255,255,0.2)' }, zIndex: 1 }}
         >
-          <ArrowBackIos />
         </IconButton>
       )}
 
@@ -603,20 +610,16 @@ export default function Messages() {
   const [peerProfile, setPeerProfile] = useState(null);
   const [peerProfileDismissed, setPeerProfileDismissed] = useState(false);
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    const saved = localStorage.getItem('sidebarCollapsed');
-    return saved === 'true';
-  });
-
-  useEffect(() => {
-    localStorage.setItem('sidebarCollapsed', sidebarCollapsed);
-  }, [sidebarCollapsed]);
-
   const [blockModalOpen, setBlockModalOpen] = useState(false);
 
   const settingsChangedByMeRef = useRef(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
 
+  const [mentionAnchorEl, setMentionAnchorEl] = useState(null);
+  const [mentionFilter, setMentionFilter] = useState('');
+
+  const inputWrapperRef = useRef(null);
+  const overlayRef = useRef(null);
 
   useEffect(() => {
     if (roomInfo?.BLOCK_STATUS) {
@@ -864,8 +867,27 @@ export default function Messages() {
     setParticipantsModalOpen(true);
   };
 
+  const handleSelectMention = (nickname) => {
+    const words = newMessage.split(' ');
+    words[words.length - 1] = `@${nickname} `;
+    setNewMessage(words.join(' '));
+    setMentionAnchorEl(null);
+
+    document.getElementById('chat-input-base')?.focus();
+  };
   const handleTypingInput = (val) => {
     setNewMessage(val);
+
+    const words = val.split(' ');
+    const lastWord = words[words.length - 1];
+
+    if (lastWord.startsWith('@')) {
+      setMentionFilter(lastWord.replace('@', '').toLowerCase());
+      setMentionAnchorEl(document.getElementById('chat-input-wrapper')); // 팝업 앵커 세팅
+    } else {
+      setMentionAnchorEl(null);
+    }
+
     clearTimeout(typingTimerRef.current);
     fetch(`${API}/messages/${roomId}/typing`, {
       method: 'POST',
@@ -879,6 +901,34 @@ export default function Messages() {
         body: JSON.stringify({ isTyping: false })
       }).catch(() => { });
     }, 1500);
+  };
+  const [mentionIndex, setMentionIndex] = useState(0);
+
+  const handleInputKeyDown = (e) => {
+    if (mentionAnchorEl) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionIndex(prev => (prev + 1) % mentionableUsers.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionIndex(prev => (prev - 1 + mentionableUsers.length) % mentionableUsers.length);
+      } else if (e.key === 'Tab' || e.key === 'Enter') {
+        e.preventDefault();
+        if (mentionableUsers[mentionIndex]) {
+          handleSelectMention(mentionableUsers[mentionIndex].NICKNAME);
+        }
+      }
+    } else if (e.ctrlKey && e.key === ' ') {
+      e.preventDefault();
+
+      const words = newMessage.split(' ');
+      const lastWord = words[words.length - 1];
+
+      if (lastWord.startsWith('@')) {
+        setMentionFilter(lastWord.replace('@', '').toLowerCase());
+        setMentionAnchorEl(document.getElementById('chat-input-wrapper'));
+      }
+    }
   };
 
   const handleSearchChange = (val) => {
@@ -1038,6 +1088,9 @@ export default function Messages() {
       READ_BY: []
     };
     setMessages(prev => [...prev, optimisticMsg]);
+
+    setTimeout(scrollToBottom, 50);
+
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -1074,6 +1127,8 @@ export default function Messages() {
           READ_BY: []
         };
         setMessages(prev => [...prev, optimisticMsg]);
+
+        setTimeout(scrollToBottom, 50);
         try {
           const formData = new FormData();
           formData.append('file', file, 'paste.png');
@@ -1108,27 +1163,6 @@ export default function Messages() {
     setSelectedMessage(null);
   };
 
-  const handleDeleteMessageForAll = () => {
-    const targetId = selectedMessage?.MESSAGE_ID;
-    handleCloseMessageOption();
-    openConfirm('모든 사람에게서 삭제', '이 메시지를 모든 사람의 화면에서 삭제하시겠습니까?', async () => {
-      if (!targetId) return;
-      setMessages(prev => prev.map(m =>
-        m.MESSAGE_ID === targetId
-          ? { ...m, IS_DELETED: 'Y', MESSAGE: '', IMAGE_URL: null, FILE_URL: null, IS_STICKER: false }
-          : m
-      ));
-      setConfirmModal({ open: false });
-      try {
-        await fetch(`${API}/messages/${roomId}/delete-all`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ messageIds: [targetId] })
-        });
-      } catch { }
-    });
-  };
-
   const handleDeleteMessageForMe = () => {
     const targetId = selectedMessage?.MESSAGE_ID;
     handleCloseMessageOption();
@@ -1140,7 +1174,33 @@ export default function Messages() {
     if (selectedDeleteIds.length === 0) return;
     openConfirm('메시지 삭제', `${selectedDeleteIds.length}개의 메시지를 나에게서만 삭제하시겠습니까?`, async () => {
       const ids = [...selectedDeleteIds];
-      setMessages(prev => prev.filter(m => !ids.includes(m.MESSAGE_ID)));
+
+      if (ids.includes(editingMessageId)) {
+        setEditingMessageId(null);
+        setNewMessage('');
+      }
+
+      setMessages(prev => {
+        const updated = prev.filter(m => !ids.includes(m.MESSAGE_ID));
+
+        setChatRooms(rooms => rooms.map(r => {
+          if (r.ROOM_ID === parseInt(roomId)) {
+            const lastValidMsg = updated.length > 0 ? updated[updated.length - 1] : null;
+            return {
+              ...r,
+              LAST_MESSAGE: lastValidMsg ? lastValidMsg.MESSAGE : '',
+              LAST_MESSAGE_AT: lastValidMsg ? lastValidMsg.SENT_AT : r.LAST_MESSAGE_AT,
+              LAST_IS_STICKER: lastValidMsg ? isStickerMessage(lastValidMsg) : false,
+              LAST_HAS_IMAGE: lastValidMsg ? !!lastValidMsg.IMAGE_URL : false,
+              LAST_HAS_FILE: lastValidMsg ? !!lastValidMsg.FILE_URL : false
+            };
+          }
+          return r;
+        }));
+
+        return updated;
+      });
+
       setDeleteMode(false);
       setSelectedDeleteIds([]);
       setConfirmModal({ open: false });
@@ -1149,6 +1209,53 @@ export default function Messages() {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ messageIds: ids })
+        });
+      } catch { }
+    });
+  };
+
+  const handleDeleteMessageForAll = () => {
+    const targetId = selectedMessage?.MESSAGE_ID;
+    handleCloseMessageOption();
+    openConfirm('모든 사람에게서 삭제', '이 메시지를 모든 사람의 화면에서 삭제하시겠습니까?', async () => {
+      if (!targetId) return;
+
+      if (editingMessageId === targetId) {
+        setEditingMessageId(null);
+        setNewMessage('');
+      }
+
+      setMessages(prev => {
+        const updated = prev.map(m =>
+          m.MESSAGE_ID === targetId
+            ? { ...m, IS_DELETED: 'Y', MESSAGE: '', IMAGE_URL: null, FILE_URL: null, IS_STICKER: false }
+            : m
+        );
+
+        setChatRooms(rooms => rooms.map(r => {
+          if (r.ROOM_ID === parseInt(roomId)) {
+            const lastValidMsg = updated.length > 0 ? updated[updated.length - 1] : null;
+            return {
+              ...r,
+              LAST_MESSAGE: lastValidMsg ? lastValidMsg.MESSAGE : '',
+              LAST_MESSAGE_AT: lastValidMsg ? lastValidMsg.SENT_AT : r.LAST_MESSAGE_AT,
+              LAST_IS_STICKER: lastValidMsg ? isStickerMessage(lastValidMsg) : false,
+              LAST_HAS_IMAGE: lastValidMsg ? !!lastValidMsg.IMAGE_URL : false,
+              LAST_HAS_FILE: lastValidMsg ? !!lastValidMsg.FILE_URL : false
+            };
+          }
+          return r;
+        }));
+
+        return updated;
+      });
+
+      setConfirmModal({ open: false });
+      try {
+        await fetch(`${API}/messages/${roomId}/delete-all`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ messageIds: [targetId] })
         });
       } catch { }
     });
@@ -1266,7 +1373,15 @@ export default function Messages() {
   };
 
   const isGroup = roomInfo?.ROOM_TYPE === 'GROUP';
-  const displayTitle = isGroup ? (roomInfo.ROOM_NAME || roomInfo.TARGET_NICKNAME || '그룹 채팅방') : roomInfo?.TARGET_NICKNAME;
+  const getDisplayTitle = () => {
+    if (!roomInfo) return '';
+    if (isGroup) {
+      if (roomInfo.ROOM_NAME && roomInfo.ROOM_NAME.trim() !== '') return roomInfo.ROOM_NAME;
+      return participants.map(p => p.NICKNAME).filter(n => n !== myNickname).join(', ');
+    }
+    return roomInfo.TARGET_NICKNAME;
+  };
+  const displayTitle = getDisplayTitle();
   const displayAvatar = isGroup ? null : roomInfo?.TARGET_AVATAR;
 
   const myMessages = messages.filter(m => m.SENDER_NICKNAME === myNickname);
@@ -1305,6 +1420,81 @@ export default function Messages() {
       }
     });
   }
+  // 💡 추가: 채팅 목록의 메시지 미리보기 우측 전용 상대 시간 변환 함수
+  const formatListTimeRelative = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now - date) / 1000);
+
+    if (diffInSeconds < 60) return '방금 전';
+
+    const diffInMinutes = Math.floor(diffInSeconds / 60);
+    if (diffInMinutes < 60) return `${diffInMinutes}분 전`;
+
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) return `${diffInHours}시간 전`;
+
+    const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays < 7) return `${diffInDays}일 전`;
+
+    const diffInWeeks = Math.floor(diffInDays / 7);
+    if (diffInWeeks < 4) return `${diffInWeeks}주 전`;
+
+    const diffInMonths = (now.getFullYear() - date.getFullYear()) * 12 + (now.getMonth() - date.getMonth());
+    if (diffInMonths < 12 && diffInMonths >= 1) return `${diffInMonths}달 전`;
+    if (diffInMonths < 1 && diffInDays >= 28) return '1달 전';
+
+    return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
+  };
+  const validNicknames = isGroup
+    ? participants.map(p => p.NICKNAME)
+    : [roomInfo?.TARGET_NICKNAME, peerProfile?.NICKNAME].filter(Boolean);
+
+  const renderMessageContent = (text, isMe, bubbleStyle, navigate, validUsers) => {
+    if (!text) return '';
+    const mentionRegex = /(@[a-zA-Z0-9가-힣_-]+)/g;
+    const parts = text.split(mentionRegex);
+
+    const mentionColor = isMe && bubbleStyle !== 'outlined' ? '#ffffff' : '#2563EB';
+
+    return parts.map((part, index) => {
+      if (part.startsWith('@') && part.length > 1) {
+        const nickname = part.replace('@', '');
+
+        if (validUsers.includes(nickname)) {
+          return (
+            <span
+              key={index}
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/user/${nickname}`);
+              }}
+              style={{
+                color: mentionColor,
+                textDecoration: 'underline',
+                textUnderlineOffset: '3px',
+                cursor: 'pointer',
+                transition: 'opacity 0.2s ease',
+              }}
+              onMouseEnter={(e) => e.target.style.opacity = '0.6'}
+              onMouseLeave={(e) => e.target.style.opacity = '1'}
+            >
+              {part}
+            </span>
+          );
+        }
+      }
+      return part;
+    });
+  };
+
+  const isValidMention = (nick) => validNicknames.includes(nick);
+
+  const mentionableUsers = isGroup
+    ? participants.filter(p => p.NICKNAME !== myNickname)
+    : roomInfo?.TARGET_NICKNAME ? [{ NICKNAME: roomInfo.TARGET_NICKNAME, USER_ID: 'peer', AVATAR: roomInfo.TARGET_AVATAR }] : [];
+
 
   const currentRoomImageSrc = roomImagePreview
     ? roomImagePreview
@@ -1328,30 +1518,49 @@ export default function Messages() {
     setImageViewer({ open: true, url: allAttachmentImages[index], allImages: allAttachmentImages, index, isGallery: true });
   };
 
+  const handleMuteToggle = async (roomId, isMuted) => {
+    try {
+      // 로컬 상태 즉시 업데이트
+      setMutedRooms(prev => ({
+        ...prev,
+        [roomId]: isMuted
+      }));
+
+      // 서버에 설정 저장 (API 엔드포인트는 실제 서버 구현에 맞춰 조정하세요)
+      await fetch(`${API}/messages/${roomId}/mute`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ isMuted })
+      });
+    } catch (err) {
+      console.error("알림 설정 변경 실패:", err);
+    }
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box sx={{ display: 'flex', height: 'calc(100vh - 48px)', backgroundColor: '#fff', borderRadius: 3, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
 
         <Box sx={{
-          width: sidebarCollapsed ? 0 : { xs: '100%', md: 360 },
+          width: { xs: '100%', md: 360 }, // 💡 너비 360px 고정
           flexShrink: 0,
           overflow: 'hidden',
-          transition: 'width 0.25s ease',
-          borderRight: { md: '1px solid #E2E8F0' },
+          borderRight: '1px solid #E2E8F0',
           display: { xs: roomId ? 'none' : 'flex', md: 'flex' },
           flexDirection: 'column',
           backgroundColor: '#fff'
         }}>
           <Box sx={{ width: { xs: '100vw', md: 360 }, display: 'flex', flexDirection: 'column', height: '100%' }}>
+            {/* 헤더 타이틀 영역 (기존 접기 아이콘 제거됨) */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, px: 2, pt: 2, flexShrink: 0 }}>
               <Typography sx={{ fontWeight: 800, fontSize: '1.25rem', color: '#0F172A' }}>메시지</Typography>
               <Box sx={{ display: 'flex', gap: 0.5 }}>
                 <IconButton onClick={() => { setCreateChatOpen(true); handleNewChatSearch(''); }} sx={{ color: '#0F172A', backgroundColor: '#F1F5F9' }}>
                   <AddCircleOutline fontSize="small" />
-                </IconButton>
-                <IconButton onClick={() => setSidebarCollapsed(true)} sx={{ color: '#0F172A', backgroundColor: '#F1F5F9' }}>
-                  <ArrowBackIos fontSize="small" sx={{ ml: 0.5 }} />
                 </IconButton>
               </Box>
             </Box>
@@ -1415,6 +1624,9 @@ export default function Messages() {
                   {chatRooms.map((room) => {
                     const isActive = parseInt(roomId) === room.ROOM_ID;
                     const isMuted = mutedRooms[room.ROOM_ID];
+
+                    const hasMyMention = typeof room.LAST_MESSAGE === 'string' && room.LAST_MESSAGE.includes(`@${myNickname}`);
+
                     return (
                       <ListItem
                         button key={room.ROOM_ID}
@@ -1422,7 +1634,20 @@ export default function Messages() {
                         sx={{ py: 1.8, px: 2.5, backgroundColor: isActive ? '#F1F5F9' : 'transparent', transition: 'all 0.15s', '&:hover': { backgroundColor: '#F8FAFC' } }}
                       >
                         <ListItemAvatar sx={{ minWidth: 54 }}>
-                          <Badge color="error" variant="dot" invisible={!room.UNREAD_COUNT} sx={{ '& .MuiBadge-badge': { right: 4, top: 4 } }}>
+                          <Badge
+                            color="error"
+                            variant="dot"
+                            invisible={!room.UNREAD_COUNT && !hasMyMention}
+                            sx={{
+                              '& .MuiBadge-badge': {
+                                right: 4,
+                                top: 4,
+                                backgroundColor: hasMyMention ? '#EF4444' : undefined,
+                                width: hasMyMention ? 10 : 8,
+                                height: hasMyMention ? 10 : 8
+                              }
+                            }}
+                          >
                             {room.ROOM_TYPE === 'GROUP' ? (
                               <GroupAvatar avatars={room.PARTICIPANT_AVATARS} nicknames={room.PARTICIPANT_NICKNAMES} roomImage={room.ROOM_IMAGE} size={42} />
                             ) : (
@@ -1439,32 +1664,31 @@ export default function Messages() {
                                 {room.TARGET_NICKNAME || (room.ROOM_TYPE === 'GROUP' ? (room.ROOM_NAME || '그룹 채팅방') : '')}
                                 {isMuted && <NotificationsOff sx={{ fontSize: 13, color: '#94A3B8', ml: 0.5 }} />}
                               </Typography>
-                              <Typography sx={{ fontSize: '0.7rem', color: '#94A3B8' }}>{formatTime(room.LAST_MESSAGE_AT)}</Typography>
+                              {/* 💡 우측 상단 기존 시간 표시는 구조 통합을 위해 제거/비워둠 */}
+                              <Typography sx={{ fontSize: '0.7rem', color: '#94A3B8' }}></Typography>
                             </Box>
                           }
                           secondary={
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              {/* 입력 중 상태 확인 */}
-                              {isActive && typingUsers.length > 0 ? (
-                                <Typography sx={{ fontSize: '0.8rem', color: '#64748B', fontWeight: 600, fontStyle: 'italic' }}>
-                                  {typingUsers[0]}님이 입력 중...
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, maxWidth: '85%', overflow: 'hidden' }}>
+                                {room.LAST_IS_STICKER && <SentimentSatisfiedAlt sx={{ fontSize: 13, color: '#94A3B8', flexShrink: 0 }} />}
+                                {room.LAST_HAS_IMAGE && !room.LAST_IS_STICKER && <ImageOutlined sx={{ fontSize: 13, color: '#94A3B8', flexShrink: 0 }} />}
+                                {room.LAST_HAS_FILE && !room.LAST_IS_STICKER && !room.LAST_HAS_IMAGE && <AttachFile sx={{ fontSize: 13, color: '#94A3B8', flexShrink: 0 }} />}
+
+                                <Typography sx={{ fontSize: '0.8rem', color: room.UNREAD_COUNT ? '#0F172A' : '#64748B', fontWeight: room.UNREAD_COUNT ? 700 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {room.LAST_IS_STICKER ? '이모티콘을 보냈습니다.'
+                                    : room.LAST_HAS_IMAGE ? '사진을 보냈습니다.'
+                                      : room.LAST_HAS_FILE ? '파일을 보냈습니다.'
+                                        : room.LAST_MESSAGE || ''}
                                 </Typography>
-                              ) : (
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, maxWidth: '70%' }}>
-                                  {room.LAST_IS_STICKER && <SentimentSatisfiedAlt sx={{ fontSize: 13, color: '#94A3B8', flexShrink: 0 }} />}
-                                  {room.LAST_HAS_IMAGE && !room.LAST_IS_STICKER && <ImageOutlined sx={{ fontSize: 13, color: '#94A3B8', flexShrink: 0 }} />}
-                                  {room.LAST_HAS_FILE && !room.LAST_IS_STICKER && !room.LAST_HAS_IMAGE && <AttachFile sx={{ fontSize: 13, color: '#94A3B8', flexShrink: 0 }} />}
-                                  <Typography sx={{ fontSize: '0.8rem', color: room.UNREAD_COUNT ? '#0F172A' : '#64748B', fontWeight: room.UNREAD_COUNT ? 700 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {room.LAST_IS_STICKER ? '이모티콘을 보냈습니다.'
-                                      : room.LAST_HAS_IMAGE ? '사진을 보냈습니다.'
-                                        : room.LAST_HAS_FILE ? '파일을 보냈습니다.'
-                                          : room.LAST_MESSAGE || ''}
-                                  </Typography>
-                                </Box>
-                              )}
+
+                                <Typography sx={{ fontSize: '0.75rem', color: hasMyMention ? '#EF4444' : '#94A3B8', flexShrink: 0, ml: 0.5, fontWeight: (room.UNREAD_COUNT || hasMyMention) ? 700 : 400 }}>
+                                  · {formatListTimeRelative(room.LAST_MESSAGE_AT)}
+                                </Typography>
+                              </Box>
 
                               {room.UNREAD_COUNT > 0 && (
-                                <Box sx={{ backgroundColor: '#EF4444', color: '#fff', fontSize: '0.6rem', fontWeight: 800, px: 0.6, py: 0.1, borderRadius: 10 }}>
+                                <Box sx={{ backgroundColor: '#EF4444', color: '#fff', fontSize: '0.6rem', fontWeight: 800, px: 0.6, py: 0.1, borderRadius: 10, flexShrink: 0 }}>
                                   {room.UNREAD_COUNT}
                                 </Box>
                               )}
@@ -1485,33 +1709,7 @@ export default function Messages() {
           sx={{ flex: 1, display: { xs: roomId ? 'flex' : 'none', md: 'flex' }, flexDirection: 'column', transition: 'background-color 0.3s', position: 'relative', minWidth: 0 }}
           style={{ backgroundColor: chatBgColor }}
         >
-          {sidebarCollapsed && (
-            <Box
-              onClick={() => setSidebarCollapsed(false)}
-              sx={{
-                position: 'absolute',
-                top: 80, // 채팅 헤더 바로 아래쪽
-                left: 0,
-                zIndex: 50,
-                backgroundColor: '#fff',
-                border: '1px solid #E2E8F0',
-                borderLeft: 'none',
-                borderRadius: '0 8px 8px 0',
-                py: 1.5,
-                px: 0.5,
-                cursor: 'pointer',
-                boxShadow: '4px 4px 12px rgba(15,23,42,0.08)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s',
-                '&:hover': { backgroundColor: '#F8FAFC', width: 36 },
-                width: 32,
-              }}
-            >
-              <ArrowForwardIos sx={{ color: '#0F172A', fontSize: 16 }} />
-            </Box>
-          )}
+
           {!roomId ? (
             <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               <Box sx={{ width: 80, height: 80, borderRadius: '50%', border: '2px solid #0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
@@ -1520,7 +1718,7 @@ export default function Messages() {
               <Typography sx={{ fontWeight: 800, fontSize: '1.2rem', color: '#0F172A', mb: 1 }}>내 메시지</Typography>
               <Typography sx={{ fontSize: '0.85rem', color: '#64748B' }}>친구나 그룹에게 비공개 사진과 메시지를 보내보세요.</Typography>
             </Box>
-         ) : (loadingChat || !roomInfo) ? (
+          ) : (loadingChat || !roomInfo) ? (
             <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CircularProgress /></Box>
           ) : (
             <>
@@ -1628,7 +1826,13 @@ export default function Messages() {
                     {/* 닉네임 (클릭 시 이동) */}
                     <Typography
                       onClick={() => navigate(`/user/${peerProfile.NICKNAME}`)}
-                      sx={{ fontWeight: 800, fontSize: '1.15rem', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+                      sx={{
+                        fontWeight: 800,
+                        fontSize: '1.15rem',
+                        cursor: 'pointer',
+                        transition: 'color 0.2s ease',
+                        '&:hover': { color: '#2563EB' }
+                      }}
                     >
                       {peerProfile.NICKNAME}
                     </Typography>
@@ -1772,7 +1976,9 @@ export default function Messages() {
                                           </Box>
                                         )}
                                         {msg.MESSAGE && msg.MESSAGE.trim() && (
-                                          <Typography sx={{ fontSize: '0.92rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{msg.MESSAGE}</Typography>
+                                          <Typography sx={{ fontSize: '0.92rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                                            {renderMessageContent(msg.MESSAGE, isMe, bubbleStyle, navigate, validNicknames)}
+                                          </Typography>
                                         )}
                                         {msg.IS_EDITED === 'Y' && (
                                           <Typography sx={{ fontSize: '0.62rem', color: isMe ? 'rgba(255,255,255,0.6)' : '#94A3B8', mt: 0.3 }}>수정됨</Typography>
@@ -1866,7 +2072,10 @@ export default function Messages() {
                   <Box
                     onClick={scrollToBottom}
                     sx={{
-                      position: 'absolute', bottom: 90, right: 24, zIndex: 30,
+                      position: 'absolute',
+                      bottom: editingMessageId ? 135 : 90,
+                      right: 24,
+                      zIndex: 30,
                       width: 40, height: 40, borderRadius: '50%',
                       backgroundColor: 'rgba(255,255,255,0.9)',
                       color: '#0F172A',
@@ -1903,38 +2112,65 @@ export default function Messages() {
                   <IconButton sx={{ color: '#94A3B8' }} onClick={() => fileInputRef.current?.click()}><ImageOutlined /></IconButton>
                   <IconButton sx={{ color: '#94A3B8' }} onClick={(e) => setStickerAnchorEl(e.currentTarget)}><SentimentSatisfiedAlt /></IconButton>
 
-                  <Popover
-                    open={Boolean(stickerAnchorEl)}
-                    anchorEl={stickerAnchorEl}
-                    onClose={() => setStickerAnchorEl(null)}
-                    anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-                    transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-                    PaperProps={{ sx: { p: 1.5, borderRadius: 3, mb: 1, boxShadow: '0 8px 32px rgba(0,0,0,0.15)', border: '1px solid #E2E8F0' } }}
+                  <Box
+                    id="chat-input-wrapper"
+                    ref={inputWrapperRef}
+                    sx={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center', overflow: 'hidden' }}
                   >
-                    <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: 700, mb: 1, px: 0.5 }}>이모티콘</Typography>
-                    <Grid container spacing={0.5} sx={{ width: 280 }}>
-                      {STICKER_LIST.map(sticker => (
-                        <Grid item xs={3} key={sticker.id}>
-                          <Box
-                            onClick={() => handleStickerSelect(sticker)}
-                            sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 1, borderRadius: 2, cursor: 'pointer', transition: 'all 0.15s', '&:hover': { backgroundColor: '#F1F5F9', transform: 'scale(1.15)' } }}
-                          >
-                            <Box sx={{ fontSize: '2.2rem', lineHeight: 1 }}>{sticker.emoji}</Box>
-                            <Typography sx={{ fontSize: '0.6rem', color: '#94A3B8', mt: 0.3 }}>{sticker.label}</Typography>
-                          </Box>
-                        </Grid>
-                      ))}
-                    </Grid>
-                  </Popover>
+                    <Box
+                      ref={overlayRef}
+                      sx={{
+                        position: 'absolute',
+                        left: 0, top: 0, width: '100%', height: '100%',
+                        px: 2, py: 1.2, borderRadius: 3,
+                        backgroundColor: '#F1F5F9',
+                        fontSize: '0.95rem',
+                        color: '#0F172A',
+                        pointerEvents: 'none',
+                        overflowX: 'auto',
+                        overflowY: 'hidden',
+                        whiteSpace: 'pre',
+                        display: 'flex', alignItems: 'center',
+                        '&::-webkit-scrollbar': { display: 'none' } // 스크롤바 숨김
+                      }}
+                    >
+                      {!newMessage ? (
+                        <Typography sx={{ color: '#94A3B8', fontSize: '0.95rem' }}>메시지 입력... (Ctrl+Space로 멘션)</Typography>
+                      ) : (
+                        newMessage.split(/(@[a-zA-Z0-9가-힣_-]+)/g).map((part, index) => (
+                          part.startsWith('@') && part.length > 1 ? (
+                            <span key={index} style={{ color: '#2563EB', fontWeight: 800 }}>
+                              {part}
+                            </span>
+                          ) : (
+                            <span key={index}>{part}</span>
+                          )
+                        ))
+                      )}
+                    </Box>
 
-                  <InputBase
-                    fullWidth
-                    placeholder="메시지 입력..."
-                    value={newMessage}
-                    onChange={(e) => handleTypingInput(e.target.value)}
-                    onPaste={handlePaste}
-                    sx={{ backgroundColor: '#F1F5F9', px: 2, py: 1.2, borderRadius: 3, fontSize: '0.95rem', color: '#0F172A' }}
-                  />
+                    <InputBase
+                      fullWidth
+                      value={newMessage}
+                      onChange={(e) => handleTypingInput(e.target.value)}
+                      onKeyDown={handleInputKeyDown} // 👈 Alt+Enter 트리거
+                      onPaste={handlePaste}
+                      onScroll={(e) => {
+                        if (overlayRef.current) overlayRef.current.scrollLeft = e.target.scrollLeft;
+                      }}
+                      autoComplete="off"
+                      sx={{
+                        px: 2, py: 1.2, fontSize: '0.95rem',
+                        color: 'transparent', // 입력 글자 자체는 숨김
+                        caretColor: '#0F172A', // 커서는 까맣게 유지
+                        zIndex: 1, // 최상단으로 올림
+                        '& input': {
+                          backgroundColor: 'transparent',
+                          '&::placeholder': { color: 'transparent' }
+                        }
+                      }}
+                    />
+                  </Box>
                   <IconButton type="submit" disabled={!newMessage.trim()} sx={{ backgroundColor: newMessage.trim() ? '#2563EB' : '#E2E8F0', color: '#fff', '&:hover': { backgroundColor: '#1D4ED8' }, transition: 'all 0.2s', p: 1.2 }}>
                     <SendRounded sx={{ fontSize: 20 }} />
                   </IconButton>
@@ -1947,11 +2183,14 @@ export default function Messages() {
 
       {/* 메시지 옵션 메뉴 */}
       <Menu anchorEl={anchorElMessage} open={Boolean(anchorElMessage)} onClose={handleCloseMessageOption} PaperProps={{ sx: { borderRadius: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', minWidth: 150 } }}>
-        {selectedMessage?.SENDER_NICKNAME === myNickname && (
-          <MenuItem onClick={handleEditMessageClick} sx={{ fontSize: '0.85rem' }}>
-            <EditOutlined fontSize="small" sx={{ mr: 1, color: '#64748B' }} /> 수정
-          </MenuItem>
-        )}
+        {selectedMessage?.SENDER_NICKNAME === myNickname &&
+          !isStickerMessage(selectedMessage) &&
+          !selectedMessage?.IMAGE_URL &&
+          !selectedMessage?.FILE_URL && (
+            <MenuItem onClick={handleEditMessageClick} sx={{ fontSize: '0.85rem' }}>
+              <EditOutlined fontSize="small" sx={{ mr: 1, color: '#64748B' }} /> 수정
+            </MenuItem>
+          )}
         {selectedMessage?.SENDER_NICKNAME === myNickname && (
           <MenuItem onClick={handleDeleteMessageForAll} sx={{ fontSize: '0.85rem' }}>
             <DeleteOutline fontSize="small" sx={{ mr: 1, color: '#64748B' }} /> 모든 사람에게서 삭제
@@ -2072,9 +2311,16 @@ export default function Messages() {
 
           <Box sx={{ backgroundColor: '#fff', p: 2.5, borderRadius: 3, border: '1px solid #E2E8F0', mb: 2, boxShadow: '0 2px 12px rgba(0,0,0,0.02)' }}>
             <FormControlLabel
-              control={<Switch checked={mutedRooms[roomId] || false} onChange={(e) => setMutedRooms(prev => ({ ...prev, [roomId]: e.target.checked }))} color="primary" />}
+              control={
+                <Switch
+                  checked={!!mutedRooms[roomId]}
+                  onChange={(e) => handleMuteToggle(roomId, e.target.checked)}
+                  color="primary"
+                />
+              }
               label={<Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>알림 끄기</Typography>}
-              sx={{ m: 0, width: '100%', justifyContent: 'space-between' }} labelPlacement="start"
+              sx={{ m: 0, width: '100%', justifyContent: 'space-between' }}
+              labelPlacement="start"
             />
           </Box>
 
@@ -2166,6 +2412,36 @@ export default function Messages() {
       <Snackbar open={roomNameSavedOpen} autoHideDuration={2000} onClose={() => setRoomNameSavedOpen(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         <Alert severity="success" sx={{ fontWeight: 600, fontSize: '0.85rem', borderRadius: 2 }}>저장되었습니다.</Alert>
       </Snackbar>
+      <Popover
+        open={Boolean(mentionAnchorEl)}
+        anchorEl={mentionAnchorEl}
+        onClose={() => setMentionAnchorEl(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        disableAutoFocus
+        disableEnforceFocus
+        PaperProps={{ sx: { borderRadius: 2, mt: -1, mb: 1, boxShadow: '0 4px 20px rgba(0,0,0,0.1)' } }}
+      >
+        <List sx={{ maxHeight: 200, overflowY: 'auto', minWidth: 200, p: 1 }}>
+          {participants
+            .filter(p => p.NICKNAME !== myNickname && p.NICKNAME.toLowerCase().includes(mentionFilter))
+            .map(p => (
+              <ListItem button key={p.USER_ID} onClick={() => handleSelectMention(p.NICKNAME)} sx={{ borderRadius: 1.5, mb: 0.5 }}>
+                <ListItemAvatar sx={{ minWidth: 40 }}>
+                  <Avatar src={p.AVATAR ? (p.AVATAR.startsWith('http') ? p.AVATAR : `${API}${p.AVATAR}`) : undefined} sx={{ width: 28, height: 28, fontSize: '0.75rem', backgroundColor: '#0F172A', fontWeight: 800 }}>
+                    {getInitial(p.NICKNAME)}
+                  </Avatar>
+                </ListItemAvatar>
+                <ListItemText primary={<Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#0F172A' }}>{p.NICKNAME}</Typography>} />
+              </ListItem>
+            ))}
+          {participants.filter(p => p.NICKNAME !== myNickname && p.NICKNAME.toLowerCase().includes(mentionFilter)).length === 0 && (
+            <Box sx={{ p: 2, textAlign: 'center' }}>
+              <Typography sx={{ fontSize: '0.8rem', color: '#94A3B8' }}>일치하는 사용자가 없습니다.</Typography>
+            </Box>
+          )}
+        </List>
+      </Popover>
     </ThemeProvider >
   );
 }

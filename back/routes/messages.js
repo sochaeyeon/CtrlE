@@ -16,8 +16,6 @@ router.get('/rooms', jwtAuthentication, async (req, res) => {
     try {
         conn = await db.getConnection();
 
-        // DIRECT + GROUP 모두 가져옴
-        // GROUP의 경우 TARGET_NICKNAME = ROOM_NAME, TARGET_AVATAR = null
         const sql = `
             SELECT
                 r.ROOM_ID,
@@ -40,13 +38,30 @@ router.get('/rooms', jwtAuthentication, async (req, res) => {
                     SELECT MAX(SENT_AT) FROM CHAT_MESSAGES
                     WHERE ROOM_ID = r.ROOM_ID AND IS_DELETED = 'N'
                 ) AS LAST_MESSAGE_AT,
-                 (
-    SELECT IMAGE_URL FROM (
-        SELECT IMAGE_URL FROM CHAT_MESSAGES
-        WHERE ROOM_ID = r.ROOM_ID AND IS_DELETED = 'N'
-        ORDER BY SENT_AT DESC
-    ) WHERE ROWNUM = 1
-) AS LAST_IMAGE_URL,
+                (
+                    SELECT IMAGE_URL FROM (
+                        SELECT IMAGE_URL FROM CHAT_MESSAGES
+                        WHERE ROOM_ID = r.ROOM_ID AND IS_DELETED = 'N'
+                        ORDER BY SENT_AT DESC
+                    ) WHERE ROWNUM = 1
+                ) AS LAST_IMAGE_URL,
+                (
+                    SELECT SENDER_NICKNAME FROM (
+                        SELECT su.NICKNAME AS SENDER_NICKNAME 
+                        FROM CHAT_MESSAGES cm_inner
+                        JOIN USERS su ON cm_inner.SENDER_ID = su.USER_ID
+                        WHERE cm_inner.ROOM_ID = r.ROOM_ID AND cm_inner.IS_DELETED = 'N'
+                        ORDER BY cm_inner.SENT_AT DESC
+                    ) WHERE ROWNUM = 1
+                ) AS LAST_SENDER_NICKNAME,
+                (
+                    SELECT SENDER_AVATAR FROM (
+                        SELECT (SELECT IMAGE_URL FROM PROFILE_IMAGES WHERE USER_ID = cm_inner.SENDER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS SENDER_AVATAR
+                        FROM CHAT_MESSAGES cm_inner
+                        WHERE cm_inner.ROOM_ID = r.ROOM_ID AND cm_inner.IS_DELETED = 'N'
+                        ORDER BY cm_inner.SENT_AT DESC
+                    ) WHERE ROWNUM = 1
+                ) AS LAST_SENDER_AVATAR,
                 (
                     SELECT COUNT(*) FROM CHAT_MESSAGES
                     WHERE ROOM_ID = r.ROOM_ID
@@ -57,7 +72,6 @@ router.get('/rooms', jwtAuthentication, async (req, res) => {
                 ) AS UNREAD_COUNT
             FROM CHAT_ROOMS r
             JOIN CHAT_MEMBERS cm1 ON r.ROOM_ID = cm1.ROOM_ID AND cm1.USER_ID = :myId
-            -- DIRECT: 상대방 정보 조인 / GROUP: 아무나 한 명 (FETCH FIRST로 제한)
             LEFT JOIN CHAT_MEMBERS cm2 ON r.ROOM_ID = cm2.ROOM_ID
                 AND cm2.USER_ID != :myId
                 AND r.ROOM_TYPE = 'DIRECT'
@@ -67,7 +81,6 @@ router.get('/rooms', jwtAuthentication, async (req, res) => {
             )
             ORDER BY LAST_MESSAGE_AT DESC NULLS LAST
         `;
-
         const result = await conn.execute(sql, { myId }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
 
         // GROUP 방 중복 제거 (LEFT JOIN으로 여러 행이 나올 수 있음)
@@ -107,6 +120,26 @@ router.get('/rooms', jwtAuthentication, async (req, res) => {
             row.LAST_IS_STICKER = row.LAST_MESSAGE?.startsWith('__STICKER__') || false;
             if (row.LAST_IS_STICKER) row.LAST_MESSAGE = '';
 
+            const unreadRes = await conn.execute(
+                `SELECT MESSAGE, IMAGE_URL, SENT_AT,
+            u.NICKNAME AS SENDER_NICKNAME
+     FROM (
+         SELECT cm.MESSAGE, cm.IMAGE_URL, cm.SENT_AT, cm.SENDER_ID
+         FROM CHAT_MESSAGES cm
+         WHERE cm.ROOM_ID = :roomId
+           AND cm.SENDER_ID != :myId
+           AND cm.IS_READ = 'N'
+           AND cm.IS_DELETED = 'N'
+           AND (cm.DEL_USER_ID IS NULL OR cm.DEL_USER_ID != :myId2)
+         ORDER BY cm.SENT_AT DESC
+     ) sub
+     JOIN USERS u ON sub.SENDER_ID = u.USER_ID
+     WHERE ROWNUM <= 3
+     ORDER BY sub.SENT_AT ASC`,
+                { roomId: row.ROOM_ID, myId, myId2: myId },
+                { outFormat: oracledb.OUT_FORMAT_OBJECT }
+            );
+            row.UNREAD_MESSAGES = unreadRes.rows; // 배열로 추가
             rooms.push(row);
         }
 

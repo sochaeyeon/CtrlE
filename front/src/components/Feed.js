@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Avatar, Button, Chip, Divider, IconButton, InputBase,
-  Stack, Typography, createTheme, ThemeProvider, CssBaseline,
-  Tooltip, Menu, MenuItem, Badge, Dialog, List, ListItem,
+  Stack, Typography, Tooltip, Menu, MenuItem, Badge, Dialog, List, ListItem,
   ListItemAvatar, ListItemText, CircularProgress,
   Snackbar, Alert, Modal, Backdrop, Fade,
   Radio, RadioGroup, FormControlLabel, TextField,
@@ -15,51 +14,10 @@ import {
   Close, LocalFireDepartment, PeopleAlt,
   ShareOutlined, Check, Edit, Delete, Flag,
   ViewList, Category, Layers, FlagOutlined,
-  ArrowUpward, FavoriteBorder,
+  ArrowUpward, FavoriteBorder, AutoAwesome,
 } from '@mui/icons-material';
 import { BugReport, HelpOutline } from '@mui/icons-material';
-
-const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: { main: '#2563EB' },
-    secondary: { main: '#0F172A' },
-    background: { default: '#F8FAFC', paper: '#FFFFFF' },
-    text: { primary: '#0F172A', secondary: '#64748B' },
-  },
-  typography: { fontFamily: '"Plus Jakarta Sans", "Noto Sans KR", sans-serif' },
-  shape: { borderRadius: 8 },
-  components: {
-    MuiCssBaseline: {
-      styleOverrides: `
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(16px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes heartPop {
-          0%   { transform: scale(1); }
-          30%  { transform: scale(1.5); }
-          60%  { transform: scale(0.9); }
-          100% { transform: scale(1); }
-        }
-        @keyframes bookmarkPop {
-          0%   { transform: scale(1) rotate(0deg); }
-          40%  { transform: scale(1.4) rotate(-8deg); }
-          70%  { transform: scale(0.9) rotate(4deg); }
-          100% { transform: scale(1) rotate(0deg); }
-        }
-        @keyframes slideDown {
-          from { opacity: 0; transform: translateY(-8px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes notiIn {
-          from { opacity: 0; transform: scale(0.95) translateY(-8px); }
-          to   { opacity: 1; transform: scale(1) translateY(0); }
-        }
-      `,
-    },
-  },
-});
+import { useColorMode } from '../App';
 
 const FIXED_CATEGORIES = [
   { label: '전체', value: null, icon: <ViewList sx={{ fontSize: 13 }} /> },
@@ -76,9 +34,6 @@ const REPORT_REASONS = [
   { value: 'OTHER', label: '기타' },
 ];
 
-// ──────────────────────────────────────────
-//  Helpers
-// ──────────────────────────────────────────
 const API = 'http://localhost:3010';
 
 const resolveImageSrc = (src) =>
@@ -92,7 +47,6 @@ const resolveAvatarSrc = (src) => {
 
 const getInitial = (name) => (name ? name.charAt(0).toUpperCase() : '?');
 
-// ── 시간 포맷: "방금 전", "3분 전", "2시간 전", "2025년 6월 3일"
 const formatRelativeTime = (dateStr) => {
   if (!dateStr) return '';
   const d = new Date(dateStr);
@@ -108,10 +62,7 @@ const formatRelativeTime = (dateStr) => {
   return d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
 };
 
-// ──────────────────────────────────────────
-//  ReportModal (PostDetail과 동일)
-// ──────────────────────────────────────────
-const ReportModal = ({ open, onClose, postId, token, onSuccess, onDuplicate }) => {
+const ReportModal = ({ open, onClose, postId, token, onSuccess, onDuplicate, colors }) => {
   const [reason, setReason] = useState('');
   const [detail, setDetail] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -126,22 +77,10 @@ const ReportModal = ({ open, onClose, postId, token, onSuccess, onDuplicate }) =
         body: JSON.stringify({ reason, detail }),
       });
       const data = await res.json();
-      if (res.ok && data.success) {
-        setReason(''); setDetail('');
-        onClose();
-        onSuccess();
-      } else if (res.status === 409) {
-        onClose();
-        onDuplicate();
-      } else {
-        onClose();
-        onDuplicate();
-      }
-    } catch {
-      onClose();
-    } finally {
-      setSubmitting(false);
-    }
+      if (res.ok && data.success) { setReason(''); setDetail(''); onClose(); onSuccess(); }
+      else { onClose(); onDuplicate(); }
+    } catch { onClose(); }
+    finally { setSubmitting(false); }
   };
 
   return (
@@ -151,54 +90,46 @@ const ReportModal = ({ open, onClose, postId, token, onSuccess, onDuplicate }) =
     >
       <Fade in={open}>
         <Box sx={{
-          position: 'fixed', top: '50%', left: '50%',
-          transform: 'translate(-50%, -50%)',
+          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
           width: { xs: '90vw', sm: 440 },
-          backgroundColor: '#fff', borderRadius: 3,
-          boxShadow: '0 20px 60px rgba(15,23,42,0.18)',
-          overflow: 'hidden', outline: 'none',
+          backgroundColor: colors.paper, borderRadius: 3,
+          boxShadow: '0 20px 60px rgba(15,23,42,0.18)', overflow: 'hidden', outline: 'none',
         }}>
-          <Box sx={{ px: 3, py: 2.5, borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ px: 3, py: 2.5, borderBottom: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
               <Box sx={{ width: 32, height: 32, borderRadius: 1.5, backgroundColor: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <FlagOutlined sx={{ fontSize: 17, color: '#DC2626' }} />
               </Box>
-              <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: '#0F172A' }}>게시글 신고</Typography>
+              <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: colors.textPrimary }}>게시글 신고</Typography>
             </Box>
-            <IconButton size="small" onClick={onClose} sx={{ color: '#94A3B8' }}>
+            <IconButton size="small" onClick={onClose} sx={{ color: colors.textHint }}>
               <Close sx={{ fontSize: 18 }} />
             </IconButton>
           </Box>
-
           <Box sx={{ px: 3, py: 3 }}>
-            <Typography sx={{ fontSize: '0.82rem', color: '#64748B', mb: 2 }}>신고 사유를 선택해주세요.</Typography>
+            <Typography sx={{ fontSize: '0.82rem', color: colors.textMuted, mb: 2 }}>신고 사유를 선택해주세요.</Typography>
             <RadioGroup value={reason} onChange={e => setReason(e.target.value)}>
               {REPORT_REASONS.map(r => (
                 <FormControlLabel key={r.value} value={r.value} label={r.label}
-                  control={<Radio size="small" sx={{ color: '#CBD5E1', '&.Mui-checked': { color: '#2563EB' } }} />}
+                  control={<Radio size="small" sx={{ color: colors.border, '&.Mui-checked': { color: '#2563EB' } }} />}
                   sx={{
                     mx: 0, px: 1.5, py: 0.8, borderRadius: 1.5, mb: 0.5,
-                    border: reason === r.value ? '1px solid #BFDBFE' : '1px solid transparent',
+                    border: reason === r.value ? '1px solid #BFDBFE' : `1px solid transparent`,
                     backgroundColor: reason === r.value ? '#EFF6FF' : 'transparent',
                     transition: 'all 0.15s',
-                    '& .MuiFormControlLabel-label': { fontSize: '0.88rem', fontWeight: reason === r.value ? 600 : 400 },
+                    '& .MuiFormControlLabel-label': { fontSize: '0.88rem', fontWeight: reason === r.value ? 600 : 400, color: colors.textPrimary },
                   }}
                 />
               ))}
             </RadioGroup>
-
             {reason === 'OTHER' && (
-              <TextField multiline rows={2} fullWidth
-                placeholder="기타 사유를 입력해주세요"
+              <TextField multiline rows={2} fullWidth placeholder="기타 사유를 입력해주세요"
                 value={detail} onChange={e => setDetail(e.target.value)}
-                sx={{ mt: 1.5, '& .MuiOutlinedInput-root': { fontSize: '0.85rem', borderRadius: 1.5, '& fieldset': { borderColor: '#E2E8F0' }, '&:hover fieldset': { borderColor: '#CBD5E1' }, '&.Mui-focused fieldset': { borderColor: '#2563EB' } } }}
+                sx={{ mt: 1.5, '& .MuiOutlinedInput-root': { fontSize: '0.85rem', borderRadius: 1.5, backgroundColor: colors.paper, color: colors.textPrimary, '& fieldset': { borderColor: colors.border }, '&:hover fieldset': { borderColor: colors.borderFocus }, '&.Mui-focused fieldset': { borderColor: '#2563EB' } } }}
               />
             )}
-
-            <Button fullWidth variant="contained"
-              disabled={!reason || submitting}
-              onClick={handleSubmit}
-              sx={{ mt: 2.5, py: 1.1, borderRadius: 1.5, textTransform: 'none', fontWeight: 700, fontSize: '0.88rem', backgroundColor: '#DC2626', boxShadow: 'none', '&:hover': { backgroundColor: '#B91C1C' }, '&.Mui-disabled': { backgroundColor: '#F1F5F9', color: '#94A3B8' } }}
+            <Button fullWidth variant="contained" disabled={!reason || submitting} onClick={handleSubmit}
+              sx={{ mt: 2.5, py: 1.1, borderRadius: 1.5, textTransform: 'none', fontWeight: 700, fontSize: '0.88rem', backgroundColor: '#DC2626', boxShadow: 'none', '&:hover': { backgroundColor: '#B91C1C' }, '&.Mui-disabled': { backgroundColor: colors.hover, color: colors.textHint } }}
             >
               {submitting ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : '신고 제출'}
             </Button>
@@ -209,43 +140,31 @@ const ReportModal = ({ open, onClose, postId, token, onSuccess, onDuplicate }) =
   );
 };
 
-// ──────────────────────────────────────────
-//  ConfirmModal (alert/confirm 대체)
-// ──────────────────────────────────────────
-const ConfirmModal = ({ open, title, message, confirmLabel = '확인', confirmColor = '#EF4444', onConfirm, onClose }) => (
+const ConfirmModal = ({ open, title, message, confirmLabel = '확인', confirmColor = '#EF4444', onConfirm, onClose, colors }) => (
   <Modal open={open} onClose={onClose} closeAfterTransition
     slots={{ backdrop: Backdrop }}
     slotProps={{ backdrop: { timeout: 200, sx: { backgroundColor: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(4px)' } } }}
   >
     <Fade in={open}>
       <Box sx={{
-        position: 'fixed', top: '50%', left: '50%',
-        transform: 'translate(-50%, -50%)',
+        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
         width: { xs: '88vw', sm: 380 },
-        backgroundColor: '#fff', borderRadius: 3,
-        boxShadow: '0 20px 60px rgba(15,23,42,0.16)',
-        overflow: 'hidden', outline: 'none',
+        backgroundColor: colors.paper, borderRadius: 3,
+        boxShadow: '0 20px 60px rgba(15,23,42,0.16)', overflow: 'hidden', outline: 'none',
       }}>
         <Box sx={{ px: 3, py: 3 }}>
-          <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: '#0F172A', mb: 1 }}>{title}</Typography>
-          <Typography sx={{ fontSize: '0.85rem', color: '#64748B', lineHeight: 1.7 }}>{message}</Typography>
+          <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: colors.textPrimary, mb: 1 }}>{title}</Typography>
+          <Typography sx={{ fontSize: '0.85rem', color: colors.textMuted, lineHeight: 1.7 }}>{message}</Typography>
         </Box>
         <Box sx={{ px: 3, pb: 3, display: 'flex', gap: 1.5, justifyContent: 'flex-end' }}>
-          <Button onClick={onClose} sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.85rem', color: '#64748B', px: 2, borderRadius: 1.5, border: '1px solid #E2E8F0', '&:hover': { backgroundColor: '#F8FAFC' } }}>
-            취소
-          </Button>
-          <Button onClick={onConfirm} sx={{ textTransform: 'none', fontWeight: 700, fontSize: '0.85rem', color: '#fff', px: 2.5, borderRadius: 1.5, backgroundColor: confirmColor, boxShadow: 'none', '&:hover': { filter: 'brightness(0.9)' } }}>
-            {confirmLabel}
-          </Button>
+          <Button onClick={onClose} sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.85rem', color: colors.textMuted, px: 2, borderRadius: 1.5, border: `1px solid ${colors.border}`, '&:hover': { backgroundColor: colors.hover } }}>취소</Button>
+          <Button onClick={onConfirm} sx={{ textTransform: 'none', fontWeight: 700, fontSize: '0.85rem', color: '#fff', px: 2.5, borderRadius: 1.5, backgroundColor: confirmColor, boxShadow: 'none', '&:hover': { filter: 'brightness(0.9)' } }}>{confirmLabel}</Button>
         </Box>
       </Box>
     </Fade>
   </Modal>
 );
 
-// ──────────────────────────────────────────
-//  NotificationModal
-// ──────────────────────────────────────────
 const NOTI_LABELS = {
   LIKE: { text: '회원님의 게시글을 좋아합니다.', color: '#EF4444' },
   COMMENT: { text: '회원님의 게시글에 댓글을 남겼습니다.', color: '#2563EB' },
@@ -253,51 +172,38 @@ const NOTI_LABELS = {
   FOLLOW_REQUEST: { text: '팔로우를 요청했습니다.', color: '#F97316' },
   FOLLOW_ACCEPTED: { text: '팔로우 요청을 수락했습니다.', color: '#10B981' },
 };
-const FollowRequestButtons = ({ requesterId, token, onHandled }) => {
-  const [loading, setLoading] = useState(null); // 'accept' | 'reject' | null
 
+const FollowRequestButtons = ({ requesterId, token, onHandled, colors }) => {
+  const [loading, setLoading] = useState(null);
   const handle = async (action) => {
     setLoading(action);
     try {
-      await fetch(`${API}/user/follow/${requesterId}/${action}`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await fetch(`${API}/user/follow/${requesterId}/${action}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` } });
       onHandled(action);
-    } catch { /* ignore */ }
+    } catch { }
     finally { setLoading(null); }
   };
-
   return (
     <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-      <Button size="small" variant="contained"
-        disabled={!!loading}
-        onClick={() => handle('accept')}
-        sx={{
-          fontSize: '0.72rem', fontWeight: 700, textTransform: 'none',
-          px: 1.5, py: 0.3, borderRadius: 1, minWidth: 0,
-          backgroundColor: '#0F172A', color: '#fff', boxShadow: 'none',
-          '&:hover': { backgroundColor: '#2563EB' },
-        }}
-      >
-        {loading === 'accept' ? <CircularProgress size={11} sx={{ color: '#fff' }} /> : '수락'}
+      <Button size="small" variant="contained" disabled={!!loading} onClick={() => handle('accept')}
+        sx={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'none', px: 1.5, py: 0.3, borderRadius: 1, minWidth: 0, backgroundColor: colors.textPrimary, color: colors.paper, boxShadow: 'none', '&:hover': { backgroundColor: '#2563EB' } }}>
+        {loading === 'accept' ? <CircularProgress size={11} sx={{ color: colors.paper }} /> : '수락'}
       </Button>
-      <Button size="small" variant="outlined"
-        disabled={!!loading}
-        onClick={() => handle('reject')}
+      <Button size="small" variant="outlined" disabled={!!loading} onClick={() => handle('reject')}
         sx={{
-          fontSize: '0.72rem', fontWeight: 700, textTransform: 'none',
-          px: 1.5, py: 0.3, borderRadius: 1, minWidth: 0,
-          borderColor: '#E2E8F0', color: '#64748B',
-          '&:hover': { borderColor: '#94A3B8', backgroundColor: '#F8FAFC' },
-        }}
-      >
-        {loading === 'reject' ? <CircularProgress size={11} sx={{ color: '#64748B' }} /> : '거절'}
+          fontSize: '0.72rem', fontWeight: 700, textTransform: 'none', px: 1.5, py: 0.3, borderRadius: 1, minWidth: 0, borderColor: colors.border, color: colors.textMuted, '&:hover': {
+            backgroundColor: colors.hover,
+            borderColor: colors.borderFocus,
+            boxShadow: '0 4px 20px rgba(15,23,42,0.06)'
+          }
+        }}>
+        {loading === 'reject' ? <CircularProgress size={11} sx={{ color: colors.textMuted }} /> : '거절'}
       </Button>
     </Stack>
   );
 };
-const NotificationModal = ({ open, onClose, token, navigate }) => {
+
+const NotificationModal = ({ open, onClose, token, navigate, colors }) => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -308,7 +214,6 @@ const NotificationModal = ({ open, onClose, token, navigate }) => {
       .then(r => r.json())
       .then(d => {
         if (d.success) setNotifications(d.notifications ?? []);
-        // 전체 읽음 처리
         fetch(`${API}/notifications/read`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` } }).catch(() => { });
       })
       .catch(() => { })
@@ -328,92 +233,54 @@ const NotificationModal = ({ open, onClose, token, navigate }) => {
       <Fade in={open}>
         <Box sx={{
           position: 'fixed', top: 64, right: { xs: 12, md: 32 },
-          width: { xs: 'calc(100vw - 24px)', sm: 380 },
-          maxHeight: '70vh',
-          backgroundColor: '#fff', borderRadius: 2.5,
-          boxShadow: '0 20px 60px rgba(15,23,42,0.16)',
-          border: '1px solid #E2E8F0',
+          width: { xs: 'calc(100vw - 24px)', sm: 380 }, maxHeight: '70vh',
+          backgroundColor: colors.paper, borderRadius: 2.5,
+          boxShadow: '0 20px 60px rgba(15,23,42,0.16)', border: `1px solid ${colors.border}`,
           overflow: 'hidden', outline: 'none',
-          animation: 'notiIn 0.2s ease both',
         }}>
-          {/* 헤더 */}
-          <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography sx={{ fontWeight: 800, fontSize: '0.95rem', color: '#0F172A' }}>알림</Typography>
-            <IconButton size="small" onClick={onClose} sx={{ color: '#94A3B8' }}>
-              <Close sx={{ fontSize: 17 }} />
-            </IconButton>
+          <Box sx={{ px: 2.5, py: 2, borderBottom: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography sx={{ fontWeight: 800, fontSize: '0.95rem', color: colors.textPrimary }}>알림</Typography>
+            <IconButton size="small" onClick={onClose} sx={{ color: colors.textHint }}><Close sx={{ fontSize: 17 }} /></IconButton>
           </Box>
-
-          {/* 목록 */}
           <Box sx={{ overflowY: 'auto', maxHeight: 'calc(70vh - 56px)' }}>
             {loading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
-                <CircularProgress size={22} sx={{ color: '#2563EB' }} />
-              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}><CircularProgress size={22} sx={{ color: '#2563EB' }} /></Box>
             ) : notifications.length === 0 ? (
               <Box sx={{ textAlign: 'center', py: 8 }}>
-                <NotificationsNoneOutlined sx={{ fontSize: 36, color: '#E2E8F0', mb: 1 }} />
-                <Typography sx={{ color: '#94A3B8', fontSize: '0.85rem' }}>알림이 없습니다.</Typography>
+                <NotificationsNoneOutlined sx={{ fontSize: 36, color: colors.border, mb: 1 }} />
+                <Typography sx={{ color: colors.textHint, fontSize: '0.85rem' }}>알림이 없습니다.</Typography>
               </Box>
-            ) : (
-              notifications.map((n, i) => {
-                const meta = NOTI_LABELS[n.NOTI_TYPE] || { text: '새 알림', color: '#64748B' };
-                const isUnread = n.IS_READ === 'N';
-                return (
-                  <Box key={n.NOTI_ID || i}
-                    sx={{
-                      display: 'flex', alignItems: 'center', gap: 1.5,
-                      px: 2.5, py: 2,
-                      backgroundColor: isUnread ? '#F0F7FF' : 'transparent',
-                      borderBottom: '1px solid #F8FAFC',
-                      transition: 'background 0.15s',
-                      '&:hover': { backgroundColor: '#F8FAFC' },
-                      '&:last-child': { borderBottom: 'none' },
-                    }}
-                  >
-                    {/* 아바타 — FOLLOW_REQUEST 아닐 때만 클릭 이동 */}
-                    <Box
-                      sx={{ position: 'relative', flexShrink: 0, cursor: n.NOTI_TYPE !== 'FOLLOW_REQUEST' ? 'pointer' : 'default' }}
-                      onClick={() => n.NOTI_TYPE !== 'FOLLOW_REQUEST' && handleClick(n)}
-                    >
-                      <Avatar
-                        src={resolveAvatarSrc(n.SENDER_AVATAR)}
-                        sx={{ width: 36, height: 36, backgroundColor: '#0F172A', fontSize: '0.8rem', fontWeight: 800 }}
-                      >
-                        {getInitial(n.SENDER_NAME)}
-                      </Avatar>
-                      {isUnread && (
-                        <Box sx={{ position: 'absolute', top: -1, right: -1, width: 9, height: 9, borderRadius: '50%', backgroundColor: meta.color, border: '2px solid #fff' }} />
-                      )}
-                    </Box>
-
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography
-                        sx={{ fontSize: '0.82rem', color: '#0F172A', lineHeight: 1.5, cursor: n.NOTI_TYPE !== 'FOLLOW_REQUEST' ? 'pointer' : 'default' }}
-                        onClick={() => n.NOTI_TYPE !== 'FOLLOW_REQUEST' && handleClick(n)}
-                      >
-                        <Box component="span" sx={{ fontWeight: 700 }}>{n.SENDER_NAME || '알 수 없음'}</Box>
-                        {' '}{meta.text}
-                      </Typography>
-                      <Typography sx={{ fontSize: '0.7rem', color: '#94A3B8', mt: 0.2 }}>
-                        {formatRelativeTime(n.CREATED_AT)}
-                      </Typography>
-
-                      {/* 팔로우 요청일 때만 수락/거절 버튼 */}
-                      {n.NOTI_TYPE === 'FOLLOW_REQUEST' && (
-                        <FollowRequestButtons
-                          requesterId={n.SENDER_ID}
-                          token={token}
-                          onHandled={() => setNotifications(prev =>
-                            prev.filter(x => x.NOTI_ID !== n.NOTI_ID)
-                          )}
-                        />
-                      )}
-                    </Box>
+            ) : notifications.map((n, i) => {
+              const meta = NOTI_LABELS[n.NOTI_TYPE] || { text: '새 알림', color: '#64748B' };
+              const isUnread = n.IS_READ === 'N';
+              return (
+                <Box key={n.NOTI_ID || i} sx={{
+                  display: 'flex', alignItems: 'center', gap: 1.5, px: 2.5, py: 2,
+                  backgroundColor: isUnread ? (colors.mode === 'dark' ? '#1E2A3A' : '#F0F7FF') : 'transparent',
+                  borderBottom: `1px solid ${colors.border}`,
+                  transition: 'background 0.15s', '&:hover': { backgroundColor: colors.hover }, '&:last-child': { borderBottom: 'none' },
+                }}>
+                  <Box sx={{ position: 'relative', flexShrink: 0, cursor: n.NOTI_TYPE !== 'FOLLOW_REQUEST' ? 'pointer' : 'default' }}
+                    onClick={() => n.NOTI_TYPE !== 'FOLLOW_REQUEST' && handleClick(n)}>
+                    <Avatar src={resolveAvatarSrc(n.SENDER_AVATAR)} sx={{ width: 36, height: 36, backgroundColor: colors.textPrimary, fontSize: '0.8rem', fontWeight: 800 }}>
+                      {getInitial(n.SENDER_NAME)}
+                    </Avatar>
+                    {isUnread && <Box sx={{ position: 'absolute', top: -1, right: -1, width: 9, height: 9, borderRadius: '50%', backgroundColor: meta.color, border: `2px solid ${colors.paper}` }} />}
                   </Box>
-                );
-              })
-            )}
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: '0.82rem', color: colors.textPrimary, lineHeight: 1.5, cursor: n.NOTI_TYPE !== 'FOLLOW_REQUEST' ? 'pointer' : 'default' }}
+                      onClick={() => n.NOTI_TYPE !== 'FOLLOW_REQUEST' && handleClick(n)}>
+                      <Box component="span" sx={{ fontWeight: 700 }}>{n.SENDER_NAME || '알 수 없음'}</Box>{' '}{meta.text}
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.7rem', color: colors.textHint, mt: 0.2 }}>{formatRelativeTime(n.CREATED_AT)}</Typography>
+                    {n.NOTI_TYPE === 'FOLLOW_REQUEST' && (
+                      <FollowRequestButtons requesterId={n.SENDER_ID} token={token} colors={colors}
+                        onHandled={() => setNotifications(prev => prev.filter(x => x.NOTI_ID !== n.NOTI_ID))} />
+                    )}
+                  </Box>
+                </Box>
+              );
+            })}
           </Box>
         </Box>
       </Fade>
@@ -421,72 +288,33 @@ const NotificationModal = ({ open, onClose, token, navigate }) => {
   );
 };
 
-// ──────────────────────────────────────────
-//  NavBar
-// ──────────────────────────────────────────
-const NavBar = ({ onLogout, notificationCount, onNotificationClick, token }) => {
+const NavBar = ({ onLogout, notificationCount, onNotificationClick, token, colors }) => {
   const navigate = useNavigate();
-
   return (
     <Box sx={{
       position: 'sticky', top: 0, zIndex: 100,
-      backgroundColor: 'rgba(248,250,252,0.85)',
-      backdropFilter: 'blur(12px)',
-      borderBottom: '1px solid #E2E8F0',
+      backgroundColor: colors.mode === 'dark' ? 'rgba(15,17,23,0.9)' : 'rgba(248,250,252,0.85)',
+      backdropFilter: 'blur(12px)', borderBottom: `1px solid ${colors.border}`,
     }}>
-      <Box sx={{ maxWidth: 1200, mx: 'auto', px: { xs: 2, md: 4 }, py: 1.5, display: 'flex', alignItems: 'center', gap: 2 }}>
-
-        {/* Logo */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 2, cursor: 'pointer' }} onClick={() => navigate('/feed')}>
-          <Box sx={{ width: 28, height: 28, borderRadius: 1, backgroundColor: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '0.75rem', lineHeight: 1 }}>{'<>'}</Typography>
+      <Box sx={{ maxWidth: 1200, mx: 'auto', px: { xs: 2, md: 4 }, py: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }} onClick={() => navigate('/feed')}>
+          <Box sx={{ width: 28, height: 28, borderRadius: 1, backgroundColor: colors.textPrimary, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Typography sx={{ color: colors.paper, fontWeight: 900, fontSize: '0.75rem', lineHeight: 1 }}>{'<>'}</Typography>
           </Box>
-          <Typography sx={{ fontWeight: 800, fontSize: '1rem', letterSpacing: '-0.02em', color: '#0F172A' }}>CtrlE</Typography>
+          <Typography sx={{ fontWeight: 800, fontSize: '1rem', letterSpacing: '-0.02em', color: colors.textPrimary }}>CtrlE</Typography>
         </Box>
-
-        {/* Search */}
-        <Box sx={{
-          flex: 1, maxWidth: 380,
-          display: 'flex', alignItems: 'center', gap: 1,
-          backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0',
-          borderRadius: 2, px: 1.5, py: 0.6,
-          '&:focus-within': { borderColor: '#2563EB', backgroundColor: '#fff' },
-          transition: 'all 0.2s',
-        }}>
-          <Search sx={{ color: '#94A3B8', fontSize: 17 }} />
-          <InputBase
-            placeholder="버그, 기술, 개발자 검색..."
-            sx={{ fontSize: '0.83rem', color: '#0F172A', flex: 1, '& input::placeholder': { color: '#94A3B8' } }}
-          />
-        </Box>
-
-        <Box sx={{ flex: 1 }} />
 
         <Stack direction="row" alignItems="center" spacing={1}>
           <Tooltip title="알림">
             <IconButton size="small" onClick={onNotificationClick}>
-              <Badge
-                badgeContent={notificationCount > 0 ? notificationCount : null}
-                color="error"
-                sx={{ '& .MuiBadge-badge': { fontSize: '0.6rem', minWidth: 16, height: 16 } }}
-              >
-                <NotificationsNoneOutlined sx={{ fontSize: 20, color: '#64748B' }} />
+              <Badge badgeContent={notificationCount > 0 ? notificationCount : null} color="error"
+                sx={{ '& .MuiBadge-badge': { fontSize: '0.6rem', minWidth: 16, height: 16 } }}>
+                <NotificationsNoneOutlined sx={{ fontSize: 20, color: colors.textMuted }} />
               </Badge>
             </IconButton>
           </Tooltip>
-
-          <Button
-            variant="contained"
-            startIcon={<Add sx={{ fontSize: 16 }} />}
-            onClick={() => navigate('/register')}
-            sx={{
-              backgroundColor: '#0F172A', color: '#fff', textTransform: 'none',
-              fontWeight: 700, fontSize: '0.8rem', px: 2, py: 0.9, borderRadius: 1.5,
-              boxShadow: 'none',
-              '&:hover': { backgroundColor: '#2563EB', boxShadow: '0 4px 14px rgba(37,99,235,0.25)', transform: 'translateY(-1px)' },
-              transition: 'all 0.2s',
-            }}
-          >
+          <Button variant="contained" startIcon={<Add sx={{ fontSize: 16 }} />} onClick={() => navigate('/register')}
+            sx={{ backgroundColor: colors.textPrimary, color: colors.paper, textTransform: 'none', fontWeight: 700, fontSize: '0.8rem', px: 2, py: 0.9, borderRadius: 1.5, boxShadow: 'none', '&:hover': { backgroundColor: '#2563EB', boxShadow: '0 4px 14px rgba(37,99,235,0.25)', transform: 'translateY(-1px)' }, transition: 'all 0.2s' }}>
             새 게시물
           </Button>
         </Stack>
@@ -495,10 +323,7 @@ const NavBar = ({ onLogout, notificationCount, onNotificationClick, token }) => 
   );
 };
 
-// ──────────────────────────────────────────
-//  PostCard
-// ──────────────────────────────────────────
-const PostCard = ({ feed, token, onOpenDetail, myNickname, onDelete }) => {
+const PostCard = ({ feed, token, onOpenDetail, myNickname, onDelete, onTagClick, colors }) => {
   const navigate = useNavigate();
   const [liked, setLiked] = useState(feed.liked ?? false);
   const [likeCount, setLikeCount] = useState(feed.likes ?? 0);
@@ -507,13 +332,9 @@ const PostCard = ({ feed, token, onOpenDetail, myNickname, onDelete }) => {
   const [bookmarkAnim, setBookmarkAnim] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const [shareOpen, setShareOpen] = useState(false);
-
-  // 신고 모달 상태
   const [reportOpen, setReportOpen] = useState(false);
   const [reportSuccessOpen, setReportSuccessOpen] = useState(false);
   const [reportDuplicateOpen, setReportDuplicateOpen] = useState(false);
-
-  // 삭제 확인 모달
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const imageList = feed.images ? feed.images.split(',') : [];
@@ -522,35 +343,19 @@ const PostCard = ({ feed, token, onOpenDetail, myNickname, onDelete }) => {
   const handleLike = async (e) => {
     e.stopPropagation();
     const next = !liked;
-    setLiked(next);
-    setLikeCount(c => c + (next ? 1 : -1));
-    setLikeAnim(true);
+    setLiked(next); setLikeCount(c => c + (next ? 1 : -1)); setLikeAnim(true);
     setTimeout(() => setLikeAnim(false), 500);
-    try {
-      await fetch(`${API}/feed/${feed.id}/like`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    } catch {
-      setLiked(!next);
-      setLikeCount(c => c + (next ? -1 : 1));
-    }
+    try { await fetch(`${API}/feed/${feed.id}/like`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }); }
+    catch { setLiked(!next); setLikeCount(c => c + (next ? -1 : 1)); }
   };
 
   const handleBookmark = async (e) => {
     e.stopPropagation();
     const next = !bookmarked;
-    setBookmarked(next);
-    setBookmarkAnim(true);
+    setBookmarked(next); setBookmarkAnim(true);
     setTimeout(() => setBookmarkAnim(false), 500);
-    try {
-      await fetch(`${API}/feed/${feed.id}/bookmark`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    } catch {
-      setBookmarked(!next);
-    }
+    try { await fetch(`${API}/feed/${feed.id}/bookmark`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }); }
+    catch { setBookmarked(!next); }
   };
 
   const handleShare = async (e) => {
@@ -559,387 +364,297 @@ const PostCard = ({ feed, token, onOpenDetail, myNickname, onDelete }) => {
     try { await navigator.clipboard.writeText(url); }
     catch {
       const el = document.createElement('textarea');
-      el.value = url;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand('copy');
-      document.body.removeChild(el);
+      el.value = url; document.body.appendChild(el); el.select();
+      document.execCommand('copy'); document.body.removeChild(el);
     }
     setShareOpen(true);
-    fetch(`${API}/feed/${feed.id}/share`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    }).catch(() => { });
+    fetch(`${API}/feed/${feed.id}/share`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => { });
   };
 
-  const handleMenuClick = (e) => {
-    e.stopPropagation();
-    setAnchorEl(e.currentTarget);
-  };
-
-  const handleMenuClose = (e) => {
-    e?.stopPropagation();
-    setAnchorEl(null);
-  };
   const handleDeleteConfirm = async () => {
     setDeleteOpen(false);
+
     try {
-      await fetch(`${API}/feed/${feed.id}`, {
+      const res = await fetch(`${API}/feed/${feed.id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` }
       });
-      onDelete(feed.id);
-    } catch { /* ignore */ }
+
+      if (res.ok) {
+        onDelete(feed.id);
+      }
+    } catch { }
+  };
+
+  const handleCommentClick = (e) => {
+    e.stopPropagation();
+    navigate(`/post/${feed.id}#comments`);
   };
 
   const tag = feed.tag || feed.category || 'General';
 
   return (
     <>
-      <Box
-        onClick={() => onOpenDetail(feed)}
-        sx={{
-          backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 2,
-          p: 3, cursor: 'pointer', animation: 'fadeUp 0.4s ease both',
-          transition: 'border-color 0.2s, box-shadow 0.2s',
-          '&:hover': { borderColor: '#CBD5E1', boxShadow: '0 4px 20px rgba(15,23,42,0.06)' },
-        }}
-      >
-        {/* Header */}
+      <Box onClick={() => onOpenDetail(feed)} sx={{
+        backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2,
+        p: 3, cursor: 'pointer', animation: 'fadeUp 0.4s ease both',
+        transition: 'border-color 0.2s, box-shadow 0.2s',
+        '&:hover': { borderColor: colors.borderFocus, boxShadow: '0 4px 20px rgba(15,23,42,0.06)' },
+      }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Avatar
               src={resolveAvatarSrc(feed.avatar)}
-              sx={{ width: 36, height: 36, backgroundColor: '#0F172A', fontWeight: 800, fontSize: '0.9rem' }}
+              onClick={(e) => { e.stopPropagation(); navigate(`/user/${feed.writer}`); }}
+              sx={{ width: 36, height: 36, backgroundColor: colors.textPrimary, fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', '&:hover': { opacity: 0.85 }, transition: 'opacity 0.15s' }}
             >
               {getInitial(feed.writer)}
             </Avatar>
             <Box>
-              <Typography sx={{ fontWeight: 700, fontSize: '0.88rem', color: '#0F172A', lineHeight: 1 }}>
+              <Typography
+                onClick={(e) => { e.stopPropagation(); navigate(`/user/${feed.writer}`); }}
+                sx={{ fontWeight: 700, fontSize: '0.88rem', color: colors.textPrimary, lineHeight: 1, cursor: 'pointer', '&:hover': { color: '#2563EB' }, transition: 'color 0.15s' }}
+              >
                 {feed.writer || 'Unknown'}
               </Typography>
-              <Typography sx={{ color: '#94A3B8', fontSize: '0.72rem', mt: 0.2 }}>
+              <Typography sx={{ color: colors.textHint, fontSize: '0.72rem', mt: 0.2 }}>
                 {feed.role || ''}{feed.role && feed.createdAt ? ' · ' : ''}{formatRelativeTime(feed.createdAt)}
               </Typography>
             </Box>
           </Box>
-
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <Chip
               label={tag}
               size="small"
-              sx={{
-                backgroundColor: '#F1F5F9', color: '#475569',
-                fontWeight: 600, fontSize: '0.7rem', height: 22,
-                border: '1px solid #E2E8F0',
-              }}
+              onClick={(e) => { e.stopPropagation(); onTagClick && onTagClick(tag); }}
+              sx={{ backgroundColor: colors.inputBg, color: colors.textMuted, fontWeight: 600, fontSize: '0.7rem', height: 22, border: `1px solid ${colors.border}`, cursor: 'pointer', '&:hover': { backgroundColor: '#EFF6FF', color: '#2563EB', borderColor: '#BFDBFE' }, transition: 'all 0.15s' }}
             />
-            <IconButton size="small" onClick={handleMenuClick} sx={{ color: '#CBD5E1', '&:hover': { color: '#64748B' } }}>
+            <IconButton size="small" onClick={(e) => { e.stopPropagation(); setAnchorEl(e.currentTarget); }} sx={{ color: colors.border, '&:hover': { color: colors.textMuted } }}>
               <MoreHoriz sx={{ fontSize: 18 }} />
             </IconButton>
-            <Menu
-              anchorEl={anchorEl}
-              open={Boolean(anchorEl)}
-              onClose={handleMenuClose}
+            <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={(e) => { e?.stopPropagation(); setAnchorEl(null); }}
               onClick={(e) => e.stopPropagation()}
-              PaperProps={{ sx: { boxShadow: '0 8px 30px rgba(0,0,0,0.08)', borderRadius: 2, border: '1px solid #E2E8F0', minWidth: 120 } }}
-            >
+              PaperProps={{ sx: { boxShadow: '0 8px 30px rgba(0,0,0,0.08)', borderRadius: 2, border: `1px solid ${colors.border}`, backgroundColor: colors.paper, minWidth: 120 } }}>
               {isMyPost ? [
-                <MenuItem key="edit"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setAnchorEl(null);
-                    navigate(`/edit/${feed.id}`);
-                  }}
-                  sx={{ fontSize: '0.8rem', color: '#475569', gap: 1 }}>
-                  <Edit sx={{ fontSize: 15, color: '#94A3B8' }} /> 수정하기
+                <MenuItem key="edit" onClick={(e) => { e.stopPropagation(); setAnchorEl(null); navigate(`/edit/${feed.id}`); }}
+                  sx={{ fontSize: '0.8rem', color: colors.textMuted, gap: 1 }}>
+                  <Edit sx={{ fontSize: 15, color: colors.textHint }} /> 수정하기
                 </MenuItem>,
-                <MenuItem key="delete"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setAnchorEl(null);
-                    setDeleteOpen(true);
-                  }}
+                <MenuItem key="delete" onClick={(e) => { e.stopPropagation(); setAnchorEl(null); setDeleteOpen(true); }}
                   sx={{ fontSize: '0.8rem', color: '#EF4444', gap: 1 }}>
                   <Delete sx={{ fontSize: 15, color: '#EF4444' }} /> 삭제하기
                 </MenuItem>,
               ] : [
-                <MenuItem key="report"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setAnchorEl(null);
-                    setReportOpen(true);
-                  }}
-                  sx={{ fontSize: '0.8rem', color: '#475569', gap: 1 }}>
-                  <Flag sx={{ fontSize: 15, color: '#94A3B8' }} /> 신고하기
+                <MenuItem key="report" onClick={(e) => { e.stopPropagation(); setAnchorEl(null); setReportOpen(true); }}
+                  sx={{ fontSize: '0.8rem', color: colors.textMuted, gap: 1 }}>
+                  <Flag sx={{ fontSize: 15, color: colors.textHint }} /> 신고하기
                 </MenuItem>,
               ]}
             </Menu>
           </Box>
         </Box>
 
-        {/* Image */}
         {imageList.length > 0 && (
           <Box sx={{ width: '100%', paddingTop: '52%', position: 'relative', borderRadius: 1.5, overflow: 'hidden', mb: 2 }}>
-            <Box component="img"
-              src={imageList[0].startsWith('http') ? imageList[0] : `${API}${imageList[0]}`} 
-              alt={feed.title}
-              sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-            />
+            <Box component="img" src={imageList[0].startsWith('http') ? imageList[0] : `${API}${imageList[0]}`} alt={feed.title}
+              sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
           </Box>
         )}
 
-        {/* Title */}
-        <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#0F172A', mb: 1, lineHeight: 1.4, letterSpacing: '-0.01em' }}>
-          {feed.title}
-        </Typography>
+        <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: colors.textPrimary, mb: 1, lineHeight: 1.4, letterSpacing: '-0.01em' }}>{feed.title}</Typography>
+        <Typography sx={{ color: colors.textMuted, fontSize: '0.85rem', lineHeight: 1.75, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+          dangerouslySetInnerHTML={{ __html: resolveImageSrc(feed.description || '') }} />
 
-        {/* Description */}
-        <Typography
-          sx={{
-            color: '#64748B', fontSize: '0.85rem', lineHeight: 1.75,
-            display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-          }}
-          dangerouslySetInnerHTML={{ __html: resolveImageSrc(feed.description || '') }}
-        />
+        {Array.isArray(feed.tags) && feed.tags.filter(Boolean).length > 0 && (
+          <Stack direction="row" spacing={0.5} sx={{ mt: 1.5, flexWrap: 'wrap', gap: 0.5 }}>
+            {feed.tags.filter(Boolean).map(t => (
+              <Box
+                key={t}
+                onClick={(e) => { e.stopPropagation(); onTagClick && onTagClick(t); }}
+                sx={{ fontSize: '0.72rem', color: '#2563EB', fontWeight: 600, cursor: 'pointer', px: 0.5, '&:hover': { textDecoration: 'underline' } }}
+              >
+                #{t}
+              </Box>
+            ))}
+          </Stack>
+        )}
 
-        {/* Actions */}
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2.5, pt: 2, borderTop: '1px solid #F1F5F9' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2.5, pt: 2, borderTop: `1px solid ${colors.border}` }}>
           <Stack direction="row" spacing={0.5}>
-            {/* 좋아요 */}
-            <Button
-              size="small"
-              startIcon={
-                <Box sx={{
-                  display: 'flex', alignItems: 'center',
-                  animation: likeAnim ? 'heartPop 0.45s ease both' : 'none'
-                }}>
-                  {liked
-                    ? <Favorite sx={{ fontSize: 16, color: '#EF4444' }} />
-                    : <FavoriteBorderOutlined sx={{ fontSize: 16 }} />
-                  }
-                </Box>
-              }
+            <Button size="small"
+              startIcon={<Box sx={{ display: 'flex', alignItems: 'center', animation: likeAnim ? 'heartPop 0.45s ease both' : 'none' }}>
+                {liked ? <Favorite sx={{ fontSize: 16, color: '#EF4444' }} /> : <FavoriteBorderOutlined sx={{ fontSize: 16 }} />}
+              </Box>}
               onClick={handleLike}
-              sx={{
-                color: liked ? '#EF4444' : '#64748B',
-                fontWeight: 600, fontSize: '0.8rem', textTransform: 'none',
-                px: 1.2, borderRadius: 1.5, minWidth: 0,
-                '&:hover': { backgroundColor: '#FEF2F2', color: '#EF4444' },
-                transition: 'color 0.15s, background 0.15s',
-              }}
-            >
+              sx={{ color: liked ? '#EF4444' : colors.textMuted, fontWeight: 600, fontSize: '0.8rem', textTransform: 'none', px: 1.2, borderRadius: 1.5, minWidth: 0, '&:hover': { backgroundColor: '#FEF2F2', color: '#EF4444' }, transition: 'color 0.15s, background 0.15s' }}>
               {likeCount}
             </Button>
-
-            <Button
-              size="small"
-              startIcon={<ChatBubbleOutline sx={{ fontSize: 16 }} />}
-              onClick={(e) => { e.stopPropagation(); onOpenDetail(feed); }}
-              sx={{
-                color: '#64748B', fontWeight: 600, fontSize: '0.8rem', textTransform: 'none',
-                px: 1.2, borderRadius: 1.5, minWidth: 0,
-                '&:hover': { backgroundColor: '#EFF6FF', color: '#2563EB' },
-                transition: 'all 0.15s',
-              }}
-            >
+            <Button size="small" startIcon={<ChatBubbleOutline sx={{ fontSize: 16 }} />}
+              onClick={handleCommentClick}
+              sx={{ color: colors.textMuted, fontWeight: 600, fontSize: '0.8rem', textTransform: 'none', px: 1.2, borderRadius: 1.5, minWidth: 0, '&:hover': { backgroundColor: '#EFF6FF', color: '#2563EB' }, transition: 'all 0.15s' }}>
               {feed.commentCount ?? 0}
             </Button>
           </Stack>
-
           <Stack direction="row" spacing={0.5} alignItems="center">
             <Tooltip title="링크 복사" placement="top">
-              <IconButton size="small" onClick={handleShare}
-                sx={{ color: '#94A3B8', '&:hover': { color: '#2563EB' }, transition: 'color 0.15s' }}>
+              <IconButton size="small" onClick={handleShare} sx={{ color: colors.textHint, '&:hover': { color: '#2563EB' }, transition: 'color 0.15s' }}>
                 <ShareOutlined sx={{ fontSize: 18 }} />
               </IconButton>
             </Tooltip>
-
-            {/* 북마크 */}
             <IconButton size="small" onClick={handleBookmark} sx={{ transition: 'color 0.15s' }}>
               <Box sx={{ animation: bookmarkAnim ? 'bookmarkPop 0.45s ease both' : 'none', display: 'flex' }}>
-                {bookmarked
-                  ? <Bookmark sx={{ fontSize: 19, color: '#2563EB' }} />
-                  : <BookmarkBorderOutlined sx={{ fontSize: 19, color: '#94A3B8' }} />
-                }
+                {bookmarked ? <Bookmark sx={{ fontSize: 19, color: '#2563EB' }} /> : <BookmarkBorderOutlined sx={{ fontSize: 19, color: colors.textHint }} />}
               </Box>
             </IconButton>
           </Stack>
         </Box>
 
         {(feed.commentCount ?? 0) > 0 && (
-          <Typography
-            onClick={(e) => { e.stopPropagation(); onOpenDetail(feed); }}
-            sx={{ color: '#CBD5E1', fontSize: '0.78rem', mt: 1, cursor: 'pointer', fontWeight: 500, '&:hover': { color: '#2563EB' }, transition: 'color 0.15s' }}
-          >
+          <Typography onClick={handleCommentClick}
+            sx={{ color: colors.textHint, fontSize: '0.78rem', mt: 1, cursor: 'pointer', fontWeight: 500, '&:hover': { color: '#2563EB' }, transition: 'color 0.15s' }}>
             댓글 {feed.commentCount}개 모두 보기
           </Typography>
         )}
       </Box>
 
-      {/* 공유 토스트 */}
-      <Snackbar open={shareOpen} autoHideDuration={2000} onClose={() => setShareOpen(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-        <Alert severity="success" icon={<Check fontSize="inherit" />}
-          sx={{ fontWeight: 600, fontSize: '0.85rem', borderRadius: 2, boxShadow: '0 4px 20px rgba(15,23,42,0.12)' }}>
-          링크가 클립보드에 복사되었습니다!
-        </Alert>
+      <Snackbar open={shareOpen} autoHideDuration={2000} onClose={() => setShareOpen(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity="success" icon={<Check fontSize="inherit" />} sx={{ fontWeight: 600, fontSize: '0.85rem', borderRadius: 2, boxShadow: '0 4px 20px rgba(15,23,42,0.12)' }}>링크가 클립보드에 복사되었습니다!</Alert>
       </Snackbar>
 
-      {/* 삭제 확인 모달 */}
-      <ConfirmModal
-        open={deleteOpen}
-        title="게시글 삭제"
-        message="이 게시글을 삭제하시겠습니까? 삭제한 게시글은 복구할 수 없습니다."
-        confirmLabel="삭제"
-        confirmColor="#EF4444"
-        onConfirm={handleDeleteConfirm}
-        onClose={() => setDeleteOpen(false)}
-      />
+      <ConfirmModal open={deleteOpen} title="게시글 삭제" message="이 게시글을 삭제하시겠습니까? 삭제한 게시글은 복구할 수 없습니다." confirmLabel="삭제" confirmColor="#EF4444" onConfirm={handleDeleteConfirm} onClose={() => setDeleteOpen(false)} colors={colors} />
+      <ReportModal open={reportOpen} onClose={() => setReportOpen(false)} postId={feed.id} token={token} onSuccess={() => setReportSuccessOpen(true)} onDuplicate={() => setReportDuplicateOpen(true)} colors={colors} />
 
-      {/* 신고 모달 */}
-      <ReportModal
-        open={reportOpen}
-        onClose={() => setReportOpen(false)}
-        postId={feed.id}
-        token={token}
-        onSuccess={() => setReportSuccessOpen(true)}
-        onDuplicate={() => setReportDuplicateOpen(true)}
-      />
-
-      <Snackbar open={reportSuccessOpen} autoHideDuration={2500} onClose={() => setReportSuccessOpen(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-        <Alert severity="success" icon={<Check fontSize="inherit" />}
-          sx={{ fontWeight: 600, fontSize: '0.85rem', borderRadius: 2, boxShadow: '0 4px 20px rgba(15,23,42,0.12)' }}>
-          신고가 접수되었습니다.
-        </Alert>
+      <Snackbar open={reportSuccessOpen} autoHideDuration={2500} onClose={() => setReportSuccessOpen(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity="success" icon={<Check fontSize="inherit" />} sx={{ fontWeight: 600, fontSize: '0.85rem', borderRadius: 2, boxShadow: '0 4px 20px rgba(15,23,42,0.12)' }}>신고가 접수되었습니다.</Alert>
       </Snackbar>
-      <Snackbar open={reportDuplicateOpen} autoHideDuration={2500} onClose={() => setReportDuplicateOpen(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-        <Alert severity="warning" icon={<FlagOutlined fontSize="inherit" />}
-          sx={{ fontWeight: 600, fontSize: '0.85rem', borderRadius: 2, boxShadow: '0 4px 20px rgba(15,23,42,0.12)' }}>
-          이미 신고한 게시글입니다.
-        </Alert>
+      <Snackbar open={reportDuplicateOpen} autoHideDuration={2500} onClose={() => setReportDuplicateOpen(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity="warning" icon={<FlagOutlined fontSize="inherit" />} sx={{ fontWeight: 600, fontSize: '0.85rem', borderRadius: 2, boxShadow: '0 4px 20px rgba(15,23,42,0.12)' }}>이미 신고한 게시글입니다.</Alert>
       </Snackbar>
     </>
   );
 };
 
-// ──────────────────────────────────────────
-//  Sidebar
-// ──────────────────────────────────────────
-const Sidebar = ({ trending, suggestions, loadingTrending, loadingSuggestions, token }) => {
+const RecommendedDivider = ({ colors }) => (
+  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1 }}>
+    <Box sx={{ flex: 1, height: '1px', backgroundColor: colors.border }} />
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, px: 1.5, py: 0.6, borderRadius: 2, backgroundColor: colors.inputBg, border: `1px solid ${colors.border}` }}>
+      <AutoAwesome sx={{ fontSize: 13, color: '#F97316' }} />
+      <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: colors.textMuted }}>팔로잉 글을 모두 봤어요 · 추천 게시글</Typography>
+    </Box>
+    <Box sx={{ flex: 1, height: '1px', backgroundColor: colors.border }} />
+  </Box>
+);
+
+const Sidebar = ({ trending, suggestions, loadingTrending, loadingSuggestions, token, colors, onTagClick, navigate }) => {
   const [followed, setFollowed] = useState({});
 
   const handleFollow = async (s) => {
     const prev = followed[s.USER_ID] || 'NONE';
     setFollowed(f => ({ ...f, [s.USER_ID]: prev === 'NONE' ? 'OPTIMISTIC' : 'NONE' }));
     try {
-      const res = await fetch(`${API}/user/follow/${s.USER_ID}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(`${API}/user/follow/${s.USER_ID}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
-      if (data.success) {
-        setFollowed(f => ({ ...f, [s.USER_ID]: data.status })); // 'NONE' | 'PENDING' | 'ACCEPTED'
-      }
-    } catch {
-      setFollowed(f => ({ ...f, [s.USER_ID]: prev }));
-    }
+      if (data.success) setFollowed(f => ({ ...f, [s.USER_ID]: data.status }));
+    } catch { setFollowed(f => ({ ...f, [s.USER_ID]: prev })); }
   };
 
   return (
     <Stack spacing={2.5}>
-      {/* Trending */}
-      <Box sx={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 2, p: 2.5 }}>
+      <Box sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2, p: 2.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
           <LocalFireDepartment sx={{ fontSize: 15, color: '#F97316' }} />
-          <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: '#0F172A', letterSpacing: '-0.01em' }}>
-            트렌딩 태그
-          </Typography>
+          <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: colors.textPrimary, letterSpacing: '-0.01em' }}>트렌딩 태그</Typography>
         </Box>
-
         {loadingTrending ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-            <CircularProgress size={18} sx={{ color: '#2563EB' }} />
-          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}><CircularProgress size={18} sx={{ color: '#2563EB' }} /></Box>
         ) : trending.length === 0 ? (
-          <Typography sx={{ color: '#CBD5E1', fontSize: '0.8rem', textAlign: 'center', py: 1 }}>
-            트렌딩 태그가 없습니다.
-          </Typography>
+          <Typography sx={{ color: colors.textHint, fontSize: '0.8rem', textAlign: 'center', py: 1 }}>트렌딩 태그가 없습니다.</Typography>
         ) : (
           <Stack spacing={1.5}>
             {trending.map((t, i) => (
-              <Box key={t.TAG_NAME || t.tag} sx={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                cursor: 'pointer', '&:hover .tag-label': { color: '#2563EB' },
-              }}>
+              <Box
+                key={t.TAG_NAME || t.tag}
+                onClick={() => onTagClick && onTagClick(t.TAG_NAME || t.tag)}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  cursor: 'pointer',
+                  p: 1,
+                  borderRadius: 1,
+                  transition: '0.15s',
+                  '&:hover': {
+                    backgroundColor: colors.hover
+                  }
+                }}
+              >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography sx={{ color: '#E2E8F0', fontWeight: 700, fontSize: '0.72rem', width: 16 }}>{i + 1}</Typography>
-                  <Typography className="tag-label" sx={{ fontWeight: 600, fontSize: '0.83rem', color: '#475569', transition: 'color 0.15s' }}>
-                    #{t.TAG_NAME || t.tag}
-                  </Typography>
+                  <Typography sx={{ color: colors.border, fontWeight: 700, fontSize: '0.72rem', width: 16 }}>{i + 1}</Typography>
+                  <Typography className="tag-label" sx={{ fontWeight: 600, fontSize: '0.83rem', color: colors.textMuted, transition: 'color 0.15s' }}>#{t.TAG_NAME || t.tag}</Typography>
                 </Box>
-                <Typography sx={{ color: '#CBD5E1', fontSize: '0.72rem' }}>
-                  {(t.POST_COUNT || t.count || 0).toLocaleString()}
-                </Typography>
+                <Typography sx={{ color: colors.textHint, fontSize: '0.72rem' }}>{(t.POST_COUNT || t.count || 0).toLocaleString()}</Typography>
               </Box>
             ))}
           </Stack>
         )}
       </Box>
 
-      {/* Suggestions */}
-      <Box sx={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 2, p: 2.5 }}>
+      <Box sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2, p: 2.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-          <PeopleAlt sx={{ fontSize: 15, color: '#64748B' }} />
-          <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: '#0F172A', letterSpacing: '-0.01em' }}>
-            팔로우 추천
-          </Typography>
+          <PeopleAlt sx={{ fontSize: 15, color: colors.textMuted }} />
+          <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: colors.textPrimary, letterSpacing: '-0.01em' }}>팔로우 추천</Typography>
         </Box>
-
         {loadingSuggestions ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-            <CircularProgress size={18} sx={{ color: '#2563EB' }} />
-          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}><CircularProgress size={18} sx={{ color: '#2563EB' }} /></Box>
         ) : suggestions.length === 0 ? (
-          <Typography sx={{ color: '#CBD5E1', fontSize: '0.8rem', textAlign: 'center', py: 1 }}>
-            추천 사용자가 없습니다.
-          </Typography>
+          <Typography sx={{ color: colors.textHint, fontSize: '0.8rem', textAlign: 'center', py: 1 }}>추천 사용자가 없습니다.</Typography>
         ) : (
           <Stack spacing={2}>
             {suggestions.map(s => (
               <Box key={s.USER_ID || s.handle} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
-                  <Avatar
-                    src={resolveAvatarSrc(s.AVATAR || s.avatar)}
-                    sx={{ width: 32, height: 32, backgroundColor: '#0F172A', fontWeight: 800, fontSize: '0.8rem' }}
-                  >
-                    {getInitial(s.NICKNAME || s.name)}
-                  </Avatar>
-                  <Box>
-                    <Typography sx={{ fontWeight: 700, fontSize: '0.82rem', color: '#0F172A', lineHeight: 1.2 }}>
-                      {s.NICKNAME || s.name}
-                    </Typography>
-                    <Typography sx={{ color: '#CBD5E1', fontSize: '0.72rem' }}>
-                      {s.BIO_SHORT || s.role || ''}
-                    </Typography>
-                  </Box>
-                </Box>
-                <Button
-                  size="small"
-                  onClick={() => handleFollow(s)}
+                <Box
+                  onClick={() => navigate(`/profile/${s.NICKNAME || s.name}`)}
                   sx={{
-                    fontSize: '0.72rem', fontWeight: 700, textTransform: 'none',
-                    minWidth: 0, px: 1.5, py: 0.4, borderRadius: 1,
-                    ...({
-                      ACCEPTED: { backgroundColor: '#0F172A', color: '#fff', boxShadow: 'none', '&:hover': { backgroundColor: '#2563EB' } },
-                      PENDING: { backgroundColor: '#F1F5F9', color: '#64748B', boxShadow: 'none', border: '1px solid #E2E8F0' },
-                      OPTIMISTIC: { backgroundColor: '#F1F5F9', color: '#64748B', boxShadow: 'none', border: '1px solid #E2E8F0' },
-                      NONE: { border: '1px solid #E2E8F0', color: '#475569', backgroundColor: 'transparent', '&:hover': { borderColor: '#CBD5E1' } },
-                    }[followed[s.USER_ID] || 'NONE']),
+                    p: 1,
+                    borderRadius: 1,
+                    transition: '0.15s',
+                    '&:hover': {
+                      backgroundColor: colors.hover
+                    }
                   }}
                 >
+                  <Avatar src={resolveAvatarSrc(s.AVATAR || s.avatar)} sx={{ width: 32, height: 32, backgroundColor: colors.textPrimary, fontWeight: 800, fontSize: '0.8rem', flexShrink: 0 }}>
+                    {getInitial(s.NICKNAME || s.name)}
+                  </Avatar>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.82rem', color: colors.textPrimary, lineHeight: 1.2, '&:hover': { color: '#2563EB' }, transition: 'color 0.15s' }}>
+                      {s.NICKNAME || s.name}
+                    </Typography>
+                    {s.FOLLOWS_ME > 0 ? (
+                      <Typography
+                        sx={{
+                          color: colors.textHint,
+                          fontSize: '0.68rem',
+                          fontWeight: 500
+                        }}
+                      >
+                        나를 팔로우합니다
+                      </Typography>
+                    ) : (
+                      <Typography sx={{ color: colors.textHint, fontSize: '0.72rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.BIO_SHORT || s.role || ''}</Typography>
+                    )}
+                  </Box>
+                </Box>
+                <Button size="small" onClick={() => handleFollow(s)}
+                  sx={{
+                    fontSize: '0.72rem', fontWeight: 700, textTransform: 'none', minWidth: 0, px: 1.5, py: 0.4, borderRadius: 1, flexShrink: 0,
+                    ...({
+                      ACCEPTED: { backgroundColor: colors.textPrimary, color: colors.paper, boxShadow: 'none', '&:hover': { backgroundColor: '#2563EB' } },
+                      PENDING: { backgroundColor: colors.hover, color: colors.textMuted, boxShadow: 'none', border: `1px solid ${colors.border}` },
+                      OPTIMISTIC: { backgroundColor: colors.hover, color: colors.textMuted, boxShadow: 'none', border: `1px solid ${colors.border}` },
+                      NONE: { border: `1px solid ${colors.border}`, color: colors.textMuted, backgroundColor: 'transparent', '&:hover': { borderColor: colors.borderFocus } },
+                    }[followed[s.USER_ID] || 'NONE']),
+                  }}>
                   {{ ACCEPTED: '팔로잉', PENDING: '요청됨', OPTIMISTIC: '요청됨', NONE: '팔로우' }[followed[s.USER_ID] || 'NONE']}
                 </Button>
               </Box>
@@ -948,7 +663,7 @@ const Sidebar = ({ trending, suggestions, loadingTrending, loadingSuggestions, t
         )}
       </Box>
 
-      <Typography sx={{ color: '#E2E8F0', fontSize: '0.68rem', lineHeight: 1.8, px: 0.5 }}>
+      <Typography sx={{ color: colors.textHint, fontSize: '0.68rem', lineHeight: 1.8, px: 0.5 }}>
         CtrlE · 이용약관 · 개인정보처리방침<br />
         © 2025 CtrlE Inc. All rights reserved.
       </Typography>
@@ -956,12 +671,24 @@ const Sidebar = ({ trending, suggestions, loadingTrending, loadingSuggestions, t
   );
 };
 
-// ──────────────────────────────────────────
-//  Main Feed
-// ──────────────────────────────────────────
 export default function Feed() {
   const navigate = useNavigate();
+  const { mode } = useColorMode();
   const token = localStorage.getItem('accessToken');
+  const [deleteSuccessOpen, setDeleteSuccessOpen] = useState(false);
+
+  const colors = {
+    mode,
+    bg: mode === 'dark' ? '#0F1117' : '#F8FAFC',
+    paper: mode === 'dark' ? '#1A1D27' : '#FFFFFF',
+    border: mode === 'dark' ? '#2D3148' : '#E2E8F0',
+    borderFocus: mode === 'dark' ? '#4B5280' : '#CBD5E1',
+    textPrimary: mode === 'dark' ? '#F1F5F9' : '#0F172A',
+    textMuted: mode === 'dark' ? '#94A3B8' : '#64748B',
+    textHint: mode === 'dark' ? '#64748B' : '#94A3B8',
+    inputBg: mode === 'dark' ? '#22253A' : '#F1F5F9',
+    hover: mode === 'dark' ? '#22253A' : '#F8FAFC',
+  };
 
   const myNickname = (() => {
     try {
@@ -971,75 +698,71 @@ export default function Feed() {
   })();
 
   const [feeds, setFeeds] = useState([]);
+  const [recommendedFeeds, setRecommendedFeeds] = useState([]);
+  const [showRecommended, setShowRecommended] = useState(false);
   const [activeFilter, setActiveFilter] = useState('전체');
   const [loadingFeeds, setLoadingFeeds] = useState(true);
-
-  // Sidebar
+  const [loadingRecommended, setLoadingRecommended] = useState(false);
   const [trending, setTrending] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [loadingTrending, setLoadingTrending] = useState(true);
   const [loadingSuggestions, setLoadingSuggestions] = useState(true);
-
-  // Notification
   const [notificationCount, setNotificationCount] = useState(0);
   const [notiModalOpen, setNotiModalOpen] = useState(false);
 
-  // ── loadFeeds ──────────────────────────
+  const loadTrending = useCallback(async () => {
+    setLoadingTrending(true);
+    try {
+      const res = await fetch(`${API}/feed/trending`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (res.ok && data.success) setTrending(data.tags ?? []);
+    } catch { setTrending([]); }
+    finally { setLoadingTrending(false); }
+  }, [token]);
+
   const loadFeeds = useCallback(async () => {
     setLoadingFeeds(true);
     try {
-      const response = await fetch(`${API}/feed/list`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await fetch(`${API}/feed/list`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await response.json();
-      if (response.ok && data.success) setFeeds(data.feeds ?? []);
-    } catch (err) {
-      console.error('피드 로드 실패:', err);
-    } finally {
-      setLoadingFeeds(false);
-    }
+      if (response.ok && data.success) {
+        setFeeds(data.feeds ?? []);
+        if ((data.feeds ?? []).length === 0) {
+          setShowRecommended(true);
+          loadRecommended();
+        }
+      }
+    } catch (err) { }
+    finally { setLoadingFeeds(false); }
   }, [token]);
 
-  // ── loadSidebar ────────────────────────
-  const loadSidebar = useCallback(async () => {
-    setLoadingTrending(true);
+  const loadRecommended = useCallback(async () => {
+    setLoadingRecommended(true);
     try {
-      const res = await fetch(`${API}/feed/trending`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(`${API}/feed/recommended`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
-      if (res.ok && data.success) setTrending(data.tags ?? []);
-    } catch {
-      setTrending([]);
-    } finally {
-      setLoadingTrending(false);
-    }
+      if (res.ok && data.success) setRecommendedFeeds(data.feeds ?? []);
+    } catch { setRecommendedFeeds([]); }
+    finally { setLoadingRecommended(false); }
+  }, [token]);
 
+  const loadSidebar = useCallback(async () => {
+    loadTrending();
     setLoadingSuggestions(true);
     try {
-      const res = await fetch(`${API}/user/suggestions`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(`${API}/user/suggestions`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       if (res.ok && data.success) setSuggestions(data.users ?? []);
-    } catch {
-      setSuggestions([]);
-    } finally {
-      setLoadingSuggestions(false);
-    }
-  }, [token]);
+    } catch { setSuggestions([]); }
+    finally { setLoadingSuggestions(false); }
+  }, [token, loadTrending]);
 
-  // ── loadNotifications ──────────────────
   const loadNotifications = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/notifications`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(`${API}/notifications`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       if (res.ok && data.success) setNotificationCount(data.unread_count ?? 0);
-    } catch {
-      setNotificationCount(0);
-    }
+    } catch { setNotificationCount(0); }
   }, [token]);
 
   useEffect(() => {
@@ -1047,6 +770,8 @@ export default function Feed() {
     if (oauthToken) {
       localStorage.setItem('accessToken', oauthToken);
       sessionStorage.removeItem('oauthToken');
+      window.location.reload();
+      return;
     } else if (!token) {
       navigate('/');
       return;
@@ -1056,160 +781,164 @@ export default function Feed() {
     loadNotifications();
   }, [token, navigate, loadFeeds, loadSidebar, loadNotifications]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    navigate('/');
-  };
+  const bottomRef = useRef(null);
+  useEffect(() => {
+    if (showRecommended || feeds.length === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setShowRecommended(true);
+          loadRecommended();
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.1 }
+    );
+    if (bottomRef.current) observer.observe(bottomRef.current);
+    return () => observer.disconnect();
+  }, [feeds.length, showRecommended, loadRecommended]);
 
-  const handleOpenDetail = (feed) => navigate(`/post/${feed.id}`);
+  const handleNotificationClick = () => { setNotiModalOpen(true); setNotificationCount(0); };
 
-  const handleNotificationClick = () => {
-    setNotiModalOpen(true);
-    setNotificationCount(0); // 낙관적 초기화
-  };
+  const handleDelete = useCallback((id) => {
+    setFeeds(prev => prev.filter(f => f.id !== id));
+    setRecommendedFeeds(prev => prev.filter(f => f.id !== id));
+    setDeleteSuccessOpen(true);
+    loadTrending();
+  }, [loadTrending]);
+
+  const handleTagClick = useCallback((tagName) => {
+    navigate(`/explore?tag=${encodeURIComponent(tagName)}`);
+  }, [navigate]);
 
   const dynamicTagLabels = trending.map(t => t.TAG_NAME || t.tag).filter(Boolean);
 
-  const filteredFeeds = (() => {
-    if (activeFilter === '전체') return feeds;
+  const filterFeeds = (list) => {
+    if (activeFilter === '전체') return list;
     const found = FIXED_CATEGORIES.find(c => c.label === activeFilter);
-    if (found?.value) {
-      return feeds.filter(f => (f.category || f.tag || '') === found.value);
-    }
-    return feeds.filter(f => {
+    if (found?.value) return list.filter(f => (f.category || f.tag || '') === found.value);
+    return list.filter(f => {
       const tagArr = Array.isArray(f.tags) ? f.tags : (f.tags ? f.tags.split(',') : []);
-      return tagArr.includes(activeFilter);
+      const cat = f.category || f.tag || '';
+      return tagArr.includes(activeFilter) || cat === activeFilter;
     });
-  })();
+  };
+
+  const filteredFeeds = filterFeeds(feeds);
+  const filteredRecommended = filterFeeds(recommendedFeeds);
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Box sx={{ minHeight: '100vh', backgroundColor: '#F8FAFC' }}>
-
-        <NavBar
-          onLogout={handleLogout}
-          notificationCount={notificationCount}
-          onNotificationClick={handleNotificationClick}
-          token={token}
-        />
-
-        {/* ── Filter bar ── */}
-        <Box sx={{
-          borderBottom: '1px solid #E2E8F0',
-          backgroundColor: 'rgba(248,250,252,0.9)',
-          backdropFilter: 'blur(8px)',
-          position: 'sticky', top: 57, zIndex: 90,
-        }}>
-          <Box sx={{ maxWidth: 1200, mx: 'auto', px: { xs: 2, md: 4 } }}>
-            <Stack direction="row" spacing={0} alignItems="center"
-              sx={{ overflowX: 'auto', '&::-webkit-scrollbar': { display: 'none' } }}>
-
-              {/* 고정 카테고리 3개 */}
-              {FIXED_CATEGORIES.map(t => (
-                <Button
-                  key={t.label}
-                  size="small"
-                  startIcon={t.icon}
-                  onClick={() => setActiveFilter(t.label)}
-                  sx={{
-                    textTransform: 'none',
-                    fontWeight: activeFilter === t.label ? 700 : 500,
-                    fontSize: '0.82rem', whiteSpace: 'nowrap',
-                    px: 2, py: 1.8, borderRadius: 0,
-                    color: activeFilter === t.label ? '#0F172A' : '#94A3B8',
-                    borderBottom: activeFilter === t.label ? '2px solid #2563EB' : '2px solid transparent',
-                    '&:hover': { color: '#0F172A', backgroundColor: 'transparent' },
-                    transition: 'all 0.15s', minWidth: 'fit-content',
-                  }}
-                >
-                  {t.label}
-                </Button>
-              ))}
-
-              {/* 구분선 */}
-              {dynamicTagLabels.length > 0 && (
-                <Box sx={{ width: '1px', height: 18, backgroundColor: '#E2E8F0', mx: 1, flexShrink: 0 }} />
-              )}
-
-              {/* 동적 태그 (trending 기반) */}
-              {dynamicTagLabels.map(label => (
-                <Button
-                  key={label}
-                  size="small"
-                  onClick={() => setActiveFilter(label)}
-                  sx={{
-                    textTransform: 'none',
-                    fontWeight: activeFilter === label ? 700 : 400,
-                    fontSize: '0.8rem', whiteSpace: 'nowrap',
-                    px: 1.8, py: 1.8, borderRadius: 0,
-                    color: activeFilter === label ? '#2563EB' : '#94A3B8',
-                    borderBottom: activeFilter === label ? '2px solid #2563EB' : '2px solid transparent',
-                    '&:hover': { color: '#2563EB', backgroundColor: 'transparent' },
-                    transition: 'all 0.15s', minWidth: 'fit-content',
-                  }}
-                >
-                  #{label}
-                </Button>
-              ))}
-            </Stack>
-          </Box>
+    <Box sx={{ minHeight: '100vh', backgroundColor: colors.bg }}>
+      <Box sx={{ borderBottom: `1px solid ${colors.border}`, backgroundColor: colors.mode === 'dark' ? 'rgba(15,17,23,0.9)' : 'rgba(248,250,252,0.9)', backdropFilter: 'blur(8px)', position: 'sticky', top: 0, zIndex: 90 }}>
+        <Box sx={{ maxWidth: 1200, mx: 'auto', px: { xs: 2, md: 4 } }}>
+          <Stack direction="row" spacing={0} alignItems="center" sx={{ overflowX: 'auto', '&::-webkit-scrollbar': { display: 'none' } }}>
+            {FIXED_CATEGORIES.map(t => (
+              <Button key={t.label} size="small" startIcon={t.icon} onClick={() => setActiveFilter(t.label)}
+                sx={{ textTransform: 'none', fontWeight: activeFilter === t.label ? 700 : 500, fontSize: '0.82rem', whiteSpace: 'nowrap', px: 2, py: 1.8, borderRadius: 0, color: activeFilter === t.label ? colors.textPrimary : colors.textHint, borderBottom: activeFilter === t.label ? '2px solid #2563EB' : '2px solid transparent', '&:hover': { color: colors.textPrimary, backgroundColor: 'transparent' }, transition: 'all 0.15s', minWidth: 'fit-content' }}>
+                {t.label}
+              </Button>
+            ))}
+            {dynamicTagLabels.length > 0 && <Box sx={{ width: '1px', height: 18, backgroundColor: colors.border, mx: 1, flexShrink: 0 }} />}
+            {dynamicTagLabels.map(label => (
+              <Button key={label} size="small" onClick={() => handleTagClick(label)}
+                sx={{ textTransform: 'none', fontWeight: activeFilter === label ? 700 : 400, fontSize: '0.8rem', whiteSpace: 'nowrap', px: 1.8, py: 1.8, borderRadius: 0, color: activeFilter === label ? '#2563EB' : colors.textHint, borderBottom: activeFilter === label ? '2px solid #2563EB' : '2px solid transparent', '&:hover': { color: '#2563EB', backgroundColor: 'transparent' }, transition: 'all 0.15s', minWidth: 'fit-content' }}>
+                #{label}
+              </Button>
+            ))}
+          </Stack>
         </Box>
+      </Box>
 
-        {/* ── Main layout ── */}
-        <Box sx={{ maxWidth: 1200, mx: 'auto', px: { xs: 2, md: 4 }, py: 4 }}>
-          <Box sx={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
+      <Box sx={{ maxWidth: 1200, mx: 'auto', px: { xs: 2, md: 4 }, py: 4 }}>
+        <Box sx={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            {loadingFeeds ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress sx={{ color: '#2563EB' }} /></Box>
+            ) : (
+              <>
+                {filteredFeeds.length > 0 ? (
+                  <Stack spacing={2}>
+                    {filteredFeeds.map((feed, i) => (
+                      <Box key={feed.id} sx={{ animationDelay: `${i * 0.04}s` }}>
+                        <PostCard
+                          feed={feed} token={token}
+                          onOpenDetail={(f) => navigate(`/post/${f.id}`)}
+                          myNickname={myNickname}
+                          onDelete={handleDelete}
+                          onTagClick={handleTagClick}
+                          colors={colors}
+                        />
+                      </Box>
+                    ))}
+                    <Box ref={bottomRef} sx={{ height: 1 }} />
+                  </Stack>
+                ) : (
+                  <Box sx={{ textAlign: 'center', py: 6 }}>
+                    <Typography sx={{ color: colors.textHint, fontSize: '0.88rem' }}>
+                      {activeFilter === '전체'
+                        ? '팔로우한 사람의 글이 없습니다.'
+                        : `'${activeFilter}' 게시물이 없습니다.`}
+                    </Typography>
+                  </Box>
+                )}
 
-            {/* Feed list */}
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              {loadingFeeds ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
-                  <CircularProgress sx={{ color: '#2563EB' }} />
-                </Box>
-              ) : filteredFeeds.length === 0 ? (
-                <Box sx={{ textAlign: 'center', py: 10 }}>
-                  <Typography sx={{ color: '#CBD5E1', fontSize: '0.88rem' }}>
-                    {activeFilter === '전체' ? '아직 게시물이 없습니다.' : `'${activeFilter}' 게시물이 없습니다.`}
-                  </Typography>
-                </Box>
-              ) : (
-                <Stack spacing={2}>
-                  {filteredFeeds.map((feed, i) => (
-                    <Box key={feed.id} sx={{ animationDelay: `${i * 0.04}s` }}>
-                      <PostCard
-                        feed={feed}
-                        token={token}
-                        onOpenDetail={handleOpenDetail}
-                        myNickname={myNickname}
-                        onDelete={(id) => setFeeds(prev => prev.filter(f => f.id !== id))}
-                      />
-                    </Box>
-                  ))}
-                </Stack>
-              )}
-            </Box>
+                {showRecommended && (
+                  <Box sx={{ mt: filteredFeeds.length > 0 ? 3 : 0 }}>
+                    <RecommendedDivider colors={colors} />
+                    {loadingRecommended ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress sx={{ color: '#2563EB' }} /></Box>
+                    ) : filteredRecommended.length === 0 ? (
+                      <Box sx={{ textAlign: 'center', py: 6 }}>
+                        <Typography sx={{ color: colors.textHint, fontSize: '0.88rem' }}>추천 게시물이 없습니다.</Typography>
+                      </Box>
+                    ) : (
+                      <Stack spacing={2} sx={{ mt: 2 }}>
+                        {filteredRecommended.map((feed, i) => (
+                          <Box key={feed.id} sx={{ animationDelay: `${i * 0.04}s` }}>
+                            <PostCard
+                              feed={feed} token={token}
+                              onOpenDetail={(f) => navigate(`/post/${f.id}`)}
+                              myNickname={myNickname}
+                              onDelete={handleDelete}
+                              onTagClick={handleTagClick}
+                              colors={colors}
+                            />
+                          </Box>
+                        ))}
+                      </Stack>
+                    )}
+                  </Box>
+                )}
+              </>
+            )}
+          </Box>
 
-            {/* Sidebar */}
-            <Box sx={{ width: 280, flexShrink: 0, display: { xs: 'none', lg: 'block' }, position: 'sticky', top: 120 }}>
-              <Sidebar
-                trending={trending}
-                suggestions={suggestions}
-                loadingTrending={loadingTrending}
-                loadingSuggestions={loadingSuggestions}
-                token={token}
-              />
-            </Box>
+          <Box sx={{ width: 280, flexShrink: 0, display: { xs: 'none', lg: 'block' }, position: 'sticky', top: 120 }}>
+            <Sidebar
+              trending={trending}
+              suggestions={suggestions}
+              loadingTrending={loadingTrending}
+              loadingSuggestions={loadingSuggestions}
+              token={token}
+              colors={colors}
+              onTagClick={handleTagClick}
+              navigate={navigate}
+            />
           </Box>
         </Box>
       </Box>
 
-      {/* 알림 모달 */}
-      <NotificationModal
-        open={notiModalOpen}
-        onClose={() => setNotiModalOpen(false)}
-        token={token}
-        navigate={navigate}
-      />
-    </ThemeProvider>
+      <Snackbar
+        open={deleteSuccessOpen}
+        autoHideDuration={2000}
+        onClose={() => setDeleteSuccessOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="success">
+          게시글이 삭제되었습니다.
+        </Alert>
+      </Snackbar>
+      <NotificationModal open={notiModalOpen} onClose={() => setNotiModalOpen(false)} token={token} navigate={navigate} colors={colors} />
+    </Box>
   );
 }

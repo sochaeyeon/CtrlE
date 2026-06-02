@@ -69,6 +69,58 @@ router.get('/recommended-users', jwtAuthentication, async (req, res) => {
 });
 
 // ──────────────────────────────────────────────────────────
+//  GET /explore/posts — 탐색 추천 게시물 (이미지 전용 그리드용)
+// ──────────────────────────────────────────────────────────
+router.get('/posts', jwtAuthentication, async (req, res) => {
+    const userId = getUserId(req);
+    const conn = await db.getConnection();
+    try {
+        // 이미지가 있는 게시물만 최신순으로 가져오기
+        const sql = `
+            SELECT p.POST_ID        AS "id",
+                   p.TITLE          AS "title",
+                   p.VIEW_COUNT     AS "viewCount",
+                   u.NICKNAME       AS "writer",
+                   (SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID) AS "likes",
+                   (SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID AND USER_ID = :userId1) AS "liked",
+                   (SELECT COUNT(*) FROM BOOKMARKS  WHERE POST_ID = p.POST_ID AND USER_ID = :userId2) AS "bookmarked",
+                   (SELECT COUNT(*) FROM COMMENTS   WHERE POST_ID = p.POST_ID AND STATUS = 'ACTIVE')  AS "commentCount",
+                   (SELECT LISTAGG(f.FILE_URL, ',') WITHIN GROUP (ORDER BY f.FILE_ID)
+                    FROM ATTACHED_FILES f
+                    WHERE f.TARGET_ID = p.POST_ID AND f.TARGET_TYPE = 'POST') AS "images"
+            FROM POSTS p
+            JOIN USERS u ON u.USER_ID = p.USER_ID
+            WHERE p.STATUS = 'ACTIVE'
+              AND EXISTS (SELECT 1 FROM ATTACHED_FILES f WHERE f.TARGET_ID = p.POST_ID AND f.TARGET_TYPE = 'POST')
+            ORDER BY p.CREATED_AT DESC
+            FETCH FIRST 18 ROWS ONLY
+        `;
+        const result = await conn.execute(
+            sql,
+            { userId1: userId, userId2: userId },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+
+        const posts = result.rows.map(row => {
+            const imageList = row.images ? row.images.split(',') : [];
+            return {
+                ...row,
+                firstImage: imageList[0] || null,
+                liked: row.liked > 0,
+                bookmarked: row.bookmarked > 0,
+            };
+        });
+
+        res.json({ success: true, posts });
+    } catch (err) {
+        console.error('[GET /explore/posts]', err);
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        await conn.close();
+    }
+});
+
+// ──────────────────────────────────────────────────────────
 //  GET /explore/search — 통합 검색 (posts / users / tags)
 //  Query params: q, type (posts|users|tags|all), tag, page, limit
 // ──────────────────────────────────────────────────────────

@@ -228,32 +228,34 @@ router.get('/mypage/data', jwtAuthentication, async (req, res) => {
     let connection;
     try {
         connection = await db.getConnection();
-
-        // 1. 사용자 정보 + 프로필 이미지 (BIO_SHORT 추가)
+        // userRes SELECT에 IS_PRIVATE 추가
         const userRes = await connection.execute(
             `SELECT 
-                u.NICKNAME, u.EMAIL, u.BIO, u.BIO_SHORT, u.GITHUB, u.WEBSITE,
-                (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWER_ID = u.USER_ID) AS FOLLOWING_CNT,
-                (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWING_ID = u.USER_ID) AS FOLLOWER_CNT,
-                (SELECT IMAGE_URL FROM PROFILE_IMAGES
-                 WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y'
-                 AND ROWNUM = 1) AS AVATAR
-             FROM USERS u
-             WHERE u.USER_ID = :id`,
+     u.NICKNAME, u.EMAIL, u.BIO, u.BIO_SHORT, u.GITHUB, u.WEBSITE,
+     u.IS_PRIVATE,
+     (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWER_ID = u.USER_ID AND STATUS = 'ACCEPTED') AS FOLLOWING_CNT,
+     (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWING_ID = u.USER_ID AND STATUS = 'ACCEPTED') AS FOLLOWER_CNT,
+     (SELECT IMAGE_URL FROM PROFILE_IMAGES
+      WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR
+   FROM USERS u WHERE u.USER_ID = :id`,
             { id: userId },
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
 
+        // postsRes SELECT에 좋아요수, 댓글수 추가
         const postsRes = await connection.execute(
             `SELECT 
-        p.POST_ID AS "id",
-        p.TITLE AS "title",
-        p.CONTENT AS "description",
-        NVL(c.CATEGORY_NAME, 'General') AS "tag"
-     FROM POSTS p
-     LEFT JOIN CATEGORIES c ON c.CATEGORY_ID = p.CATEGORY_ID
-     WHERE p.USER_ID = :id AND p.STATUS = 'ACTIVE'
-     ORDER BY p.CREATED_AT DESC`,
+     p.POST_ID AS "id",
+     p.TITLE AS "title",
+     p.CONTENT AS "description",
+     p.CREATED_AT AS "CREATED_AT",
+     NVL(c.CATEGORY_NAME, 'General') AS "tag",
+(SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID) AS "likes",
+     (SELECT COUNT(*) FROM COMMENTS WHERE POST_ID = p.POST_ID) AS "commentCount"
+   FROM POSTS p
+   LEFT JOIN CATEGORIES c ON c.CATEGORY_ID = p.CATEGORY_ID
+   WHERE p.USER_ID = :id AND p.STATUS = 'ACTIVE'
+   ORDER BY p.CREATED_AT DESC`,
             { id: userId },
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
@@ -280,9 +282,6 @@ router.get('/mypage/data', jwtAuthentication, async (req, res) => {
     }
 });
 
-// ──────────────────────────────────────────────────────────
-//  GET /user/followers  — 나를 팔로우하는 사람들
-// ──────────────────────────────────────────────────────────
 router.get('/followers', jwtAuthentication, async (req, res) => {
     const userId = req.user.userId;
     let connection;
@@ -290,16 +289,18 @@ router.get('/followers', jwtAuthentication, async (req, res) => {
         connection = await db.getConnection();
         const result = await connection.execute(
             `SELECT 
-                u.USER_ID AS "userId",
-                u.NICKNAME AS "nickname",
-                u.BIO_SHORT AS "bioShort",
-                (SELECT IMAGE_URL FROM PROFILE_IMAGES
-                 WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS "avatar"
-             FROM FOLLOWS f
-             JOIN USERS u ON u.USER_ID = f.FOLLOWER_ID
-             WHERE f.FOLLOWING_ID = :userId
-             ORDER BY f.CREATED_AT DESC`,
-            { userId },
+            u.USER_ID AS "userId",
+            u.NICKNAME AS "nickname",
+            u.BIO_SHORT AS "bioShort",
+            (SELECT IMAGE_URL FROM PROFILE_IMAGES
+             WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS "avatar",
+            (SELECT STATUS FROM FOLLOWS         
+             WHERE FOLLOWER_ID = :userId2 AND FOLLOWING_ID = u.USER_ID) AS "followStatus"
+         FROM FOLLOWS f
+         JOIN USERS u ON u.USER_ID = f.FOLLOWER_ID
+         WHERE f.FOLLOWING_ID = :userId
+         ORDER BY f.CREATED_AT DESC`,
+            { userId, userId2: userId }, 
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
         res.json({ success: true, list: result.rows || [] });
@@ -436,22 +437,28 @@ router.post('/avatar', jwtAuthentication, upload.single('avatar'), async (req, r
     }
 });
 
-// GET /user/suggestions - 팔로우 추천 (내가 팔로우하지 않은 사람, 최대 5명)
+// =====================================================
+// user.js 의 router.get('/suggestions', ...) 를 아래로 교체
+// =====================================================
+
 router.get('/suggestions', jwtAuthentication, async (req, res) => {
     const userId = req.user?.userId ?? req.user?.id;
     const conn = await db.getConnection();
     try {
         const result = await conn.execute(
-            `select u.user_id, u.nickname, u.bio_short,
-                    (select image_url from profile_images
-                     where user_id = u.user_id and is_main = 'Y' and rownum = 1) as avatar
-             from users u
-             where u.user_id <> :userId
-             and u.user_id not in (
-                 select following_id from follows where follower_id = :userId2
-             )
-             and rownum <= 5`,
-            { userId, userId2: userId },
+            `SELECT u.USER_ID, u.NICKNAME, u.BIO_SHORT,
+                    (SELECT image_url FROM profile_images
+                     WHERE user_id = u.user_id AND is_main = 'Y' AND rownum = 1) AS AVATAR,
+                    (SELECT COUNT(*) FROM follows
+                     WHERE follower_id = u.user_id AND following_id = :userId3
+                     AND status = 'ACCEPTED') AS FOLLOWS_ME
+             FROM users u
+             WHERE u.user_id <> :userId
+               AND u.user_id NOT IN (
+                   SELECT following_id FROM follows WHERE follower_id = :userId2
+               )
+               AND rownum <= 5`,
+            { userId, userId2: userId, userId3: userId },
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
         res.json({ success: true, users: result.rows });
@@ -680,6 +687,165 @@ router.get('/search/public', jwtAuthentication, async (req, res) => {
     } finally {
         if (conn) await conn.close();
     }
+});
+
+// GET /user/bookmarks
+router.get('/bookmarks', jwtAuthentication, async (req, res) => {
+    const userId = req.user.userId;
+    let connection;
+    try {
+        connection = await db.getConnection();
+        const result = await connection.execute(
+            `SELECT 
+         p.POST_ID AS "id",
+         p.TITLE AS "title",
+         p.CONTENT AS "description",
+         p.CREATED_AT AS "CREATED_AT",
+         NVL(c.CATEGORY_NAME, 'General') AS "tag",
+(SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID) AS "likes",
+         (SELECT COUNT(*) FROM COMMENTS WHERE POST_ID = p.POST_ID) AS "commentCount"
+       FROM BOOKMARKS b
+       JOIN POSTS p ON p.POST_ID = b.POST_ID
+       LEFT JOIN CATEGORIES c ON c.CATEGORY_ID = p.CATEGORY_ID
+       WHERE b.USER_ID = :userId AND p.STATUS = 'ACTIVE'
+       ORDER BY b.CREATED_AT DESC`,
+            { userId },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+
+        const bookmarkData = await Promise.all((result.rows || []).map(async (row) => {
+            let content = row.description;
+            if (content && typeof content.getData === 'function') {
+                content = await content.getData();
+            }
+            const imgMatch = content ? content.match(/<img[^>]+src=["']([^"']+)["']/) : null;
+            return { ...row, description: content, images: imgMatch ? imgMatch[1] : null };
+        }));
+
+        res.json({ success: true, list: bookmarkData });
+    } catch (err) {
+        console.error('[GET /user/bookmarks]', err);
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (connection) await connection.close();
+    }
+});
+
+// GET /user/settings — 설정값 조회
+router.get('/settings', jwtAuthentication, async (req, res) => {
+  const userId = req.user.userId;
+  const conn = await db.getConnection();
+  try {
+    const result = await conn.execute(
+      `SELECT IS_PRIVATE, NOTI_COMMENT, NOTI_LIKE, NOTI_FOLLOW, NOTI_MESSAGE,
+              MSG_ALLOW, GROUP_ALLOW, TAG_ALLOW, MENTION_ALLOW, HIDE_LIKE_COUNT
+       FROM USERS WHERE USER_ID = :userId`,
+      { userId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    res.json({ success: true, settings: result.rows[0] });
+  } catch(err) { res.status(500).json({ success: false, message: err.message }); }
+  finally { await conn.close(); }
+});
+
+// PUT /user/settings — 설정값 저장
+router.put('/settings', jwtAuthentication, async (req, res) => {
+  const userId = req.user.userId;
+  const fields = ['is_private','noti_comment','noti_like','noti_follow','noti_message',
+                  'msg_allow','group_allow','tag_allow','mention_allow','hide_like_count'];
+  const body = req.body;
+  const updates = fields.filter(f => body[f] !== undefined);
+  if (!updates.length) return res.json({ success: true });
+  const conn = await db.getConnection();
+  try {
+    const setClauses = updates.map(f => `${f.toUpperCase()} = :${f}`).join(', ');
+    const binds = { userId };
+    updates.forEach(f => binds[f] = body[f]);
+    await conn.execute(`UPDATE USERS SET ${setClauses} WHERE USER_ID = :userId`, binds, { autoCommit: true });
+    res.json({ success: true });
+  } catch(err) { res.status(500).json({ success: false, message: err.message }); }
+  finally { await conn.close(); }
+});
+
+// GET /user/blocked — 차단 목록
+router.get('/blocked', jwtAuthentication, async (req, res) => {
+  const userId = req.user.userId;
+  const conn = await db.getConnection();
+  try {
+    const result = await conn.execute(
+      `SELECT u.USER_ID AS "userId", u.NICKNAME AS "nickname", u.BIO_SHORT AS "bioShort",
+              (SELECT IMAGE_URL FROM PROFILE_IMAGES WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS "avatar"
+       FROM BLOCKS b JOIN USERS u ON u.USER_ID = b.BLOCKED_ID
+       WHERE b.BLOCKER_ID = :userId ORDER BY b.CREATED_AT DESC`,
+      { userId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    res.json({ success: true, list: result.rows });
+  } catch(err) { res.status(500).json({ success: false, message: err.message }); }
+  finally { await conn.close(); }
+});
+
+// POST /user/block/:targetId — 차단/해제 토글
+router.post('/block/:targetId', jwtAuthentication, async (req, res) => {
+  const userId = req.user.userId;
+  const { targetId } = req.params;
+  const conn = await db.getConnection();
+  try {
+    const exists = await conn.execute(
+      `SELECT BLOCK_ID FROM BLOCKS WHERE BLOCKER_ID = :userId AND BLOCKED_ID = :targetId`,
+      { userId, targetId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    if (exists.rows.length > 0) {
+      await conn.execute(`DELETE FROM BLOCKS WHERE BLOCKER_ID = :userId AND BLOCKED_ID = :targetId`, { userId, targetId });
+      await conn.commit();
+      return res.json({ success: true, status: 'UNBLOCKED' });
+    }
+    await conn.execute(
+      `INSERT INTO BLOCKS (BLOCK_ID, BLOCKER_ID, BLOCKED_ID) VALUES (SEQ_BLOCK_ID.NEXTVAL, :userId, :targetId)`,
+      { userId, targetId }, { autoCommit: true }
+    );
+    res.json({ success: true, status: 'BLOCKED' });
+  } catch(err) { res.status(500).json({ success: false, message: err.message }); }
+  finally { await conn.close(); }
+});
+
+// GET /user/muted — 뮤트 목록
+router.get('/muted', jwtAuthentication, async (req, res) => {
+  const userId = req.user.userId;
+  const conn = await db.getConnection();
+  try {
+    const result = await conn.execute(
+      `SELECT u.USER_ID AS "userId", u.NICKNAME AS "nickname", u.BIO_SHORT AS "bioShort",
+              (SELECT IMAGE_URL FROM PROFILE_IMAGES WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS "avatar"
+       FROM MUTES m JOIN USERS u ON u.USER_ID = m.MUTED_ID
+       WHERE m.MUTER_ID = :userId ORDER BY m.CREATED_AT DESC`,
+      { userId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    res.json({ success: true, list: result.rows });
+  } catch(err) { res.status(500).json({ success: false, message: err.message }); }
+  finally { await conn.close(); }
+});
+
+// POST /user/mute/:targetId — 뮤트/해제 토글
+router.post('/mute/:targetId', jwtAuthentication, async (req, res) => {
+  const userId = req.user.userId;
+  const { targetId } = req.params;
+  const conn = await db.getConnection();
+  try {
+    const exists = await conn.execute(
+      `SELECT MUTE_ID FROM MUTES WHERE MUTER_ID = :userId AND MUTED_ID = :targetId`,
+      { userId, targetId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    if (exists.rows.length > 0) {
+      await conn.execute(`DELETE FROM MUTES WHERE MUTER_ID = :userId AND MUTED_ID = :targetId`, { userId, targetId });
+      await conn.commit();
+      return res.json({ success: true, status: 'UNMUTED' });
+    }
+    await conn.execute(
+      `INSERT INTO MUTES (MUTE_ID, MUTER_ID, MUTED_ID) VALUES (SEQ_MUTE_ID.NEXTVAL, :userId, :targetId)`,
+      { userId, targetId }, { autoCommit: true }
+    );
+    res.json({ success: true, status: 'MUTED' });
+  } catch(err) { res.status(500).json({ success: false, message: err.message }); }
+  finally { await conn.close(); }
 });
 
 module.exports = router;
