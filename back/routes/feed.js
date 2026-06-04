@@ -6,27 +6,45 @@ const db = require('../db');
 const jwtAuthentication = require('../middlewares/auth');
 const createUploader = require('../middlewares/upload');
 const upload = createUploader('post');
-
-// 💡 추가된 부분: AI 답변을 위해 Gemini 설정 불러오기
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const { GoogleGenAI } = require('@google/genai');
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-// ── 이미지 및 동영상 업로드 ──
+const videoStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const dir = path.join(__dirname, '../uploads/post');
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname);
+        cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+    },
+});
+const uploadVideo = multer({
+    storage: videoStorage,
+    limits: { fileSize: 500 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        cb(null, ['video/mp4', 'video/webm', 'video/quicktime'].includes(file.mimetype));
+    },
+});
 router.post('/upload', jwtAuthentication, upload.single('image'), (req, res) => {
     if (!req.file) return res.status(400).json({ success: false, message: '파일 없음' });
     res.json({ success: true, fileUrl: `/uploads/post/${req.file.filename}` });
 });
-
-// ── [신규] 모든 태그 목록 불러오기 (자동완성용) ──
+router.post('/upload-video', jwtAuthentication, uploadVideo.single('video'), (req, res) => {
+    if (!req.file) return res.status(400).json({ success: false, message: '동영상 파일 없음' });
+    res.json({ success: true, fileUrl: `/uploads/post/${req.file.filename}` });
+});
 router.get('/tags', async (req, res) => {
     let conn;
     try {
         conn = await db.getConnection();
         const result = await conn.execute(`SELECT TAG_NAME FROM TAGS`);
-        // 프론트엔드에서 편하게 쓰도록 { TAG_NAME: 'React' } 형태로 반환
-        res.json({ 
-            success: true, 
-            tags: result.rows.map(row => ({ TAG_NAME: row[0] })) 
+        res.json({
+            success: true,
+            tags: result.rows.map(row => row[0])
         });
     } catch (err) {
         console.error('[GET /feed/tags]', err);
@@ -36,65 +54,80 @@ router.get('/tags', async (req, res) => {
     }
 });
 
-// ── [신규] 비속어 필터링 검사 ──
 router.post('/check-profanity', jwtAuthentication, async (req, res) => {
     const { title, content } = req.body;
     let conn;
     try {
         conn = await db.getConnection();
-        const result = await conn.execute(`SELECT BANNED_WORD FROM BAD_WORDS`);
-        const bannedWords = result.rows.map(row => row[0]);
-
+        const result = await conn.execute(
+            `SELECT BANNED_WORD, REPLACE_WORD FROM BAD_WORDS`,
+            {},
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
         const fullText = ((title || '') + ' ' + (content || '')).replace(/<[^>]*>?/gm, '').toLowerCase();
         const detected = [];
+        const replaceMap = {};
 
-        for (const word of bannedWords) {
+        for (const row of result.rows) {
+            const word = row.BANNED_WORD;
             if (word && fullText.includes(word.toLowerCase())) {
                 detected.push(word);
+                replaceMap[word] = row.REPLACE_WORD || '***';
             }
         }
-
-        res.json({ 
-            success: true, 
-            hasProfanity: detected.length > 0, 
-            words: detected 
-        });
+        res.json({ success: true, hasProfanity: detected.length > 0, words: detected, replaceMap });
     } catch (err) {
         console.error('[POST /feed/check-profanity]', err);
-        // 에러가 나더라도 글 작성을 완전히 막지 않기 위해 통과시킴
-        res.json({ success: true, hasProfanity: false, words: [] });
+        res.json({ success: true, hasProfanity: false, words: [], replaceMap: {} });
     } finally {
         if (conn) await conn.close();
     }
 });
 
-// ── [신규] AI 트러블슈팅 답변 생성 ──
+router.get('/:postId/ai-answer', jwtAuthentication, async (req, res) => {
+    const { postId } = req.params;
+    let conn;
+    try {
+        conn = await db.getConnection();
+        const result = await conn.execute(
+            `SELECT DBMS_LOB.SUBSTR(ANSWER, 10000, 1) AS ANSWER, UPDATED_AT
+         FROM AI_ANSWERS WHERE POST_ID = :postId
+         ORDER BY CREATED_AT DESC FETCH FIRST 1 ROWS ONLY`,
+            { postId: Number(postId) },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        res.json({
+            success: true,
+            answer: result.rows[0]?.ANSWER ?? null,
+            updatedAt: result.rows[0]?.UPDATED_AT ?? null
+        });
+    } catch {
+        res.json({ success: true, answer: null, updatedAt: null });
+    } finally {
+        if (conn) await conn.close();
+    }
+});
+
 router.post('/:postId/ai-answer', jwtAuthentication, async (req, res) => {
     const { postId } = req.params;
     let conn;
     try {
         conn = await db.getConnection();
         const postResult = await conn.execute(
-            `SELECT TITLE, CONTENT FROM POSTS WHERE POST_ID = :postId`,
+            `SELECT TITLE, CONTENT, UPDATED_AT FROM POSTS WHERE POST_ID = :postId`,
             { postId },
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
-
-        if (!postResult.rows.length) {
+        if (!postResult.rows.length)
             return res.status(404).json({ success: false, message: '게시글을 찾을 수 없습니다.' });
-        }
 
         const post = postResult.rows[0];
         let contentText = post.CONTENT;
-        if (contentText && typeof contentText.getData === 'function') {
+        if (contentText && typeof contentText.getData === 'function')
             contentText = await contentText.getData();
-        }
-
-        // HTML 태그를 제거하여 AI가 순수 내용을 분석하기 좋게 만듦
         const cleanContent = contentText.replace(/<[^>]*>?/gm, '');
 
-        const prompt = `
-당신은 시니어 개발자입니다. 다음 사용자의 에러/트러블슈팅 질문을 읽고 해결책을 제시해주세요.
+        const prompt = `당신은 시니어 개발자입니다. 다음 사용자의 에러/트러블슈팅 질문을 읽고 해결책을 제시해주세요.
 
 [제목]: ${post.TITLE}
 [내용]: ${cleanContent}
@@ -108,9 +141,18 @@ router.post('/:postId/ai-answer', jwtAuthentication, async (req, res) => {
             model: 'gemini-2.5-flash',
             contents: prompt,
         });
-
-        // 불필요한 마크다운 코드 블록 마커(```html 등)가 섞여 들어올 경우를 대비해 정리
         let htmlAnswer = response.text.replace(/```html\n?/g, '').replace(/```\n?/g, '').trim();
+
+        // DB 저장 (MERGE)
+        await conn.execute(
+            `MERGE INTO AI_ANSWERS a
+       USING (SELECT :postId AS POST_ID FROM DUAL) s ON (a.POST_ID = s.POST_ID)
+       WHEN MATCHED THEN UPDATE SET a.ANSWER = :answer, a.UPDATED_AT = SYSDATE
+       WHEN NOT MATCHED THEN INSERT (POST_ID, ANSWER, CREATED_AT, UPDATED_AT)
+                              VALUES (:postId2, :answer2, SYSDATE, SYSDATE)`,
+            { postId: Number(postId), answer: htmlAnswer, postId2: Number(postId), answer2: htmlAnswer },
+            { autoCommit: true }
+        );
 
         res.json({ success: true, answer: htmlAnswer });
     } catch (err) {
@@ -387,91 +429,95 @@ router.get('/recommended', jwtAuthentication, async (req, res) => {
     }
 });
 
-// ──────────────────────────────────────────────────────────
-//  GET /feed/:postId — 게시글 단건 조회
-// ──────────────────────────────────────────────────────────
 router.get('/:postId', jwtAuthentication, async (req, res) => {
-    // 💡 해결: 넘어온 파라미터를 무조건 숫자로 변환
-    const postId = Number(req.params.postId);
-    const userId = getUserId(req);
+  const postId = Number(req.params.postId);
+  const userId = getUserId(req);
 
-    // 숫자가 아닌 값(예: undefined, null)이 들어오면 DB 조회 전에 차단
-    if (isNaN(postId)) {
-        return res.status(400).json({ success: false, message: '유효하지 않은 게시글 번호입니다.' });
+  if (isNaN(postId)) {
+    return res.status(400).json({ success: false, message: '유효하지 않은 게시글 번호입니다.' });
+  }
+
+  const conn = await db.getConnection();
+  try {
+    // 게시글 데이터 먼저 조회 후 즉시 응답
+    const postResult = await conn.execute(
+      `SELECT p.*,
+       c.CATEGORY_NAME AS CATEGORY_NAME,
+       u.NICKNAME  AS WRITER,
+       u.BIO       AS ROLE,
+       (SELECT IMAGE_URL FROM PROFILE_IMAGES
+        WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR,
+       (SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID) AS LIKES,
+       (SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID AND USER_ID = :userId1) AS LIKED,
+       (SELECT COUNT(*) FROM BOOKMARKS  WHERE POST_ID = p.POST_ID AND USER_ID = :userId2) AS BOOKMARKED,
+       (SELECT LISTAGG(t.tag_name, ',') WITHIN GROUP (ORDER BY t.tag_id)
+        FROM post_tags pt JOIN tags t ON t.tag_id = pt.tag_id
+        WHERE pt.post_id = p.post_id) AS TAGS
+       FROM POSTS p
+       JOIN USERS u ON u.USER_ID = p.USER_ID
+       LEFT JOIN CATEGORIES c ON c.CATEGORY_ID = p.CATEGORY_ID
+       WHERE p.POST_ID = :postId AND p.STATUS = 'ACTIVE'`,
+      { postId, userId1: userId, userId2: userId },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    if (!postResult.rows.length) {
+      return res.status(404).json({ success: false, message: '게시글을 찾을 수 없습니다.' });
     }
 
-    const conn = await db.getConnection();
-    try {
-        const dupCheck = await conn.execute(
-            `SELECT COUNT(*) AS CNT FROM POST_VIEWS
-             WHERE POST_ID = :postId
-               AND USER_ID = :userId
-               AND VIEWED_AT > SYSDATE - 1/24`,
-            { postId, userId },
-            { outFormat: oracledb.OUT_FORMAT_OBJECT }
-        );
+    const feed = postResult.rows[0];
+    let content = feed.CONTENT;
+    if (content && typeof content.getData === 'function') {
+      content = await content.getData();
+    }
 
+    // 응답 먼저
+    res.json({
+      success: true,
+      feed: {
+        ...feed,
+        CONTENT: content,
+        liked: feed.LIKED > 0,
+        bookmarked: feed.BOOKMARKED > 0,
+        tags: feed.TAGS ? feed.TAGS.split(',') : [],
+      },
+    });
+
+    // 조회수 처리는 응답 후 백그라운드에서
+    db.getConnection().then(async (bgConn) => {
+      try {
+        const dupCheck = await bgConn.execute(
+          `SELECT COUNT(*) AS CNT FROM POST_VIEWS
+           WHERE POST_ID = :postId AND USER_ID = :userId
+           AND VIEWED_AT > SYSDATE - 1/24`,
+          { postId, userId },
+          { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
         if (dupCheck.rows[0].CNT === 0) {
-            await conn.execute(
-                `INSERT INTO POST_VIEWS (POST_ID, USER_ID, IP_ADDR) VALUES (:postId, :userId, :ip)`,
-                { postId, userId, ip: req.ip }
-            );
-            await conn.execute(
-                `UPDATE POSTS SET VIEW_COUNT = VIEW_COUNT + 1 WHERE POST_ID = :postId`,
-                { postId }
-            );
-            await conn.commit();
+          await bgConn.execute(
+            `INSERT INTO POST_VIEWS (POST_ID, USER_ID, IP_ADDR) VALUES (:postId, :userId, :ip)`,
+            { postId, userId, ip: req.ip }
+          );
+          await bgConn.execute(
+            `UPDATE POSTS SET VIEW_COUNT = VIEW_COUNT + 1 WHERE POST_ID = :postId`,
+            { postId }
+          );
+          await bgConn.commit();
         }
+      } catch (e) {
+        console.error('[view count bg]', e);
+      } finally {
+        await bgConn.close();
+      }
+    }).catch(() => {});
 
-        const postResult = await conn.execute(
-            `SELECT p.*,
-             c.CATEGORY_NAME AS CATEGORY_NAME,
-             u.NICKNAME  AS WRITER,
-             u.BIO       AS ROLE,
-             (SELECT IMAGE_URL FROM PROFILE_IMAGES
-              WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR,
-             (SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID) AS LIKES,
-             (SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID AND USER_ID = :userId1) AS LIKED,
-             (SELECT COUNT(*) FROM BOOKMARKS  WHERE POST_ID = p.POST_ID AND USER_ID = :userId2) AS BOOKMARKED,
-             (SELECT LISTAGG(t.tag_name, ',') WITHIN GROUP (ORDER BY t.tag_id)
-              FROM post_tags pt JOIN tags t ON t.tag_id = pt.tag_id
-              WHERE pt.post_id = p.post_id) AS TAGS
-             FROM POSTS p
-             JOIN USERS u ON u.USER_ID = p.USER_ID
-             LEFT JOIN CATEGORIES c ON c.CATEGORY_ID = p.CATEGORY_ID
-             WHERE p.POST_ID = :postId AND p.STATUS = 'ACTIVE'`,
-            { postId, userId1: userId, userId2: userId },
-            { outFormat: oracledb.OUT_FORMAT_OBJECT }
-        );
-
-        if (!postResult.rows.length) {
-            return res.status(404).json({ success: false, message: '게시글을 찾을 수 없습니다.' });
-        }
-
-        const feed = postResult.rows[0];
-        let content = feed.CONTENT;
-        if (content && typeof content.getData === 'function') {
-            content = await content.getData();
-        }
-
-        return res.json({
-            success: true,
-            feed: {
-                ...feed,
-                CONTENT: content,
-                liked: feed.LIKED > 0,
-                bookmarked: feed.BOOKMARKED > 0,
-                tags: feed.TAGS ? feed.TAGS.split(',') : [],
-            },
-        });
-    } catch (err) {
-        console.error('[GET /feed/:postId]', err);
-        return res.status(500).json({ success: false, message: '서버 오류' });
-    } finally {
-        await conn.close();
-    }
+  } catch (err) {
+    console.error('[GET /feed/:postId]', err);
+    return res.status(500).json({ success: false, message: '서버 오류' });
+  } finally {
+    await conn.close();
+  }
 });
-
 // ──────────────────────────────────────────────────────────
 //  GET /feed/:postId/comments — 댓글 조회
 // ──────────────────────────────────────────────────────────

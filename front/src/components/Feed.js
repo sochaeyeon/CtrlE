@@ -394,7 +394,7 @@ const PostCard = ({ feed, token, onOpenDetail, myNickname, onDelete, onTagClick,
 
   const handleCardTap = () => {
     const now = Date.now();
-    if (now - lastTapRef.current < 300) {
+    if (now - lastTapRef.current < 200) {
       // 더블클릭
       clearTimeout(clickTimerRef.current);
       clickTimerRef.current = null;
@@ -406,7 +406,7 @@ const PostCard = ({ feed, token, onOpenDetail, myNickname, onDelete, onTagClick,
     clickTimerRef.current = setTimeout(() => {
       clickTimerRef.current = null;
       navigate(`/post/${feed.id}`);
-    }, 300);
+    }, 200);
   };
 
   const handleLike = async (e) => {
