@@ -26,7 +26,7 @@ const MENU_ITEMS = [
   { text: '메시지',    icon: <ForumOutlined sx={{ fontSize: 22 }} />,            activeIcon: <Forum sx={{ fontSize: 22 }} />,            path: '/messages' },
   { id: 'noti', text: '알림', icon: <NotificationsNoneOutlined sx={{ fontSize: 24 }} />, activeIcon: <Notifications sx={{ fontSize: 24 }} /> },
   { text: '새 게시물', icon: <AddBoxOutlined sx={{ fontSize: 24 }} />,          activeIcon: <AddBox sx={{ fontSize: 24 }} />,          path: '/register' },
-  { text: '내 활동',   icon: <BarChartOutlined sx={{ fontSize: 24 }} />,         activeIcon: <BarChart sx={{ fontSize: 24 }} />,        path: '/mypage' },
+  { text: '내 활동',   icon: <BarChartOutlined sx={{ fontSize: 24 }} />,         activeIcon: <BarChart sx={{ fontSize: 24 }} />,        path: '/myactivity' },
   { text: '설정',      icon: <SettingsOutlined sx={{ fontSize: 24 }} />,         activeIcon: <Settings sx={{ fontSize: 24 }} />,        path: '/settings' },
 ];
 

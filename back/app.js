@@ -14,6 +14,7 @@ const feedRouter = require("./routes/feed");
 const notificationRouter = require('./routes/notifications');
 const exploreRouter = require('./routes/explore');
 const messagesRouter = require('./routes/messages');
+const activityRouter = require('./routes/activity');
 
 const db = require("./db");
 
@@ -33,6 +34,7 @@ app.use("/feed", feedRouter);
 app.use('/notifications', notificationRouter);
 app.use('/explore', exploreRouter);
 app.use('/messages', messagesRouter);
+app.use('/activity', activityRouter);
 
 async function startServer() {
   try {

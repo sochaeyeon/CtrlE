@@ -16,6 +16,7 @@ import UserProfile from './components/UserProfile';
 import Messages from './components/Messages';
 import NotificationSidebar from './components/NotificationSidebar';
 import Settings from './components/Settings';
+import Myactivity from './components/Myactivity';
 
 const API = 'http://localhost:3010';
 
@@ -247,6 +248,7 @@ function AppContent() {
           <Route path="/messages" element={<Messages />} />
           <Route path="/messages/room/:roomId" element={<Messages />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/myactivity" element={<Myactivity />} />
         </Routes>
       </Box>
 
