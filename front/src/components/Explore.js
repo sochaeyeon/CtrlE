@@ -10,7 +10,7 @@ import {
   Favorite, FavoriteBorder, ChatBubbleOutline, BookmarkBorderOutlined,
   Bookmark, PersonAdd, PersonRemove, ArrowBack, Tag, People, Article,
   History, NorthEast, LocalFireDepartment, GroupAdd, AutoAwesome,
-  WorkspacePremium, EmojiEvents, Visibility
+  WorkspacePremium, EmojiEvents, Visibility, LocationOn
 } from '@mui/icons-material';
 import { useColorMode } from '../App';
 
@@ -160,7 +160,7 @@ const SearchDropdown = ({ query, recentSearches, trendingTags, onSelect, onClear
                 const nickname = u.NICKNAME || u.nickname || u.name;
                 const bio = u.BIO || u.bio;
                 const avatar = u.AVATAR || u.avatar;
-                
+
                 return (
                   <Box key={u.USER_ID || u.userId || u.id} onMouseDown={() => onSelect(nickname)} sx={{
                     display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1, cursor: 'pointer',
@@ -265,13 +265,17 @@ const PostCard = ({ post, idx, colors }) => {
     >
       <Box component="img" src={imgSrc} alt="post" sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
 
-      <Box sx={{
-        position: 'absolute', bottom: 8, left: 8,
-        display: 'flex', alignItems: 'center', gap: 0.5,
-        color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.8)'
-      }}>
-        <Visibility sx={{ fontSize: 16 }} />
-        <Typography sx={{ fontSize: '0.8rem', fontWeight: 700 }}>{formatCount(viewCount)}</Typography>
+      <Box sx={{ position: 'absolute', bottom: 8, left: 8, display: 'flex', flexDirection: 'column', gap: 0.4 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+          <Visibility sx={{ fontSize: 16 }} />
+          <Typography sx={{ fontSize: '0.8rem', fontWeight: 700 }}>{formatCount(viewCount)}</Typography>
+        </Box>
+        {post.location && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+            <LocationOn sx={{ fontSize: 13 }} />
+            <Typography sx={{ fontSize: '0.7rem', fontWeight: 600 }}>{post.location}</Typography>
+          </Box>
+        )}
       </Box>
 
       <Box className="hover-overlay" sx={{
@@ -513,14 +517,14 @@ export default function Explore() {
   const token = localStorage.getItem('accessToken');
 
   const colors = {
-    bg:          mode === 'dark' ? '#0F1117' : '#F8FAFC',
-    paper:       mode === 'dark' ? '#1A1D27' : '#FFFFFF',
-    border:      mode === 'dark' ? '#2D3148' : '#E2E8F0',
+    bg: mode === 'dark' ? '#0F1117' : '#F8FAFC',
+    paper: mode === 'dark' ? '#1A1D27' : '#FFFFFF',
+    border: mode === 'dark' ? '#2D3148' : '#E2E8F0',
     borderFocus: mode === 'dark' ? '#4B5280' : '#CBD5E1',
-    textPrimary: mode === 'dark' ? '#F1F5F9'  : '#0F172A',
-    textMuted:   mode === 'dark' ? '#94A3B8'  : '#64748B',
-    textHint:    mode === 'dark' ? '#64748B'  : '#94A3B8',
-    hover:       mode === 'dark' ? '#22253A'  : '#F8FAFC',
+    textPrimary: mode === 'dark' ? '#F1F5F9' : '#0F172A',
+    textMuted: mode === 'dark' ? '#94A3B8' : '#64748B',
+    textHint: mode === 'dark' ? '#64748B' : '#94A3B8',
+    hover: mode === 'dark' ? '#22253A' : '#F8FAFC',
   };
 
   const [inputValue, setInputValue] = useState('');
@@ -536,7 +540,7 @@ export default function Explore() {
   const [recommendedUsers, setRecommendedUsers] = useState([]);
   const [explorePosts, setExplorePosts] = useState([]);
   const [loadingDefault, setLoadingDefault] = useState(true);
-  
+
   const [posts, setPosts] = useState([]);
   const [users, setUsers] = useState([]);
   const [tags, setTags] = useState([]);
@@ -554,7 +558,7 @@ export default function Explore() {
         fetch(`${API}/explore/posts`, { headers: { Authorization: `Bearer ${token}` } })
       ]);
       const [tData, uData, pData] = await Promise.all([tRes.json(), uRes.json(), pRes.json()]);
-      
+
       if (tData.success) setTrendingTags(tData.tags);
       if (uData.success) setRecommendedUsers(uData.users);
       if (pData.success) setExplorePosts(pData.posts);
@@ -589,13 +593,15 @@ export default function Explore() {
 
     const params = new URLSearchParams(location.search);
     const tagParam = params.get('tag');
+    const locationParam = params.get('location');
+    const searchParam = tagParam || locationParam;
 
-    if (tagParam) {
-      setInputValue(tagParam);
-      setQuery(tagParam);
+    if (searchParam) {
+      setInputValue(searchParam);
+      setQuery(searchParam);
       setActiveResultTab('posts');
       setActiveTagFilter('all');
-      doSearch(tagParam);
+      doSearch(searchParam);
     } else {
       setQuery('');
       setInputValue('');
@@ -606,7 +612,7 @@ export default function Explore() {
   const handleSearch = (val) => {
     const v = (val ?? inputValue).trim();
     if (!v) return;
-    
+
     setQuery(v);
     setInputValue(v);
     setFocused(false);
