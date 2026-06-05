@@ -18,12 +18,10 @@ import {
   RefreshOutlined, PlayArrow,
 } from '@mui/icons-material';
 import { useColorMode } from '../App';
+import EditModal from './EditModal';
 
 const API = 'http://localhost:3010';
 
-// ──────────────────────────────────────────
-//  Constants
-// ──────────────────────────────────────────
 const TAG_META = {
   'Bug Fix': { color: '#DC2626', bg: '#FEF2F2', darkBg: '#2D1515' },
   'React': { color: '#2563EB', bg: '#EFF6FF', darkBg: '#172033' },
@@ -608,7 +606,7 @@ const renderContentWithCopy = (html, colors, wrapperSx = null) => {
   );
 };
 
-const AIAnswerSection = ({ postId, token, colors, postUpdatedAt, isMyPost, myNickname }) => {
+const AIAnswerSection = ({ postId, token, colors, postUpdatedAt, isMyPost }) => {
   const [loading, setLoading] = useState(false);
   const [answer, setAnswer] = useState(null);
   const [aiCreatedAt, setAiCreatedAt] = useState(null);
@@ -649,8 +647,17 @@ const AIAnswerSection = ({ postId, token, colors, postUpdatedAt, isMyPost, myNic
     finally { setLoading(false); }
   };
 
-  // ── 타인: AI 답변 없을 때
-  if (!answer && !loading && !isMyPost) {
+  const commentBodySx = {
+    fontSize: '0.82rem', color: colors.textMuted, lineHeight: 1.8,
+    '& p': { mb: 0.8, mt: 0 }, '& strong': { fontWeight: 700, color: colors.textPrimary },
+    '& h3': { fontWeight: 700, color: colors.textPrimary, fontSize: '0.88rem', mt: 1.5, mb: 0.6 },
+    '& ul, & ol': { pl: 2, mb: 0.8 }, '& li': { mb: 0.3 },
+    '& code': { fontFamily: '"JetBrains Mono",monospace', backgroundColor: colors.inputBg, color: '#CE9178', px: 0.6, py: 0.1, borderRadius: 0.5, fontSize: '0.78em' },
+    '& pre': { backgroundColor: '#0D1117', color: '#D4D4D4', borderRadius: '6px', p: 1.5, fontSize: '0.76rem', fontFamily: '"JetBrains Mono",monospace', overflowX: 'auto', lineHeight: 1.7, my: 1, border: '1px solid #1E293B' },
+  };
+
+  // 타인이고 AI 답변 없을 때
+  if (!isMyPost && !answer && !loading) {
     return (
       <Box sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2, p: 2.5, textAlign: 'center' }}>
         <Box sx={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #569CD6, #4EC9B0)', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 1.5 }}>
@@ -658,7 +665,10 @@ const AIAnswerSection = ({ postId, token, colors, postUpdatedAt, isMyPost, myNic
         </Box>
         <Typography sx={{ fontSize: '0.8rem', color: colors.textMuted, lineHeight: 1.7, mb: 1.5 }}>
           아직 작성자가 AI 답변을 생성하지 않았어요!<br />
-          <strong style={{ color: colors.textPrimary }}>댓글로 먼저 도움을 드려보세요 💬</strong>
+          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, color: colors.textPrimary, fontWeight: 700 }}>
+            <ChatBubbleOutline sx={{ fontSize: 14 }} />
+            댓글로 먼저 도움을 드려보세요
+          </Box>
         </Typography>
         <Button size="small" variant="outlined"
           onClick={() => document.getElementById('comments')?.scrollIntoView({ behavior: 'smooth' })}
@@ -669,17 +679,8 @@ const AIAnswerSection = ({ postId, token, colors, postUpdatedAt, isMyPost, myNic
     );
   }
 
-  const commentBodySx = {
-    fontSize: '0.82rem', color: colors.textMuted, lineHeight: 1.8,
-    '& p': { mb: 0.8, mt: 0 }, '& strong': { fontWeight: 700, color: colors.textPrimary },
-    '& h3': { fontWeight: 700, color: colors.textPrimary, fontSize: '0.88rem', mt: 1.5, mb: 0.6 },
-    '& ul, & ol': { pl: 2, mb: 0.8 }, '& li': { mb: 0.3 },
-    '& code': { fontFamily: '"JetBrains Mono",monospace', backgroundColor: colors.inputBg, color: '#CE9178', px: 0.6, py: 0.1, borderRadius: 0.5, fontSize: '0.78em' },
-    '& pre': { backgroundColor: '#0D1117', color: '#D4D4D4', borderRadius: '6px', p: 1.5, fontSize: '0.76rem', fontFamily: '"JetBrains Mono",monospace', overflowX: 'auto', lineHeight: 1.7, my: 1, border: '1px solid #1E293B' },
-  };
-
   return (
-    <Box sx={{ position: 'sticky', top: 72, backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2, overflow: 'hidden' }}>
+    <Box sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2, overflow: 'hidden' }}>
       {/* 헤더 */}
       <Box sx={{ px: 2, py: 1.8, borderBottom: collapsed ? 'none' : `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: colors.mode === 'dark' ? 'linear-gradient(135deg, rgba(86,156,214,0.15) 0%, rgba(78,201,176,0.08) 100%)' : 'linear-gradient(135deg, rgba(86,156,214,0.1) 0%, rgba(78,201,176,0.05) 100%)', cursor: 'pointer' }}
         onClick={() => setCollapsed(v => !v)}>
@@ -761,7 +762,7 @@ const AIAnswerSection = ({ postId, token, colors, postUpdatedAt, isMyPost, myNic
   );
 };
 
-const CommentItem = ({ comment, index, depth = 0, onReply, onDelete, onEdit, myNickname, navigate, postWriter, colors, token, commentModules }) => {
+const CommentItem = ({ comment, index, depth = 0, onReply, onDelete, onEdit, myNickname, navigate, postWriter, colors, token, commentModules, highlighted, highlightedNickname }) => {
   const isPostWriter = (comment.WRITER || comment.writer) === postWriter;
   const isReply = depth > 0;
   const isMyComment = (comment.WRITER || comment.writer) === myNickname;
@@ -810,7 +811,19 @@ const CommentItem = ({ comment, index, depth = 0, onReply, onDelete, onEdit, myN
         display: 'flex', gap: 1.5, py: 2,
         pl: isReply ? `${depth * 16}px` : 0,
         borderBottom: `1px solid ${colors.border}`,
-        backgroundColor: isReply ? (colors.mode === 'dark' ? 'rgba(86,156,214,0.05)' : '#F8FAFF') : 'transparent',
+        backgroundColor: isReply
+          ? (colors.mode === 'dark' ? 'rgba(86,156,214,0.05)' : '#F8FAFF')
+          : 'transparent',
+        borderRadius: 2,
+        animation: highlighted ? 'commentPulse 1.5s ease 3' : 'none',
+        '@keyframes commentPulse': {
+          '0%, 100%': {
+            backgroundColor: isReply
+              ? (colors.mode === 'dark' ? 'rgba(86,156,214,0.05)' : '#F8FAFF')
+              : 'transparent'
+          },
+          '50%': { backgroundColor: colors.mode === 'dark' ? 'rgba(37,99,235,0.25)' : '#DBEAFE' },
+        },
         '&:last-child': { borderBottom: 'none' },
         position: 'relative',
       }}>
@@ -891,7 +904,9 @@ const CommentItem = ({ comment, index, depth = 0, onReply, onDelete, onEdit, myN
       {comment.replies?.map((reply, ri) => (
         <CommentItem key={reply.COMMENT_ID || reply.id} comment={reply} index={ri} depth={depth + 1}
           onReply={onReply} myNickname={myNickname} navigate={navigate} postWriter={postWriter}
-          colors={colors} onDelete={onDelete} onEdit={onEdit} token={token} commentModules={commentModules} />
+          colors={colors} onDelete={onDelete} onEdit={onEdit} token={token} commentModules={commentModules}
+          highlighted={highlightedNickname === (reply.WRITER || reply.writer)}
+          highlightedNickname={highlightedNickname} />
       ))}
 
       {reportOpen && (
@@ -931,6 +946,23 @@ export default function PostDetail() {
   const token = localStorage.getItem('accessToken');
   const { mode } = useColorMode();
   const colors = makeColors(mode);
+  const [editOpen, setEditOpen] = useState(false);
+  const [highlightedCommentNickname, setHighlightedCommentNickname] = useState(null);
+
+  useEffect(() => {
+    if (!location.state?.highlightComment || !location.state?.highlightNickname) return;
+    const nickname = location.state.highlightNickname;
+    setHighlightedCommentNickname(nickname);
+
+    window.history.replaceState({}, '');
+
+    setTimeout(() => {
+      commentSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 400);
+
+    const timer = setTimeout(() => setHighlightedCommentNickname(null), 3500);
+    return () => clearTimeout(timer);
+  }, [location.state]);
 
   const myNickname = (() => {
     try {
@@ -963,7 +995,8 @@ export default function PostDetail() {
   const commentInputRef = useRef(null);
   const commentImageFiles = useRef([]);
   const clickTimerRef = useRef(null);
-
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [aiModal, setAiModal] = useState(false);
   const commentImageHandler = useCallback(() => {
     const input = document.createElement('input');
     input.type = 'file'; input.accept = 'image/*'; input.click();
@@ -1048,6 +1081,13 @@ export default function PostDetail() {
     }
   }, [location.hash, loading]);
 
+  useEffect(() => {
+    if (location.state?.showAIModal && feed && !loading) {
+      setAiModal(true);
+      window.history.replaceState({}, '');
+    }
+  }, [location.state, feed, loading]);
+
   const handleProfileClick = useCallback((writerNickname) => {
     if (!writerNickname) return;
     navigate(writerNickname === myNickname ? '/mypage' : `/user/${writerNickname}`);
@@ -1084,6 +1124,17 @@ export default function PostDetail() {
     try {
       await fetch(`${API}/feed/${postId}/bookmark`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
     } catch { setBookmarked(!next); }
+  };
+
+  const handleDeletePost = async () => {
+    try {
+      const res = await fetch(`${API}/feed/${postId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) navigate('/feed');
+    } catch { }
+    setDeleteOpen(false);
   };
 
   const handleShare = async () => {
@@ -1189,174 +1240,212 @@ export default function PostDetail() {
       </Box>
 
       {/* ── Content ── */}
-      {/* ── Content ── */}
-      <Box sx={{ maxWidth: isError ? 1200 : 800, mx: 'auto', px: { xs: 2, md: 4 }, py: { xs: 3, md: 5 } }}>
-        <Box sx={{ display: 'grid', gridTemplateColumns: isError ? { xs: '1fr', lg: '1fr 340px' } : '1fr', gap: 3, alignItems: 'start' }}>
+      <Box sx={{ position: 'relative', py: { xs: 3, md: 5 } }}>
+        <Box sx={{ maxWidth: 800, mx: 'auto', px: { xs: 2, md: 4 } }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+            <Box>
+              {isError && (
+                <Box sx={{ display: { xs: 'block', xl: 'none' }, mb: 3 }}>
+                  <AIAnswerSection
+                    postId={postId}
+                    token={token}
+                    colors={colors}
+                    postUpdatedAt={feed.UPDATED_AT || feed.updatedAt}
+                    isMyPost={(feed.WRITER || feed.writer) === myNickname}
+                  />
+                </Box>
+              )}
 
-          <Box>
+              {/* 게시물 본문 카드 */}
+              <Box onClick={handleCardClick}
+                sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2.5, p: { xs: 2.5, md: 4 }, mb: 3, animation: 'fadeUp 0.4s ease both', cursor: 'default', position: 'relative', overflow: 'hidden', '@keyframes fadeUp': { from: { opacity: 0, transform: 'translateY(16px)' }, to: { opacity: 1, transform: 'translateY(0)' } } }}>
+                <HeartOverlay trigger={heartTrigger} />
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer', '&:hover .writer-name': { color: colors.accent } }}
+                    onClick={e => { e.stopPropagation(); handleProfileClick(feed.WRITER || feed.writer); }}>
+                    <Avatar src={resolveAvatarSrc(feed.AVATAR || feed.avatar)}
+                      sx={{ width: 44, height: 44, backgroundColor: colors.textPrimary, fontWeight: 800, fontSize: '1rem', boxShadow: '0 2px 10px rgba(15,23,42,0.12)', transition: 'all 0.2s', '&:hover': { boxShadow: `0 4px 16px rgba(86,156,214,0.3)` } }}>
+                      {getInitial(feed.WRITER || feed.writer)}
+                    </Avatar>
+                    <Box>
+                      <Typography className="writer-name" sx={{ fontWeight: 700, fontSize: '0.92rem', color: colors.textPrimary, lineHeight: 1.2, transition: 'color 0.15s' }}>
+                        {feed.WRITER || feed.writer || 'Unknown'}
+                      </Typography>
+                      <Typography sx={{ color: colors.textHint, fontSize: '0.75rem', mt: 0.2 }}>
+                        {(feed.ROLE || feed.role || 'Developer')}
+                        {(feed.CREATED_AT || feed.createdAt) ? ` · ${formatDate(feed.CREATED_AT || feed.createdAt)}` : ''}
+                      </Typography>
+                    </Box>
+                  </Box>
+                  {(feed.WRITER || feed.writer) === myNickname ? (
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                      <Tooltip title="수정" placement="top">
+                        <IconButton size="small" onClick={e => { e.stopPropagation(); setEditOpen(true); }}
+                          sx={{ color: colors.textHint, borderRadius: 1.5, border: `1px solid ${colors.border}`, '&:hover': { color: colors.accent, borderColor: colors.accent }, transition: 'all 0.15s' }}>
+                          <Edit sx={{ fontSize: 17 }} />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="삭제" placement="top">
+                        <IconButton size="small" onClick={e => { e.stopPropagation(); setDeleteOpen(true); }}
+                          sx={{ color: colors.textHint, borderRadius: 1.5, border: `1px solid ${colors.border}`, '&:hover': { backgroundColor: colors.mode === 'dark' ? '#2D1515' : '#FEF2F2', color: '#DC2626', borderColor: '#FECACA' }, transition: 'all 0.15s' }}>
+                          <Delete sx={{ fontSize: 17 }} />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  ) : (
+                    <Tooltip title="신고하기" placement="top">
+                      <IconButton size="small" onClick={e => { e.stopPropagation(); setReportOpen(true); }}
+                        sx={{ color: colors.textHint, borderRadius: 1.5, border: `1px solid ${colors.border}`, '&:hover': { backgroundColor: colors.mode === 'dark' ? '#2D1515' : '#FEF2F2', color: '#DC2626', borderColor: '#FECACA' }, transition: 'all 0.15s' }}>
+                        <FlagOutlined sx={{ fontSize: 17 }} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </Box>
+                <Typography sx={{ fontWeight: 800, fontSize: { xs: '1.3rem', md: '1.65rem' }, color: colors.textPrimary, lineHeight: 1.3, letterSpacing: '-0.02em', mb: 3 }}>
+                  {feed.TITLE || feed.title}
+                </Typography>
+                {imageList.length > 0 && <ImageGallery images={imageList} colors={colors} />}
+                {videoUrl && <VideoPlayer src={videoUrl} colors={colors} />}
+                {renderContentWithCopy(feed.DESCRIPTION || feed.description || feed.CONTENT || feed.content, colors)}
+                {(feed.CODE || feed.code) && <CodeBlock code={feed.CODE || feed.code} />}
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pt: 3, mt: 2, borderTop: `1px solid ${colors.border}` }}>
+                  <Stack direction="row" spacing={1}>
+                    <Button size="small"
+                      startIcon={liked ? <Favorite sx={{ fontSize: 17, color: '#EF4444' }} /> : <FavoriteBorderOutlined sx={{ fontSize: 17 }} />}
+                      onClick={e => { e.stopPropagation(); handleLike(); }}
+                      sx={{ color: liked ? '#EF4444' : colors.textMuted, fontWeight: 600, fontSize: '0.82rem', textTransform: 'none', px: 1.5, borderRadius: 1.5, '&:hover': { backgroundColor: colors.mode === 'dark' ? 'rgba(239,68,68,0.1)' : '#FEF2F2', color: '#EF4444' }, transition: 'all 0.15s' }}>
+                      {likeCount}
+                    </Button>
+                    <Button size="small"
+                      startIcon={<ChatBubbleOutline sx={{ fontSize: 17 }} />}
+                      onClick={e => { e.stopPropagation(); commentSectionRef.current?.scrollIntoView({ behavior: 'smooth' }); }}
+                      sx={{ color: colors.textMuted, fontWeight: 600, fontSize: '0.82rem', textTransform: 'none', px: 1.5, borderRadius: 1.5, '&:hover': { backgroundColor: colors.mode === 'dark' ? 'rgba(37,99,235,0.1)' : '#EFF6FF', color: colors.accent }, transition: 'all 0.15s' }}>
+                      {totalComments}
+                    </Button>
+                  </Stack>
+                  <Stack direction="row" spacing={0.5} alignItems="center">
+                    <Tooltip title="공유하기" placement="top">
+                      <IconButton size="small" onClick={e => { e.stopPropagation(); handleShare(); }} sx={{ color: colors.textHint, '&:hover': { color: colors.accent }, transition: 'color 0.15s' }}>
+                        <ShareOutlined sx={{ fontSize: 19 }} />
+                      </IconButton>
+                    </Tooltip>
+                    <IconButton size="small" onClick={e => { e.stopPropagation(); handleBookmark(); }}>
+                      {bookmarked
+                        ? <Bookmark sx={{ fontSize: 20, color: colors.accent }} />
+                        : <BookmarkBorderOutlined sx={{ fontSize: 20, color: colors.textHint }} />}
+                    </IconButton>
+                  </Stack>
+                </Box>
+              </Box>
+
+              {/* 댓글 섹션 */}
+              <Box id="comments" ref={commentSectionRef}
+                sx={{ animation: 'fadeUp 0.4s ease 0.1s both', '@keyframes fadeUp': { from: { opacity: 0, transform: 'translateY(16px)' }, to: { opacity: 1, transform: 'translateY(0)' } } }}>
+                <Box sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2.5 }}>
+                  <Box sx={{ px: 3, py: 2.5, borderBottom: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <ChatBubbleOutline sx={{ fontSize: 18, color: colors.textMuted }} />
+                    <Typography sx={{ fontWeight: 800, fontSize: '0.95rem', color: colors.textPrimary }}>댓글</Typography>
+                    <Box sx={{ px: 1.2, py: 0.15, backgroundColor: colors.inputBg, borderRadius: 1, border: `1px solid ${colors.border}` }}>
+                      <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: colors.textMuted }}>{totalComments}</Typography>
+                    </Box>
+                  </Box>
+                  <Box ref={commentListRef} sx={{ px: 3 }}>
+                    {commLoading ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+                        <CircularProgress size={22} sx={{ color: colors.accent }} />
+                      </Box>
+                    ) : comments.length === 0 ? (
+                      <Box sx={{ textAlign: 'center', py: 8 }}>
+                        <ChatBubbleOutline sx={{ fontSize: 32, color: colors.border, mb: 1.5 }} />
+                        <Typography sx={{ color: colors.textHint, fontSize: '0.85rem', fontWeight: 500 }}>첫 댓글을 남겨보세요!</Typography>
+                      </Box>
+                    ) : (
+                      comments.map((c, i) => (
+                        <CommentItem key={c.COMMENT_ID || c.id} comment={c} index={i} depth={0}
+                          onReply={setReplyTarget} myNickname={myNickname} navigate={navigate}
+                          postWriter={feed.WRITER || feed.writer} colors={colors}
+                          onDelete={handleCommentDelete} onEdit={handleCommentEdit}
+                          token={token} commentModules={commentModules}
+                          highlighted={highlightedCommentNickname === (c.WRITER || c.writer)}
+                          highlightedNickname={highlightedCommentNickname} />
+                      ))
+                    )}
+                  </Box>
+                  <Box sx={{ px: 3, py: 3, borderTop: `1px solid ${colors.border}`, backgroundColor: colors.mode === 'dark' ? 'rgba(255,255,255,0.02)' : '#FAFBFC' }}>
+                    {replyTarget && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, mb: 1.5, backgroundColor: colors.mode === 'dark' ? '#1E3A5F' : '#EFF6FF', borderRadius: 1.5, border: `1px solid ${colors.accent}`, animation: 'slideDown 0.2s ease both', '@keyframes slideDown': { from: { opacity: 0, transform: 'translateY(-8px)' }, to: { opacity: 1, transform: 'translateY(0)' } } }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                          <ReplyOutlined sx={{ fontSize: 14, color: colors.accent }} />
+                          <Typography sx={{ fontSize: '0.78rem', color: colors.accent, fontWeight: 600 }}>
+                            @{replyTarget.WRITER || replyTarget.writer} 에게 답글 작성 중
+                          </Typography>
+                        </Box>
+                        <IconButton size="small" onClick={() => setReplyTarget(null)} sx={{ color: colors.textHint, p: 0.3 }}>
+                          <Close sx={{ fontSize: 14 }} />
+                        </IconButton>
+                      </Box>
+                    )}
+                    <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                      <Avatar src={resolveAvatarSrc(myAvatar)} sx={{ width: 34, height: 34, fontSize: '0.7rem', backgroundColor: colors.textPrimary, flexShrink: 0, mt: 0.5, fontWeight: 800 }}>
+                        {getInitial(myNickname)}
+                      </Avatar>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Box sx={makeQuillBoxSx(colors)}>
+                          <ReactQuill ref={commentInputRef} theme="snow" value={newComment} onChange={setNewComment} modules={commentModules}
+                            placeholder={replyTarget ? `@${replyTarget.WRITER || replyTarget.writer}에게 답글...` : '댓글을 작성하세요... 코드 강조, 인용구 사용 가능'} />
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1.5 }}>
+                          <Button variant="contained" disabled={isCommentEmpty(newComment) || submitting} onClick={handleAddComment}
+                            endIcon={submitting ? <CircularProgress size={13} sx={{ color: '#fff' }} /> : <ArrowUpward sx={{ fontSize: 15 }} />}
+                            sx={{ backgroundColor: colors.textPrimary, color: colors.paper, textTransform: 'none', fontWeight: 700, fontSize: '0.82rem', px: 2.5, py: 0.8, borderRadius: 1.5, boxShadow: 'none', '&:hover': { backgroundColor: colors.accent }, '&.Mui-disabled': { backgroundColor: colors.border, color: colors.textHint }, transition: 'all 0.15s' }}>
+                            {replyTarget ? '답글 등록' : '댓글 등록'}
+                          </Button>
+                        </Box>
+                      </Box>
+                    </Box>
+                  </Box>
+                </Box>
+              </Box>
+            </Box>
+
+            {/* 오른쪽: AI 답변 사이드바 (데스크탑) — 게시글 컨테이너 밖, 절대위치 */}
             {isError && (
-              <Box sx={{ display: { xs: 'block', lg: 'none' }, mb: 3 }}>
-                <AIAnswerSection
-                  postId={postId}
-                  token={token}
-                  colors={colors}
-                  postUpdatedAt={feed.UPDATED_AT || feed.updatedAt}
-                  isMyPost={(feed.WRITER || feed.writer) === myNickname}
-                  myNickname={myNickname}
-                />
+              <Box sx={{
+                display: { xs: 'none', xl: 'block' },
+                position: 'absolute',
+                top: { xs: 24, md: 40 },
+                left: 'calc(50% + 420px)',
+                width: 300,
+              }}>
+                <Box sx={{ position: 'sticky', top: 72 }}>
+                  <AIAnswerSection
+                    postId={postId}
+                    token={token}
+                    colors={colors}
+                    postUpdatedAt={feed.UPDATED_AT || feed.updatedAt}
+                    isMyPost={(feed.WRITER || feed.writer) === myNickname}
+                  />
+                </Box>
               </Box>
             )}
 
-            {/* 게시물 본문 카드 */}
-            <Box onClick={handleCardClick}
-              sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2.5, p: { xs: 2.5, md: 4 }, mb: 3, animation: 'fadeUp 0.4s ease both', cursor: 'default', position: 'relative', overflow: 'hidden', '@keyframes fadeUp': { from: { opacity: 0, transform: 'translateY(16px)' }, to: { opacity: 1, transform: 'translateY(0)' } } }}>
-              <HeartOverlay trigger={heartTrigger} />
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer', '&:hover .writer-name': { color: colors.accent } }}
-                  onClick={e => { e.stopPropagation(); handleProfileClick(feed.WRITER || feed.writer); }}>
-                  <Avatar src={resolveAvatarSrc(feed.AVATAR || feed.avatar)}
-                    sx={{ width: 44, height: 44, backgroundColor: colors.textPrimary, fontWeight: 800, fontSize: '1rem', boxShadow: '0 2px 10px rgba(15,23,42,0.12)', transition: 'all 0.2s', '&:hover': { boxShadow: `0 4px 16px rgba(86,156,214,0.3)` } }}>
-                    {getInitial(feed.WRITER || feed.writer)}
-                  </Avatar>
-                  <Box>
-                    <Typography className="writer-name" sx={{ fontWeight: 700, fontSize: '0.92rem', color: colors.textPrimary, lineHeight: 1.2, transition: 'color 0.15s' }}>
-                      {feed.WRITER || feed.writer || 'Unknown'}
-                    </Typography>
-                    <Typography sx={{ color: colors.textHint, fontSize: '0.75rem', mt: 0.2 }}>
-                      {(feed.ROLE || feed.role || 'Developer')}
-                      {(feed.CREATED_AT || feed.createdAt) ? ` · ${formatDate(feed.CREATED_AT || feed.createdAt)}` : ''}
-                    </Typography>
-                  </Box>
-                </Box>
-                <Tooltip title="신고하기" placement="top">
-                  <IconButton size="small" onClick={e => { e.stopPropagation(); setReportOpen(true); }}
-                    sx={{ color: colors.textHint, borderRadius: 1.5, border: `1px solid ${colors.border}`, '&:hover': { backgroundColor: colors.mode === 'dark' ? '#2D1515' : '#FEF2F2', color: '#DC2626', borderColor: '#FECACA' }, transition: 'all 0.15s' }}>
-                    <FlagOutlined sx={{ fontSize: 17 }} />
-                  </IconButton>
-                </Tooltip>
-              </Box>
-              <Typography sx={{ fontWeight: 800, fontSize: { xs: '1.3rem', md: '1.65rem' }, color: colors.textPrimary, lineHeight: 1.3, letterSpacing: '-0.02em', mb: 3 }}>
-                {feed.TITLE || feed.title}
-              </Typography>
-              {imageList.length > 0 && <ImageGallery images={imageList} colors={colors} />}
-              {videoUrl && <VideoPlayer src={videoUrl} colors={colors} />}
-              {renderContentWithCopy(feed.DESCRIPTION || feed.description || feed.CONTENT || feed.content, colors)}
-              {(feed.CODE || feed.code) && <CodeBlock code={feed.CODE || feed.code} />}
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pt: 3, mt: 2, borderTop: `1px solid ${colors.border}` }}>
-                <Stack direction="row" spacing={1}>
-                  <Button size="small"
-                    startIcon={liked ? <Favorite sx={{ fontSize: 17, color: '#EF4444' }} /> : <FavoriteBorderOutlined sx={{ fontSize: 17 }} />}
-                    onClick={e => { e.stopPropagation(); handleLike(); }}
-                    sx={{ color: liked ? '#EF4444' : colors.textMuted, fontWeight: 600, fontSize: '0.82rem', textTransform: 'none', px: 1.5, borderRadius: 1.5, '&:hover': { backgroundColor: colors.mode === 'dark' ? 'rgba(239,68,68,0.1)' : '#FEF2F2', color: '#EF4444' }, transition: 'all 0.15s' }}>
-                    {likeCount}
-                  </Button>
-                  <Button size="small"
-                    startIcon={<ChatBubbleOutline sx={{ fontSize: 17 }} />}
-                    onClick={e => { e.stopPropagation(); commentSectionRef.current?.scrollIntoView({ behavior: 'smooth' }); }}
-                    sx={{ color: colors.textMuted, fontWeight: 600, fontSize: '0.82rem', textTransform: 'none', px: 1.5, borderRadius: 1.5, '&:hover': { backgroundColor: colors.mode === 'dark' ? 'rgba(37,99,235,0.1)' : '#EFF6FF', color: colors.accent }, transition: 'all 0.15s' }}>
-                    {totalComments}
-                  </Button>
-                </Stack>
-                <Stack direction="row" spacing={0.5} alignItems="center">
-                  <Tooltip title="공유하기" placement="top">
-                    <IconButton size="small" onClick={e => { e.stopPropagation(); handleShare(); }} sx={{ color: colors.textHint, '&:hover': { color: colors.accent }, transition: 'color 0.15s' }}>
-                      <ShareOutlined sx={{ fontSize: 19 }} />
-                    </IconButton>
-                  </Tooltip>
-                  <IconButton size="small" onClick={e => { e.stopPropagation(); handleBookmark(); }}>
-                    {bookmarked
-                      ? <Bookmark sx={{ fontSize: 20, color: colors.accent }} />
-                      : <BookmarkBorderOutlined sx={{ fontSize: 20, color: colors.textHint }} />}
-                  </IconButton>
-                </Stack>
-              </Box>
-            </Box>
-
-            {/* 댓글 섹션 */}
-            <Box id="comments" ref={commentSectionRef}
-              sx={{ animation: 'fadeUp 0.4s ease 0.1s both', '@keyframes fadeUp': { from: { opacity: 0, transform: 'translateY(16px)' }, to: { opacity: 1, transform: 'translateY(0)' } } }}>
-              <Box sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2.5 }}>
-                <Box sx={{ px: 3, py: 2.5, borderBottom: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                  <ChatBubbleOutline sx={{ fontSize: 18, color: colors.textMuted }} />
-                  <Typography sx={{ fontWeight: 800, fontSize: '0.95rem', color: colors.textPrimary }}>댓글</Typography>
-                  <Box sx={{ px: 1.2, py: 0.15, backgroundColor: colors.inputBg, borderRadius: 1, border: `1px solid ${colors.border}` }}>
-                    <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: colors.textMuted }}>{totalComments}</Typography>
-                  </Box>
-                </Box>
-                <Box ref={commentListRef} sx={{ px: 3 }}>
-                  {commLoading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
-                      <CircularProgress size={22} sx={{ color: colors.accent }} />
-                    </Box>
-                  ) : comments.length === 0 ? (
-                    <Box sx={{ textAlign: 'center', py: 8 }}>
-                      <ChatBubbleOutline sx={{ fontSize: 32, color: colors.border, mb: 1.5 }} />
-                      <Typography sx={{ color: colors.textHint, fontSize: '0.85rem', fontWeight: 500 }}>첫 댓글을 남겨보세요!</Typography>
-                    </Box>
-                  ) : (
-                    comments.map((c, i) => (
-                      <CommentItem key={c.COMMENT_ID || c.id} comment={c} index={i} depth={0}
-                        onReply={setReplyTarget} myNickname={myNickname} navigate={navigate}
-                        postWriter={feed.WRITER || feed.writer} colors={colors}
-                        onDelete={handleCommentDelete} onEdit={handleCommentEdit}
-                        token={token} commentModules={commentModules} />
-                    ))
-                  )}
-                </Box>
-                <Box sx={{ px: 3, py: 3, borderTop: `1px solid ${colors.border}`, backgroundColor: colors.mode === 'dark' ? 'rgba(255,255,255,0.02)' : '#FAFBFC' }}>
-                  {replyTarget && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, mb: 1.5, backgroundColor: colors.mode === 'dark' ? '#1E3A5F' : '#EFF6FF', borderRadius: 1.5, border: `1px solid ${colors.accent}`, animation: 'slideDown 0.2s ease both', '@keyframes slideDown': { from: { opacity: 0, transform: 'translateY(-8px)' }, to: { opacity: 1, transform: 'translateY(0)' } } }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                        <ReplyOutlined sx={{ fontSize: 14, color: colors.accent }} />
-                        <Typography sx={{ fontSize: '0.78rem', color: colors.accent, fontWeight: 600 }}>
-                          @{replyTarget.WRITER || replyTarget.writer} 에게 답글 작성 중
-                        </Typography>
-                      </Box>
-                      <IconButton size="small" onClick={() => setReplyTarget(null)} sx={{ color: colors.textHint, p: 0.3 }}>
-                        <Close sx={{ fontSize: 14 }} />
-                      </IconButton>
-                    </Box>
-                  )}
-                  <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
-                    <Avatar src={resolveAvatarSrc(myAvatar)} sx={{ width: 34, height: 34, fontSize: '0.7rem', backgroundColor: colors.textPrimary, flexShrink: 0, mt: 0.5, fontWeight: 800 }}>
-                      {getInitial(myNickname)}
-                    </Avatar>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Box sx={makeQuillBoxSx(colors)}>
-                        <ReactQuill ref={commentInputRef} theme="snow" value={newComment} onChange={setNewComment} modules={commentModules}
-                          placeholder={replyTarget ? `@${replyTarget.WRITER || replyTarget.writer}에게 답글...` : '댓글을 작성하세요... 코드 강조, 인용구 사용 가능'} />
-                      </Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1.5 }}>
-                        <Button variant="contained" disabled={isCommentEmpty(newComment) || submitting} onClick={handleAddComment}
-                          endIcon={submitting ? <CircularProgress size={13} sx={{ color: '#fff' }} /> : <ArrowUpward sx={{ fontSize: 15 }} />}
-                          sx={{ backgroundColor: colors.textPrimary, color: colors.paper, textTransform: 'none', fontWeight: 700, fontSize: '0.82rem', px: 2.5, py: 0.8, borderRadius: 1.5, boxShadow: 'none', '&:hover': { backgroundColor: colors.accent }, '&.Mui-disabled': { backgroundColor: colors.border, color: colors.textHint }, transition: 'all 0.15s' }}>
-                          {replyTarget ? '답글 등록' : '댓글 등록'}
-                        </Button>
-                      </Box>
-                    </Box>
-                  </Box>
-                </Box>
-              </Box>
-            </Box>
           </Box>
-
-          {/* 오른쪽: AI 답변 사이드바 (데스크탑) */}
-          {isError && (
-            <Box sx={{ display: { xs: 'none', lg: 'block' } }}>
-              <AIAnswerSection
-                postId={postId}
-                token={token}
-                colors={colors}
-                postUpdatedAt={feed.UPDATED_AT || feed.updatedAt}
-                isMyPost={(feed.WRITER || feed.writer) === myNickname}
-                myNickname={myNickname}
-              />
-            </Box>
-          )}
 
         </Box>
       </Box>
 
+      <EditModal
+        open={editOpen}
+        postId={postId}
+        onClose={() => setEditOpen(false)}
+        onSaved={() => {
+          setEditOpen(false);
+          // 게시글 다시 불러오기
+          fetch(`${API}/feed/${postId}`, { headers: { Authorization: `Bearer ${token}` } })
+            .then(r => r.json())
+            .then(data => { if (data.success) setFeed(data.feed); });
+        }}
+      />
       {/* ── 신고 모달 ── */}
       {reportOpen && (
         <ReportModal open={reportOpen} onClose={() => setReportOpen(false)}
@@ -1365,6 +1454,27 @@ export default function PostDetail() {
           onDuplicate={() => { setReportOpen(false); setReportDuplicateOpen(true); }}
           colors={colors} />
       )}
+
+      {/* ── 게시글 삭제 확인 모달 ── */}
+      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} closeAfterTransition slots={{ backdrop: Backdrop }}
+        slotProps={{ backdrop: { timeout: 200, sx: { backgroundColor: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(4px)' } } }}>
+        <Fade in={deleteOpen}>
+          <Box sx={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: { xs: '88vw', sm: 360 }, backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 3, boxShadow: '0 20px 60px rgba(15,23,42,0.2)', p: 3, outline: 'none' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, mb: 1.5 }}>
+              <Box sx={{ width: 32, height: 32, borderRadius: 1.5, backgroundColor: colors.mode === 'dark' ? '#2D1515' : '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Delete sx={{ fontSize: 17, color: '#EF4444' }} />
+              </Box>
+              <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: colors.textPrimary }}>게시글 삭제</Typography>
+            </Box>
+            <Typography sx={{ fontSize: '0.85rem', color: colors.textMuted, mb: 3 }}>이 게시글을 삭제하시겠습니까? 삭제된 게시글은 복구할 수 없습니다.</Typography>
+            <Stack direction="row" spacing={1.5} justifyContent="flex-end">
+              <Button onClick={() => setDeleteOpen(false)} sx={{ fontSize: '0.82rem', color: colors.textMuted, border: `1px solid ${colors.border}`, borderRadius: 1.5, textTransform: 'none', px: 2 }}>취소</Button>
+              <Button variant="contained" onClick={handleDeletePost}
+                sx={{ fontSize: '0.82rem', backgroundColor: '#EF4444', color: '#fff', boxShadow: 'none', borderRadius: 1.5, textTransform: 'none', px: 2, '&:hover': { backgroundColor: '#DC2626' } }}>삭제</Button>
+            </Stack>
+          </Box>
+        </Fade>
+      </Modal>
 
       {/* ── 토스트 ── */}
       <Snackbar open={shareOpen} autoHideDuration={2500} onClose={() => setShareOpen(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>

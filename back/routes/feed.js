@@ -165,7 +165,7 @@ router.post('/:postId/ai-answer', jwtAuthentication, async (req, res) => {
 
 // ── 게시글 등록 ──
 router.post('/register', jwtAuthentication, async (req, res) => {
-    const { category, title, content, tags } = req.body;
+    const { category, title, content, tags, hide_like_count, disable_comments, location } = req.body;
     const userId = req.user.userId;
 
     let connection;
@@ -179,10 +179,11 @@ router.post('/register', jwtAuthentication, async (req, res) => {
 
         const categoryId = catRes.rows[0][0];
 
+
         await connection.execute(
-            `INSERT INTO POSTS (POST_ID, USER_ID, CATEGORY_ID, POST_TYPE, TITLE, CONTENT) 
-             VALUES (SEQ_POST_ID.NEXTVAL, :userId, :categoryId, 'QUESTION', :title, EMPTY_CLOB())`,
-            { userId, categoryId, title },
+            `INSERT INTO POSTS (POST_ID, USER_ID, CATEGORY_ID, POST_TYPE, TITLE, CONTENT, LOCATION, HIDE_LIKE_COUNT, DISABLE_COMMENTS) 
+     VALUES (SEQ_POST_ID.NEXTVAL, :userId, :categoryId, 'QUESTION', :title, EMPTY_CLOB(), :location, :hideLike, :disableComments)`,
+            { userId, categoryId, title, location: location || null, hideLike: hide_like_count || 'N', disableComments: disable_comments || 'N' },
             { autoCommit: false }
         );
 
@@ -257,18 +258,26 @@ router.post('/register', jwtAuthentication, async (req, res) => {
 });
 
 router.get('/trending', jwtAuthentication, async (req, res) => {
+    const { category } = req.query; // 'ERROR' | 'QUESTION' | 'FREE' | undefined
     const conn = await db.getConnection();
     try {
+        const binds = {};
+        let categoryFilter = '';
+        if (category) {
+            categoryFilter = `AND c.CATEGORY_NAME = :category`;
+            binds.category = category;
+        }
         const result = await conn.execute(
-            `select t.tag_name, count(pt.post_id) as post_count
-             from tags t
-             join post_tags pt on pt.tag_id = t.tag_id
-             join posts p on p.post_id = pt.post_id and p.status = 'ACTIVE'
-             group by t.tag_name
-             order by post_count desc
-             fetch first 5 rows only`,
-            {},
-            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+            `SELECT t.TAG_NAME, COUNT(pt.POST_ID) AS POST_COUNT
+       FROM TAGS t
+       JOIN POST_TAGS pt ON pt.TAG_ID = t.TAG_ID
+       JOIN POSTS p ON p.POST_ID = pt.POST_ID AND p.STATUS = 'ACTIVE'
+       LEFT JOIN CATEGORIES c ON c.CATEGORY_ID = p.CATEGORY_ID
+       WHERE 1=1 ${categoryFilter}
+       GROUP BY t.TAG_NAME
+       ORDER BY POST_COUNT DESC
+       FETCH FIRST 5 ROWS ONLY`,
+            binds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
         res.json({ success: true, tags: result.rows });
     } catch (err) {
@@ -294,6 +303,7 @@ router.get('/list', jwtAuthentication, async (req, res) => {
                 c.CATEGORY_NAME AS "category",
                 u.NICKNAME   AS "writer",
                 u.BIO        AS "role",
+                p.LOCATION AS "LOCATION",
                 (SELECT image_url FROM profile_images
                  WHERE user_id = u.user_id AND is_main = 'Y' AND rownum = 1) AS "avatar",
                 (SELECT COUNT(*) FROM post_likes WHERE post_id = p.post_id) AS "likes",
@@ -430,18 +440,21 @@ router.get('/recommended', jwtAuthentication, async (req, res) => {
 });
 
 router.get('/:postId', jwtAuthentication, async (req, res) => {
-  const postId = Number(req.params.postId);
-  const userId = getUserId(req);
+    const postId = Number(req.params.postId);
+    const userId = getUserId(req);
 
-  if (isNaN(postId)) {
-    return res.status(400).json({ success: false, message: '유효하지 않은 게시글 번호입니다.' });
-  }
+    if (isNaN(postId)) {
+        return res.status(400).json({ success: false, message: '유효하지 않은 게시글 번호입니다.' });
+    }
 
-  const conn = await db.getConnection();
-  try {
-    // 게시글 데이터 먼저 조회 후 즉시 응답
-    const postResult = await conn.execute(
-      `SELECT p.*,
+    const conn = await db.getConnection();
+    try {
+        const postResult = await conn.execute(
+            `SELECT p.*,
+             p.LOCATION AS LOCATION, 
+              p.HIDE_LIKE_COUNT AS HIDE_LIKE_COUNT,
+   p.DISABLE_COMMENTS AS DISABLE_COMMENTS,
+   c.CATEGORY_NAME AS CATEGORY_NAME,
        c.CATEGORY_NAME AS CATEGORY_NAME,
        u.NICKNAME  AS WRITER,
        u.BIO       AS ROLE,
@@ -457,66 +470,66 @@ router.get('/:postId', jwtAuthentication, async (req, res) => {
        JOIN USERS u ON u.USER_ID = p.USER_ID
        LEFT JOIN CATEGORIES c ON c.CATEGORY_ID = p.CATEGORY_ID
        WHERE p.POST_ID = :postId AND p.STATUS = 'ACTIVE'`,
-      { postId, userId1: userId, userId2: userId },
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
+            { postId, userId1: userId, userId2: userId },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
 
-    if (!postResult.rows.length) {
-      return res.status(404).json({ success: false, message: '게시글을 찾을 수 없습니다.' });
-    }
+        if (!postResult.rows.length) {
+            return res.status(404).json({ success: false, message: '게시글을 찾을 수 없습니다.' });
+        }
 
-    const feed = postResult.rows[0];
-    let content = feed.CONTENT;
-    if (content && typeof content.getData === 'function') {
-      content = await content.getData();
-    }
+        const feed = postResult.rows[0];
+        let content = feed.CONTENT;
+        if (content && typeof content.getData === 'function') {
+            content = await content.getData();
+        }
 
-    // 응답 먼저
-    res.json({
-      success: true,
-      feed: {
-        ...feed,
-        CONTENT: content,
-        liked: feed.LIKED > 0,
-        bookmarked: feed.BOOKMARKED > 0,
-        tags: feed.TAGS ? feed.TAGS.split(',') : [],
-      },
-    });
+        // 응답 먼저
+        res.json({
+            success: true,
+            feed: {
+                ...feed,
+                CONTENT: content,
+                liked: feed.LIKED > 0,
+                bookmarked: feed.BOOKMARKED > 0,
+                tags: feed.TAGS ? feed.TAGS.split(',') : [],
+            },
+        });
 
-    // 조회수 처리는 응답 후 백그라운드에서
-    db.getConnection().then(async (bgConn) => {
-      try {
-        const dupCheck = await bgConn.execute(
-          `SELECT COUNT(*) AS CNT FROM POST_VIEWS
+        // 조회수 처리는 응답 후 백그라운드에서
+        db.getConnection().then(async (bgConn) => {
+            try {
+                const dupCheck = await bgConn.execute(
+                    `SELECT COUNT(*) AS CNT FROM POST_VIEWS
            WHERE POST_ID = :postId AND USER_ID = :userId
            AND VIEWED_AT > SYSDATE - 1/24`,
-          { postId, userId },
-          { outFormat: oracledb.OUT_FORMAT_OBJECT }
-        );
-        if (dupCheck.rows[0].CNT === 0) {
-          await bgConn.execute(
-            `INSERT INTO POST_VIEWS (POST_ID, USER_ID, IP_ADDR) VALUES (:postId, :userId, :ip)`,
-            { postId, userId, ip: req.ip }
-          );
-          await bgConn.execute(
-            `UPDATE POSTS SET VIEW_COUNT = VIEW_COUNT + 1 WHERE POST_ID = :postId`,
-            { postId }
-          );
-          await bgConn.commit();
-        }
-      } catch (e) {
-        console.error('[view count bg]', e);
-      } finally {
-        await bgConn.close();
-      }
-    }).catch(() => {});
+                    { postId, userId },
+                    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+                );
+                if (dupCheck.rows[0].CNT === 0) {
+                    await bgConn.execute(
+                        `INSERT INTO POST_VIEWS (POST_ID, USER_ID, IP_ADDR) VALUES (:postId, :userId, :ip)`,
+                        { postId, userId, ip: req.ip }
+                    );
+                    await bgConn.execute(
+                        `UPDATE POSTS SET VIEW_COUNT = VIEW_COUNT + 1 WHERE POST_ID = :postId`,
+                        { postId }
+                    );
+                    await bgConn.commit();
+                }
+            } catch (e) {
+                console.error('[view count bg]', e);
+            } finally {
+                await bgConn.close();
+            }
+        }).catch(() => { });
 
-  } catch (err) {
-    console.error('[GET /feed/:postId]', err);
-    return res.status(500).json({ success: false, message: '서버 오류' });
-  } finally {
-    await conn.close();
-  }
+    } catch (err) {
+        console.error('[GET /feed/:postId]', err);
+        return res.status(500).json({ success: false, message: '서버 오류' });
+    } finally {
+        await conn.close();
+    }
 });
 // ──────────────────────────────────────────────────────────
 //  GET /feed/:postId/comments — 댓글 조회
@@ -820,7 +833,7 @@ router.post('/:postId/bookmark', jwtAuthentication, async (req, res) => {
 router.put('/:postId', jwtAuthentication, async (req, res) => {
     const { postId } = req.params;
     const userId = getUserId(req);
-    const { category, title, content, tags } = req.body;
+    const { category, title, content, tags, hide_like_count, disable_comments, location } = req.body;
 
     if (!title?.trim() || !content?.trim()) {
         return res.status(400).json({ success: false, message: '제목과 본문은 필수입니다.' });
@@ -842,8 +855,11 @@ router.put('/:postId', jwtAuthentication, async (req, res) => {
         const categoryId = catRes.rows[0]?.CATEGORY_ID ?? null;
 
         await conn.execute(
-            `UPDATE POSTS SET TITLE = :title, CATEGORY_ID = :categoryId, UPDATED_AT = SYSDATE WHERE POST_ID = :postId`,
-            { title, categoryId, postId }, { autoCommit: false }
+            `UPDATE POSTS SET TITLE = :title, CATEGORY_ID = :categoryId, LOCATION = :location,
+     HIDE_LIKE_COUNT = :hideLike, DISABLE_COMMENTS = :disableComments, UPDATED_AT = SYSDATE
+     WHERE POST_ID = :postId`,
+            { title, categoryId, location: location || null, hideLike: hide_like_count || 'N', disableComments: disable_comments || 'N', postId },
+            { autoCommit: false }
         );
 
         const lobRes = await conn.execute(

@@ -15,19 +15,22 @@ import {
 } from '@mui/icons-material';
 import NotificationSidebar from './NotificationSidebar';
 import { useColorMode } from '../App';
+// ✅ 1. RegisterModal import 추가
+import RegisterModal from './RegisterModal';
 
 const API = 'http://localhost:3010';
 const DRAWER_WIDTH = 260;
 const getInitial = (name) => (name ? name.charAt(0).toUpperCase() : '?');
 
 const MENU_ITEMS = [
-  { text: '피드',      icon: <HomeOutlined sx={{ fontSize: 24 }} />,             activeIcon: <Home sx={{ fontSize: 24 }} />,             path: '/feed' },
-  { text: '탐색',      icon: <SearchOutlined sx={{ fontSize: 24 }} />,           activeIcon: <SearchOutlined sx={{ fontSize: 24 }} />, path: '/explore' },
-  { text: '메시지',    icon: <ForumOutlined sx={{ fontSize: 22 }} />,            activeIcon: <Forum sx={{ fontSize: 22 }} />,            path: '/messages' },
+  { text: '피드', icon: <HomeOutlined sx={{ fontSize: 24 }} />, activeIcon: <Home sx={{ fontSize: 24 }} />, path: '/feed' },
+  { text: '탐색', icon: <SearchOutlined sx={{ fontSize: 24 }} />, activeIcon: <SearchOutlined sx={{ fontSize: 24 }} />, path: '/explore' },
+  { text: '메시지', icon: <ForumOutlined sx={{ fontSize: 22 }} />, activeIcon: <Forum sx={{ fontSize: 22 }} />, path: '/messages' },
   { id: 'noti', text: '알림', icon: <NotificationsNoneOutlined sx={{ fontSize: 24 }} />, activeIcon: <Notifications sx={{ fontSize: 24 }} /> },
-  { text: '새 게시물', icon: <AddBoxOutlined sx={{ fontSize: 24 }} />,          activeIcon: <AddBox sx={{ fontSize: 24 }} />,          path: '/register' },
-  { text: '내 활동',   icon: <BarChartOutlined sx={{ fontSize: 24 }} />,         activeIcon: <BarChart sx={{ fontSize: 24 }} />,        path: '/myactivity' },
-  { text: '설정',      icon: <SettingsOutlined sx={{ fontSize: 24 }} />,         activeIcon: <Settings sx={{ fontSize: 24 }} />,        path: '/settings' },
+  // ✅ 2. path 제거하고 id 추가 — path가 있으면 Link로 렌더돼서 모달 대신 페이지 이동함
+  { id: 'register', text: '새 게시물', icon: <AddBoxOutlined sx={{ fontSize: 24 }} />, activeIcon: <AddBox sx={{ fontSize: 24 }} /> },
+  { text: '내 활동', icon: <BarChartOutlined sx={{ fontSize: 24 }} />, activeIcon: <BarChart sx={{ fontSize: 24 }} />, path: '/myactivity' },
+  { text: '설정', icon: <SettingsOutlined sx={{ fontSize: 24 }} />, activeIcon: <Settings sx={{ fontSize: 24 }} />, path: '/settings' },
 ];
 
 const DarkModeToggle = ({ mode, toggleColorMode, isOpen, colors }) => {
@@ -160,20 +163,22 @@ export default function Menu() {
   const token = localStorage.getItem('accessToken');
   const { mode, toggleColorMode } = useColorMode();
 
-  // Explore 컴포넌트와 동일한 색상 팔레트 적용
   const colors = {
-    bg:          mode === 'dark' ? '#0F1117' : '#F8FAFC',
-    paper:       mode === 'dark' ? '#1A1D27' : '#FFFFFF',
-    border:      mode === 'dark' ? '#2D3148' : '#E2E8F0',
+    bg: mode === 'dark' ? '#0F1117' : '#F8FAFC',
+    paper: mode === 'dark' ? '#1A1D27' : '#FFFFFF',
+    border: mode === 'dark' ? '#2D3148' : '#E2E8F0',
     borderFocus: mode === 'dark' ? '#4B5280' : '#CBD5E1',
     textPrimary: mode === 'dark' ? '#F1F5F9' : '#0F172A',
-    textSecondary: mode === 'dark' ? '#94A3B8' : '#64748B', // textMuted 대응
-    hover:       mode === 'dark' ? '#22253A' : '#F8FAFC',
+    textSecondary: mode === 'dark' ? '#94A3B8' : '#64748B',
+    hover: mode === 'dark' ? '#22253A' : '#F8FAFC',
   };
 
   const [isOpen, setIsOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
-  const [notiOpen, setNotiOpen] = useState(false);
+  const [notiOpen, setNotiOpen] = useState(
+    () => localStorage.getItem('notiSidebarOpen') === 'true'
+  );
+  const [registerOpen, setRegisterOpen] = useState(false);
   const [user, setUser] = useState({ name: '사용자', handle: '@user', avatar: null });
 
   const drawerWidth = isOpen ? DRAWER_WIDTH : 80;
@@ -195,7 +200,14 @@ export default function Menu() {
     })();
   }, [token]);
 
-  const handleMenuClick = (item) => { if (item.id === 'noti') setNotiOpen(true); };
+  const handleMenuClick = (item) => {
+    if (item.id === 'noti') {
+      setNotiOpen(true);
+      localStorage.setItem('notiSidebarOpen', 'true');
+    }
+    if (item.id === 'register') setRegisterOpen(true);
+  };
+
   const handleLogoutClick = (e) => { e.stopPropagation(); setLogoutOpen(true); };
   const confirmLogout = () => { setLogoutOpen(false); localStorage.removeItem('accessToken'); navigate('/'); };
 
@@ -243,7 +255,12 @@ export default function Menu() {
               <NavItem
                 key={item.text}
                 item={item}
-                isActive={location.pathname === item.path || (item.id === 'noti' && notiOpen)}
+                isActive={
+                  (item.path && location.pathname === item.path) ||
+                  (item.id === 'noti' && notiOpen) ||
+                  // ✅ register 모달 열려있을 때 활성 표시
+                  (item.id === 'register' && registerOpen)
+                }
                 isOpen={isOpen}
                 onClick={() => handleMenuClick(item)}
                 colors={colors}
@@ -327,7 +344,15 @@ export default function Menu() {
         )}
       </Drawer>
 
-      <NotificationSidebar open={notiOpen} onClose={() => setNotiOpen(false)} />
+      <NotificationSidebar
+        open={notiOpen}
+        onClose={() => {
+          setNotiOpen(false);
+          localStorage.setItem('notiSidebarOpen', 'false');
+        }}
+      />
+
+      <RegisterModal open={registerOpen} onClose={() => setRegisterOpen(false)} />
 
       <Dialog
         open={logoutOpen}

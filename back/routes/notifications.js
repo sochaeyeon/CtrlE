@@ -12,21 +12,38 @@ router.get('/', auth, async (req, res) => {
             `SELECT n.noti_id, n.sender_id, n.noti_type, n.target_type,
                     n.target_id, n.is_read, n.created_at,
                     u.nickname as sender_nickname,
-                    (select image_url from profile_images
-                     where user_id = u.user_id and is_main = 'Y' and rownum = 1) as sender_avatar,
-                    (select case when count(*) > 0 then 'Y' else 'N' end 
-                     from follows 
-                     where follower_id = :userId and following_id = n.sender_id) as is_following,
-                    null as target_image
-             from notifications n
-             left join users u on u.user_id = n.sender_id
-             where n.receiver_id = :userId
-             order by n.created_at desc`,
+                    (SELECT image_url FROM profile_images
+                     WHERE user_id = u.user_id AND is_main = 'Y' AND rownum = 1) AS sender_avatar,
+                    (SELECT CASE WHEN COUNT(*) > 0 THEN 'Y' ELSE 'N' END
+                     FROM follows
+                     WHERE follower_id = :userId AND following_id = n.sender_id) AS is_following,
+                    CASE WHEN n.target_type = 'POST' THEN
+                        (SELECT p.content FROM posts p WHERE p.post_id = n.target_id)
+                    ELSE NULL END AS target_content
+             FROM notifications n
+             LEFT JOIN users u ON u.user_id = n.sender_id
+             WHERE n.receiver_id = :userId
+             ORDER BY n.created_at DESC`,
             { userId },
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
-        const unread_count = result.rows.filter(r => r.IS_READ === 'N').length;
-        res.json({ success: true, notifications: result.rows, unread_count });
+
+        const notifications = await Promise.all(result.rows.map(async (row) => {
+            let targetImage = null;
+            if (row.TARGET_CONTENT) {
+                let content = row.TARGET_CONTENT;
+                if (typeof content.getData === 'function') {
+                    content = await content.getData();
+                }
+                const match = content.match(/src="([^"]+)"/);
+                if (match) targetImage = match[1];
+            }
+            const { TARGET_CONTENT, ...rest } = row;
+            return { ...rest, TARGET_IMAGE: targetImage };
+        }));
+
+        const unread_count = notifications.filter(r => r.IS_READ === 'N').length;
+        res.json({ success: true, notifications, unread_count });
     } catch (err) {
         console.error('[GET /notifications]', err);
         res.status(500).json({ success: false, message: err.message });
@@ -35,13 +52,12 @@ router.get('/', auth, async (req, res) => {
     }
 });
 
-// PUT /notifications/read - 전체 읽음 처리
 router.put('/read', auth, async (req, res) => {
     const userId = req.user?.userId ?? req.user?.id;
     const conn = await db.getConnection();
     try {
         await conn.execute(
-            `update notifications set is_read = 'Y' where receiver_id = :userId and is_read = 'N'`,
+            `UPDATE notifications SET is_read = 'Y' WHERE receiver_id = :userId AND is_read = 'N'`,
             { userId }
         );
         await conn.commit();

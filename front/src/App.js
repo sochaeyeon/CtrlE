@@ -6,17 +6,17 @@ import { Close, NotificationsOff, Notifications } from '@mui/icons-material';
 import Login from './components/Login';
 import Join from './components/Join';
 import Feed from './components/Feed';
-import Register from './components/Register';
+import Register from './components/RegisterModal';
 import MyPage from './components/MyPage';
 import Menu from './components/Menu';
 import Explore from './components/Explore';
 import PostDetail from './components/PostDetail';
-import EditPost from './components/EditPost';
 import UserProfile from './components/UserProfile';
 import Messages from './components/Messages';
 import NotificationSidebar from './components/NotificationSidebar';
 import Settings from './components/Settings';
 import Myactivity from './components/Myactivity';
+import EditModal from './components/EditModal';
 
 const API = 'http://localhost:3010';
 
@@ -240,10 +240,8 @@ function AppContent() {
           <Route path="/join" element={<Join />} />
           <Route path="/feed" element={<Feed />} />
           <Route path="/explore" element={<Explore />} />
-          <Route path="/register" element={<Register />} />
           <Route path="/mypage" element={<MyPage />} />
           <Route path="/post/:postId" element={<PostDetail />} />
-          <Route path="/edit/:postId" element={<EditPost />} />
           <Route path="/user/:nickname" element={<UserProfile />} />
           <Route path="/messages" element={<Messages />} />
           <Route path="/messages/room/:roomId" element={<Messages />} />
