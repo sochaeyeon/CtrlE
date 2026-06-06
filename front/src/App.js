@@ -135,6 +135,15 @@ function AppContent() {
     localStorage.setItem('mutedRooms', JSON.stringify({ ...currentMuted, [roomId]: true }));
   };
 
+  const myNickname = (() => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) return '';
+      const payload = JSON.parse(decodeURIComponent(escape(atob(token.split('.')[1]))));
+      return payload.nickname || '';
+    } catch { return ''; }
+  })();
+
   const handleUnmuteRoom = (roomId) => {
     const currentMuted = JSON.parse(localStorage.getItem('mutedRooms') || '{}');
     delete currentMuted[roomId];
@@ -165,7 +174,6 @@ function AppContent() {
 
         if (data.success && data.rooms) {
           const currentPath = location.pathname;
-          const mutedRooms = JSON.parse(localStorage.getItem('mutedRooms') || '{}');
 
           const newNotis = [];
 
@@ -174,12 +182,15 @@ function AppContent() {
             const newTime = room.LAST_MESSAGE_AT;
 
             if (prevTime && newTime && newTime !== prevTime && room.UNREAD_COUNT > 0) {
-              if (currentPath !== `/messages/room/${room.ROOM_ID}` && !mutedRooms[room.ROOM_ID]) {
+              const isMentioned = typeof room.LAST_MESSAGE === 'string' && room.LAST_MESSAGE.includes(`@${myNickname}`);
+              const shouldNotify = currentPath !== `/messages/room/${room.ROOM_ID}` &&
+                (!room.IS_MUTED || isMentioned);
+
+              if (shouldNotify) {
                 const isGroup = room.ROOM_TYPE === 'GROUP';
                 const roomName = isGroup ? (room.ROOM_NAME || '그룹 채팅방') : null;
                 const senderAvatar = isGroup ? room.LAST_SENDER_AVATAR : room.TARGET_AVATAR;
 
-                // UNREAD_MESSAGES 배열이 있으면 각각 토스트, 없으면 기존처럼 1개
                 const messages = room.UNREAD_MESSAGES?.length > 0
                   ? room.UNREAD_MESSAGES
                   : [{ MESSAGE: room.LAST_MESSAGE, SENDER_NICKNAME: isGroup ? room.LAST_SENDER_NICKNAME : room.TARGET_NICKNAME }];
@@ -201,6 +212,11 @@ function AppContent() {
                     previewImage = msg.IMAGE_URL;
                   }
 
+                  // 멘션이 포함된 메시지면 메시지 앞에 표시
+                  if (typeof displayMsg === 'string' && displayMsg.includes(`@${myNickname}`)) {
+                    displayMsg = `💬 ${displayMsg}`;
+                  }
+
                   notiCounter += 1;
                   newNotis.push({
                     roomId: room.ROOM_ID,
@@ -211,7 +227,8 @@ function AppContent() {
                     roomName,
                     message: displayMsg,
                     previewSticker,
-                    previewImage
+                    previewImage,
+                    isMention: isMentioned,
                   });
                 });
               }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Box, Avatar, Typography, createTheme, ThemeProvider, CssBaseline,
+  Box, Avatar, Typography,
   InputBase, IconButton, List, ListItem, ListItemAvatar, ListItemText,
   CircularProgress, Paper, Badge, Stack, Menu, MenuItem, Dialog,
   DialogTitle, DialogContent, DialogActions, Button, Switch,
@@ -15,45 +15,12 @@ import {
   AttachFile, ExpandMore, ExpandLess, PeopleOutline, NotificationsOff,
   ArrowBackIos, ArrowForwardIos, BookmarkOutlined
 } from '@mui/icons-material';
+import { useColorMode } from '../App';
 
 const API = 'http://localhost:3010';
 
-const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: { main: '#2563EB' },
-    secondary: { main: '#0F172A' },
-    background: { default: '#F8FAFC', paper: '#FFFFFF' },
-    text: { primary: '#0F172A', secondary: '#64748B' },
-  },
-  typography: { fontFamily: '"Plus Jakarta Sans", "Noto Sans KR", sans-serif' },
-  components: {
-    MuiCssBaseline: {
-      styleOverrides: `
-        @keyframes typingBounce {
-          0%, 60%, 100% { transform: translateY(0); }
-          30% { transform: translateY(-4px); }
-        }
-        @keyframes slideIn {
-          from { opacity: 0; transform: translateY(-10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes stickerBounce {
-          0% { transform: scale(0.5); opacity: 0; }
-          60% { transform: scale(1.15); opacity: 1; }
-          100% { transform: scale(1); opacity: 1; }
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-      `
-    }
-  }
-});
 
 const getInitial = (name) => (name ? name.charAt(0).toUpperCase() : '?');
-const getAvatarColor = () => '#0F172A';
 
 const formatTime = (dateStr) => {
   if (!dateStr) return '';
@@ -99,8 +66,7 @@ const formatActivity = (lastActiveAt) => {
   return new Date(lastActiveAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) + ' 활동';
 };
 
-// ── FIX 4: null 사진 GroupAvatar — 채팅방 목록과 동일한 스타일 ──
-const GroupAvatar = ({ avatars, nicknames = [], size = 42, roomImage, onClick }) => {
+const GroupAvatar = ({ avatars, nicknames = [], size = 42, roomImage, onClick, avatarBg = '#0F172A' }) => {
   if (roomImage) {
     return (
       <Avatar
@@ -120,7 +86,7 @@ const GroupAvatar = ({ avatars, nicknames = [], size = 42, roomImage, onClick })
       <Avatar
         sx={{
           width: size, height: size,
-          backgroundColor: '#0F172A',
+          backgroundColor: 'var(--text-primary)',
           cursor: onClick ? 'pointer' : 'default'
         }}
         onClick={onClick}
@@ -135,7 +101,7 @@ const GroupAvatar = ({ avatars, nicknames = [], size = 42, roomImage, onClick })
       <Avatar src={`${API}${list[0]}`} sx={{ width: size, height: size, cursor: onClick ? 'pointer' : 'default' }} onClick={onClick} />
     ) : (
       <Avatar
-        sx={{ width: size, height: size, backgroundColor: getAvatarColor(nameList[0]), fontSize: size * 0.4, fontWeight: 800, cursor: onClick ? 'pointer' : 'default' }}
+        sx={{ width: size, height: size, backgroundColor: 'var(--text-primary)', fontSize: size * 0.4, fontWeight: 800, color: '#fff', cursor: onClick ? 'pointer' : 'default' }}
         onClick={onClick}
       >
         {getInitial(nameList[0])}
@@ -166,10 +132,12 @@ const GroupAvatar = ({ avatars, nicknames = [], size = 42, roomImage, onClick })
         ) : (
           <Box key={i} sx={{
             width: '100%', height: '100%',
-            backgroundColor: getAvatarColor(nameList[i]),
+            backgroundColor: avatarBg,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontSize: size * 0.22, fontWeight: 800
+            color: avatarBg === '#F1F5F9' ? '#0F172A' : '#fff',
+            fontSize: size * 0.22, fontWeight: 800
           }}>
+
             {getInitial(nameList[i])}
           </Box>
         )
@@ -343,7 +311,7 @@ const MessageReportModal = ({ open, onClose, onSuccess }) => {
           <Box sx={{ width: 32, height: 32, borderRadius: 1.5, backgroundColor: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <ReportGmailerrorred sx={{ fontSize: 17, color: '#DC2626' }} />
           </Box>
-          <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: '#0F172A' }}>메시지 신고</Typography>
+          <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: 'var(--text-primary)' }}>메시지 신고</Typography>
         </Box>
         <IconButton size="small" onClick={onClose} sx={{ color: '#94A3B8' }}>
           <Close sx={{ fontSize: 18 }} />
@@ -351,7 +319,7 @@ const MessageReportModal = ({ open, onClose, onSuccess }) => {
       </Box>
 
       <Box sx={{ px: 3, py: 3 }}>
-        <Typography sx={{ fontSize: '0.82rem', color: '#64748B', mb: 2 }}>신고 사유를 선택해주세요.</Typography>
+        <Typography sx={{ fontSize: '0.82rem', color: 'var(--text-secondary)', mb: 2 }}>신고 사유를 선택해주세요.</Typography>
         <Stack spacing={0.5}>
           {MESSAGE_REPORT_REASONS.map(r => (
             <Box
@@ -389,8 +357,8 @@ const MessageReportModal = ({ open, onClose, onSuccess }) => {
             value={detail}
             onChange={(e) => setDetail(e.target.value)}
             sx={{
-              mt: 1.5, backgroundColor: '#F8FAFC',
-              border: '1px solid #E2E8F0', borderRadius: 1.5,
+              mt: 1.5, backgroundColor: 'var(--bg-default)',
+              border: '1px solid var(--border-color)', borderRadius: 1.5,
               px: 2, py: 1, fontSize: '0.85rem',
               '&:focus-within': { borderColor: '#2563EB' }
             }}
@@ -406,7 +374,7 @@ const MessageReportModal = ({ open, onClose, onSuccess }) => {
             textTransform: 'none', fontWeight: 700, fontSize: '0.88rem',
             backgroundColor: '#DC2626', boxShadow: 'none',
             '&:hover': { backgroundColor: '#B91C1C' },
-            '&.Mui-disabled': { backgroundColor: '#F1F5F9', color: '#94A3B8' }
+            '&.Mui-disabled': { backgroundColor: 'var(--hover-bg)', color: '#94A3B8' }
           }}
         >
           {submitting ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : '신고 제출'}
@@ -416,24 +384,13 @@ const MessageReportModal = ({ open, onClose, onSuccess }) => {
   );
 };
 
-const STICKER_LIST = [
-  { id: 's1', emoji: '😂', label: '웃음' },
-  { id: 's2', emoji: '😍', label: '사랑' },
-  { id: 's3', emoji: '🥺', label: '슬픔' },
-  { id: 's4', emoji: '😡', label: '화남' },
-  { id: 's5', emoji: '🎉', label: '파티' },
-  { id: 's6', emoji: '👍', label: '좋아요' },
-  { id: 's7', emoji: '🙏', label: '감사' },
-  { id: 's8', emoji: '💀', label: '죽음' },
-  { id: 's9', emoji: '🔥', label: '불' },
-  { id: 's10', emoji: '🫶', label: '하트손' },
-  { id: 's11', emoji: '🤣', label: '구르는웃음' },
-  { id: 's12', emoji: '😎', label: '쿨' },
-  { id: 's13', emoji: '🥳', label: '파티얼굴' },
-  { id: 's14', emoji: '😭', label: '엉엉' },
-  { id: 's15', emoji: '🫠', label: '녹음' },
-  { id: 's16', emoji: '🤩', label: '눈별' },
-];
+const EMOTICON_LIST = Array.from({ length: 16 }, (_, i) => {
+  const row = Math.floor(i / 4);
+  const col = i % 4;
+  return { id: `e${i}`, src: `/uploads/emoticon/split_${row}_${col}.png` };
+});
+
+const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '😡', '👍'];
 
 const isStickerMessage = (msg) =>
   msg?.IS_DELETED !== 'Y' &&
@@ -465,8 +422,8 @@ const ParticipantsModal = ({ open, onClose, participants, loading, onClickUser }
     >
       <Box sx={{ px: 3, py: 2.5, borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <PeopleOutline sx={{ fontSize: 20, color: '#64748B' }} />
-          <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: '#0F172A' }}>
+          <PeopleOutline sx={{ fontSize: 20, color: 'var(--text-secondary)' }} />
+          <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: 'var(--text-primary)' }}>
             참여자 {participants.length}명
           </Typography>
         </Box>
@@ -475,12 +432,12 @@ const ParticipantsModal = ({ open, onClose, participants, loading, onClickUser }
         </IconButton>
       </Box>
       <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid #F1F5F9' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', backgroundColor: '#F1F5F9', borderRadius: 2, px: 1.5, py: 0.8 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', backgroundColor: 'var(--hover-bg)', borderRadius: 2, px: 1.5, py: 0.8 }}>
           <Search sx={{ color: '#94A3B8', fontSize: 18, mr: 1 }} />
           <InputBase
             fullWidth placeholder="참여자 검색..." value={query}
             onChange={(e) => setQuery(e.target.value)}
-            sx={{ fontSize: '0.88rem', color: '#0F172A' }}
+            sx={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}
           />
           {query && (
             <IconButton size="small" onClick={() => setQuery('')} sx={{ color: '#94A3B8', p: 0.2 }}>
@@ -504,19 +461,22 @@ const ParticipantsModal = ({ open, onClose, participants, loading, onClickUser }
               <ListItem
                 button key={p.USER_ID}
                 onClick={() => { onClickUser(p.NICKNAME); onClose(); }}
-                sx={{ py: 1.2, px: 2.5, borderBottom: idx < filtered.length - 1 ? '1px solid #F8FAFC' : 'none', '&:hover': { backgroundColor: '#F8FAFC' } }}
+                sx={{
+                  py: 1.2, px: 2.5, borderBottom: idx < filtered.length - 1 ? '1px solid var(--border-color)' : 'none'
+                  , '&:hover': { backgroundColor: 'var(--bg-default)' }
+                }}
               >
                 <ListItemAvatar sx={{ minWidth: 46 }}>
                   {/* FIX 6: 사용자 아바타 올바르게 표시 */}
                   <Avatar
                     src={p.AVATAR ? (p.AVATAR.startsWith('http') ? p.AVATAR : `${API}${p.AVATAR}`) : undefined}
-                    sx={{ width: 36, height: 36, fontSize: '0.8rem', backgroundColor: '#0F172A', fontWeight: 800 }}
+                    sx={{ width: 36, height: 36, fontSize: '0.8rem', backgroundColor: 'var(--text-primary)', fontWeight: 800 }}
                   >
                     {getInitial(p.NICKNAME)}
                   </Avatar>
                 </ListItemAvatar>
                 <ListItemText
-                  primary={<Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: '#0F172A' }}>{p.NICKNAME}</Typography>}
+                  primary={<Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)' }}>{p.NICKNAME}</Typography>}
                   secondary={
                     p.LAST_ACTIVE
                       ? <Typography sx={{ fontSize: '0.7rem', color: '#94A3B8' }}>{formatActivity(p.LAST_ACTIVE) || ''}</Typography>
@@ -535,7 +495,10 @@ const ParticipantsModal = ({ open, onClose, participants, loading, onClickUser }
 export default function Messages() {
   const { roomId } = useParams();
   const navigate = useNavigate();
+  const { mode } = useColorMode();
   const token = localStorage.getItem('accessToken');
+
+  const avatarBg = mode === 'dark' ? '#4B5563' : '#0F172A';
 
   const myNickname = (() => {
     try {
@@ -564,7 +527,8 @@ export default function Messages() {
   const [selectedUsers, setSelectedUsers] = useState([]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [chatBgColor, setChatBgColor] = useState('#F8FAFC');
+  const [chatBgColor, setChatBgColor] = useState('');
+  const [isCustomBgColor, setIsCustomBgColor] = useState(false);
   const [bubbleStyle, setBubbleStyle] = useState('rounded');
   const [mutedRooms, setMutedRooms] = useState({});
 
@@ -585,7 +549,6 @@ export default function Messages() {
 
   const [readAtMap, setReadAtMap] = useState({});
 
-  // FIX 1 & 2: 이미지 뷰어 상태
   const [imageViewer, setImageViewer] = useState({ open: false, url: null, allImages: [], index: 0, isGallery: false });
 
   const fileInputRef = useRef(null);
@@ -620,7 +583,10 @@ export default function Messages() {
 
   const inputWrapperRef = useRef(null);
   const overlayRef = useRef(null);
-
+  const [reactions, setReactions] = useState({});
+  const mentionReadRoomsRef = useRef(
+    JSON.parse(sessionStorage.getItem('mentionReadRooms') || '{}')
+  );
   useEffect(() => {
     if (roomInfo?.BLOCK_STATUS) {
       setBlockModalOpen(true);
@@ -663,14 +629,11 @@ export default function Messages() {
     e.target.value = '';
   };
 
-  // FIX 5: null값 저장 막기
   const handleSaveRoomInfo = async () => {
     const trimmedName = roomNameEdit.trim();
-    // 이름이 비어있고 이미지 변경도 없으면 저장 막기
     if (!trimmedName && !roomImageFile && !deleteRoomImage) {
       return;
     }
-    // 이름이 비어있으면 저장 막기
     if (!trimmedName) {
       return;
     }
@@ -744,7 +707,14 @@ export default function Messages() {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();
-        if (data.success) setChatRooms(data.rooms || []);
+        if (data.success) {
+          setChatRooms(data.rooms || []);
+          const initialMuted = {};
+          (data.rooms || []).forEach(r => {
+            if (r.IS_MUTED) initialMuted[r.ROOM_ID] = true;
+          });
+          setMutedRooms(initialMuted);
+        }
       } catch (err) { } finally {
         setLoadingRooms(false);
       }
@@ -760,6 +730,9 @@ export default function Messages() {
       setMessages([]);
       return;
     }
+
+    mentionReadRoomsRef.current[roomId] = true;
+    sessionStorage.setItem('mentionReadRooms', JSON.stringify(mentionReadRoomsRef.current));
     setLoadingChat(true);
     setDeleteMode(false);
     setSelectedDeleteIds([]);
@@ -798,11 +771,22 @@ export default function Messages() {
               if (m.IMAGE_URL || m.FILE_URL) {
                 return !incoming.some(s => s.SENDER_NICKNAME === myNickname && (s.IMAGE_URL || s.FILE_URL) && new Date(s.SENT_AT).getTime() > Date.now() - 20000);
               }
-              return !incoming.find(s => s.MESSAGE === m.MESSAGE && s.SENDER_NICKNAME === m.SENDER_NICKNAME && !s.IMAGE_URL);
+              return !incoming.find(s =>
+                s.SENDER_NICKNAME === m.SENDER_NICKNAME &&
+                (s.MESSAGE === m.MESSAGE ||
+                  (m.IS_EMOTICON && s.MESSAGE?.startsWith('__EMOTICON__') && new Date(s.SENT_AT).getTime() > Date.now() - 20000))
+                && !s.IMAGE_URL
+              );
             });
 
             return [...updated, ...optimisticMessages];
           });
+
+          fetch(`${API}/messages/${roomId}/reactions`, {
+            headers: { Authorization: `Bearer ${token}` }
+          }).then(r => r.json()).then(d => {
+            if (d.success) setReactions(d.reactions || {});
+          }).catch(() => { });
           if (data.readAtMap) setReadAtMap(data.readAtMap);
 
           setChatRooms(prev => prev.map(r => r.ROOM_ID === parseInt(roomId) ? { ...r, UNREAD_COUNT: 0 } : r));
@@ -883,7 +867,8 @@ export default function Messages() {
 
     if (lastWord.startsWith('@')) {
       setMentionFilter(lastWord.replace('@', '').toLowerCase());
-      setMentionAnchorEl(document.getElementById('chat-input-wrapper')); // 팝업 앵커 세팅
+      setMentionAnchorEl(document.getElementById('chat-input-wrapper'));
+      setMentionIndex(0);
     } else {
       setMentionAnchorEl(null);
     }
@@ -903,30 +888,28 @@ export default function Messages() {
     }, 1500);
   };
   const [mentionIndex, setMentionIndex] = useState(0);
-
   const handleInputKeyDown = (e) => {
     if (mentionAnchorEl) {
+      const mentionableFiltered = (isGroup ? participants : (roomInfo?.TARGET_NICKNAME ? [{ NICKNAME: roomInfo.TARGET_NICKNAME, USER_ID: 'peer', AVATAR: roomInfo.TARGET_AVATAR }] : []))
+        .filter(p => p.NICKNAME !== myNickname && p.NICKNAME.toLowerCase().includes(mentionFilter));
+
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setMentionIndex(prev => (prev + 1) % mentionableUsers.length);
+        setMentionIndex(prev => (prev + 1) % mentionableFiltered.length);
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setMentionIndex(prev => (prev - 1 + mentionableUsers.length) % mentionableUsers.length);
+        setMentionIndex(prev => (prev - 1 + mentionableFiltered.length) % mentionableFiltered.length);
       } else if (e.key === 'Tab' || e.key === 'Enter') {
         e.preventDefault();
-        if (mentionableUsers[mentionIndex]) {
-          handleSelectMention(mentionableUsers[mentionIndex].NICKNAME);
+        if (mentionableFiltered[mentionIndex]) {
+          handleSelectMention(mentionableFiltered[mentionIndex].NICKNAME);
         }
+      } else if (e.key === 'Escape') {
+        setMentionAnchorEl(null);
       }
-    } else if (e.ctrlKey && e.key === ' ') {
-      e.preventDefault();
-
-      const words = newMessage.split(' ');
-      const lastWord = words[words.length - 1];
-
-      if (lastWord.startsWith('@')) {
-        setMentionFilter(lastWord.replace('@', '').toLowerCase());
-        setMentionAnchorEl(document.getElementById('chat-input-wrapper'));
+    } else {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        handleSend(e);
       }
     }
   };
@@ -1069,6 +1052,40 @@ export default function Messages() {
   const handleStickerSelect = (sticker) => {
     setStickerAnchorEl(null);
     handleSend(null, `__STICKER__${sticker.emoji}`, { IS_STICKER: true });
+  };
+
+  const handleReaction = async (messageId, emoji) => {
+    const mid = messageId;
+    setReactions(prev => {
+      const current = prev[mid]?.[emoji];
+      const alreadyReacted = current?.myReaction;
+      const updated = { ...prev };
+      if (!updated[mid]) updated[mid] = {};
+      if (alreadyReacted) {
+        const newCount = (updated[mid][emoji]?.count || 1) - 1;
+        if (newCount <= 0) {
+          const { [emoji]: _, ...rest } = updated[mid];
+          updated[mid] = rest;
+        } else {
+          updated[mid][emoji] = { ...updated[mid][emoji], count: newCount, myReaction: false };
+        }
+      } else {
+        updated[mid][emoji] = {
+          count: (updated[mid][emoji]?.count || 0) + 1,
+          myReaction: true,
+          users: [...(updated[mid][emoji]?.users || []), myNickname]
+        };
+      }
+      return updated;
+    });
+    handleCloseMessageOption();
+    try {
+      await fetch(`${API}/messages/${roomId}/messages/${messageId}/reaction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ emoji })
+      });
+    } catch { }
   };
 
   const handleFileUpload = async (e) => {
@@ -1275,8 +1292,9 @@ export default function Messages() {
   const handleLeaveRoom = () => {
     openConfirm('채팅방 나가기', '채팅방을 나가면 대화 내용이 모두 삭제됩니다. 계속하시겠습니까?', async () => {
       try {
-        await sendSystemMessage(`${myNickname}님이 채팅방을 나갔습니다.`);
-
+        if (isGroup) {
+          await sendSystemMessage(`${myNickname}님이 채팅방을 나갔습니다.`);
+        }
         await fetch(`${API}/messages/${roomId}/leave`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` }
@@ -1306,11 +1324,14 @@ export default function Messages() {
     if (bubbleStyle === 'outlined') {
       return isMe
         ? { bg: 'transparent', text: '#2563EB', border: '1px solid #2563EB' }
-        : { bg: 'transparent', text: '#0F172A', border: '1px solid #E2E8F0' };
+        : {
+          bg: 'transparent', text: mode === 'dark' ? '#F1F5F9' : '#0F172A'
+          , border: '1px solid var(--border-color)'
+        };
     }
     return isMe
       ? { bg: '#2563EB', text: '#fff', border: 'none' }
-      : { bg: '#fff', text: '#0F172A', border: '1px solid #E2E8F0' };
+      : { bg: mode === 'dark' ? '#22253A' : '#fff', text: mode === 'dark' ? '#F1F5F9' : '#0F172A', border: '1px solid var(--border-color)' };
   };
 
   useEffect(() => {
@@ -1325,7 +1346,17 @@ export default function Messages() {
         });
         const data = await res.json();
         if (data.success) {
-          setChatBgColor(data.settings.BG_COLOR || '#F8FAFC');
+          const savedColor = data.settings.BG_COLOR;
+          const DEFAULT_LIGHT = '#F8FAFC';
+          const DEFAULT_DARK = '#0F1117';
+          const isDefault = !savedColor || savedColor === DEFAULT_LIGHT || savedColor === DEFAULT_DARK;
+          if (isDefault) {
+            setIsCustomBgColor(false);
+            setChatBgColor(mode === 'dark' ? DEFAULT_DARK : DEFAULT_LIGHT);
+          } else {
+            setIsCustomBgColor(true);
+            setChatBgColor(savedColor);
+          }
           setBubbleStyle(data.settings.BUBBLE_STYLE || 'rounded');
         }
       } catch { }
@@ -1334,7 +1365,7 @@ export default function Messages() {
     fetchSettings();
     const interval = setInterval(fetchSettings, 3000);
     return () => clearInterval(interval);
-  }, [roomId, token]);
+  }, [roomId, token, mode]);
 
   const settingsSaveTimer = useRef(null);
   const saveSettings = (bgColor, bubble) => {
@@ -1351,6 +1382,10 @@ export default function Messages() {
   };
 
   const handleBgColorChange = async (color) => {
+    const DEFAULT_LIGHT = '#F8FAFC';
+    const DEFAULT_DARK = '#0F1117';
+    const isDefault = color === DEFAULT_LIGHT || color === DEFAULT_DARK;
+    setIsCustomBgColor(!isDefault);
     setChatBgColor(color);
     saveSettings(color, bubbleStyle);
     const colorNames = {
@@ -1362,7 +1397,11 @@ export default function Messages() {
     settingsChangedByMeRef.current = true;
     setTimeout(() => { settingsChangedByMeRef.current = false; }, 4000);
   };
-
+  useEffect(() => {
+    if (!isCustomBgColor) {
+      setChatBgColor(mode === 'dark' ? '#0F1117' : '#F8FAFC');
+    }
+  }, [mode]);
   const handleBubbleStyleChange = async (style) => {
     setBubbleStyle(style);
     saveSettings(chatBgColor, style);
@@ -1395,6 +1434,7 @@ export default function Messages() {
   useEffect(() => {
     if (roomId && isGroup) fetchParticipants();
   }, [roomId, isGroup]);
+  const mentionableFiltered = participants.filter(p => p.NICKNAME !== myNickname && p.NICKNAME.toLowerCase().includes(mentionFilter));
 
   const processedMessages = messages.map(m => ({ ...m, READ_BY: [] }));
   if (isGroup && participants.length > 0) {
@@ -1520,13 +1560,13 @@ export default function Messages() {
 
   const handleMuteToggle = async (roomId, isMuted) => {
     try {
-      // 로컬 상태 즉시 업데이트
       setMutedRooms(prev => ({
         ...prev,
         [roomId]: isMuted
       }));
-
-      // 서버에 설정 저장 (API 엔드포인트는 실제 서버 구현에 맞춰 조정하세요)
+      setChatRooms(prev => prev.map(r =>
+        r.ROOM_ID === parseInt(roomId) ? { ...r, IS_MUTED: isMuted } : r
+      ));
       await fetch(`${API}/messages/${roomId}/mute`, {
         method: 'PUT',
         headers: {
@@ -1541,38 +1581,37 @@ export default function Messages() {
   };
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Box sx={{ display: 'flex', height: 'calc(100vh - 48px)', backgroundColor: '#fff', borderRadius: 3, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+    <>
+      <Box sx={{ display: 'flex', height: 'calc(100vh - 48px)', backgroundColor: 'var(--bg-paper)', overflow: 'hidden' }}>
 
         <Box sx={{
-          width: { xs: '100%', md: 360 }, // 💡 너비 360px 고정
+          width: { xs: '100%', md: 360 },
           flexShrink: 0,
           overflow: 'hidden',
-          borderRight: '1px solid #E2E8F0',
+          borderRight: '1px solid var(--border-color)',
           display: { xs: roomId ? 'none' : 'flex', md: 'flex' },
           flexDirection: 'column',
-          backgroundColor: '#fff'
+          backgroundColor: 'var(--bg-paper)'
         }}>
           <Box sx={{ width: { xs: '100vw', md: 360 }, display: 'flex', flexDirection: 'column', height: '100%' }}>
             {/* 헤더 타이틀 영역 (기존 접기 아이콘 제거됨) */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, px: 2, pt: 2, flexShrink: 0 }}>
-              <Typography sx={{ fontWeight: 800, fontSize: '1.25rem', color: '#0F172A' }}>메시지</Typography>
+              <Typography sx={{ fontWeight: 800, fontSize: '1.25rem', color: 'var(--text-primary)' }}>메시지</Typography>
               <Box sx={{ display: 'flex', gap: 0.5 }}>
-                <IconButton onClick={() => { setCreateChatOpen(true); handleNewChatSearch(''); }} sx={{ color: '#0F172A', backgroundColor: '#F1F5F9' }}>
+                <IconButton onClick={() => { setCreateChatOpen(true); handleNewChatSearch(''); }} sx={{ color: 'var(--text-primary)', backgroundColor: 'var(--hover-bg)' }}>
                   <AddCircleOutline fontSize="small" />
                 </IconButton>
               </Box>
             </Box>
 
             <Box ref={searchWrapRef} sx={{ position: 'relative', px: 2, mb: 1, flexShrink: 0 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', backgroundColor: '#F1F5F9', borderRadius: 2.5, px: 1.5, py: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', backgroundColor: 'var(--hover-bg)', borderRadius: 2.5, px: 1.5, py: 1 }}>
                 <Search sx={{ color: '#94A3B8', fontSize: 20, mr: 1 }} />
                 <InputBase
                   fullWidth placeholder="검색..." value={searchQuery}
                   onChange={(e) => handleSearchChange(e.target.value)}
                   onFocus={() => { setSearchOpen(true); if (searchResults.length === 0) handleSearchChange(searchQuery); }}
-                  sx={{ fontSize: '0.9rem', color: '#0F172A' }}
+                  sx={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}
                 />
                 {isSearching
                   ? <CircularProgress size={16} sx={{ color: '#94A3B8', ml: 1 }} />
@@ -1590,16 +1629,18 @@ export default function Messages() {
                       <ListItem
                         button key={user.USER_ID}
                         onClick={() => handleStartChatFromSearch(user)}
-                        sx={{ py: 1.2, px: 2, borderBottom: idx < searchResults.length - 1 ? '1px solid #F1F5F9' : 'none' }}
+                        sx={{
+                          py: 1.2, px: 2, borderBottom: idx < searchResults.length - 1 ? '1px solid var(--border-color)' : 'none'
+                        }}
                       >
                         <ListItemAvatar sx={{ minWidth: 46 }}>
-                          <Avatar src={user.AVATAR ? `${API}${user.AVATAR}` : null} sx={{ width: 34, height: 34, backgroundColor: '#0F172A', fontSize: '0.8rem' }}>
+                          <Avatar src={user.AVATAR ? `${API}${user.AVATAR}` : null} sx={{ width: 34, height: 34, backgroundColor: 'var(--text-primary)', fontSize: '0.8rem' }}>
                             {getInitial(user.NICKNAME)}
                           </Avatar>
                         </ListItemAvatar>
                         <ListItemText
                           primary={<Typography sx={{ fontWeight: 700, fontSize: '0.85rem' }}>{user.NICKNAME}</Typography>}
-                          secondary={<Typography sx={{ fontSize: '0.7rem', color: '#64748B' }}>{user.BIO_SHORT || `@${user.NICKNAME}`}</Typography>}
+                          secondary={<Typography sx={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{user.BIO_SHORT || `@${user.NICKNAME}`}</Typography>}
                           sx={{ m: 0 }}
                         />
                       </ListItem>
@@ -1617,41 +1658,44 @@ export default function Messages() {
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={24} /></Box>
               ) : chatRooms.length === 0 ? (
                 <Box sx={{ textAlign: 'center', py: 6 }}>
-                  <Typography sx={{ fontSize: '0.85rem', color: '#64748B' }}>대화가 없습니다.</Typography>
+                  <Typography sx={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>대화가 없습니다.</Typography>
                 </Box>
               ) : (
                 <List disablePadding>
                   {chatRooms.map((room) => {
                     const isActive = parseInt(roomId) === room.ROOM_ID;
                     const isMuted = mutedRooms[room.ROOM_ID];
-
-                    const hasMyMention = typeof room.LAST_MESSAGE === 'string' && room.LAST_MESSAGE.includes(`@${myNickname}`);
+                    const hasMyMention = !mentionReadRoomsRef.current[room.ROOM_ID] &&
+                      typeof room.LAST_MESSAGE === 'string' &&
+                      room.LAST_MESSAGE.includes(`@${myNickname}`);
 
                     return (
                       <ListItem
-                        button key={room.ROOM_ID}
+                        key={room.ROOM_ID}
                         onClick={() => navigate(`/messages/room/${room.ROOM_ID}`)}
-                        sx={{ py: 1.8, px: 2.5, backgroundColor: isActive ? '#F1F5F9' : 'transparent', transition: 'all 0.15s', '&:hover': { backgroundColor: '#F8FAFC' } }}
+                        sx={{ cursor: 'pointer', py: 1.8, px: 2.5, backgroundColor: isActive ? (mode === 'dark' ? '#22253A' : '#F1F5F9') : 'transparent', transition: 'all 0.15s', '&:hover': { backgroundColor: 'var(--bg-default)' } }}
                       >
                         <ListItemAvatar sx={{ minWidth: 54 }}>
                           <Badge
+                            badgeContent={hasMyMention ? '@' : undefined}
                             color="error"
-                            variant="dot"
+                            variant={hasMyMention ? 'standard' : 'dot'}
                             invisible={!room.UNREAD_COUNT && !hasMyMention}
                             sx={{
                               '& .MuiBadge-badge': {
-                                right: 4,
-                                top: 4,
-                                backgroundColor: hasMyMention ? '#EF4444' : undefined,
-                                width: hasMyMention ? 10 : 8,
-                                height: hasMyMention ? 10 : 8
+                                right: 4, top: 4,
+                                fontSize: '0.55rem', fontWeight: 900,
+                                minWidth: hasMyMention ? 16 : 8,
+                                height: hasMyMention ? 16 : 8,
+                                padding: hasMyMention ? '0 3px' : 0,
+                                backgroundColor: '#EF4444',
                               }
                             }}
                           >
                             {room.ROOM_TYPE === 'GROUP' ? (
-                              <GroupAvatar avatars={room.PARTICIPANT_AVATARS} nicknames={room.PARTICIPANT_NICKNAMES} roomImage={room.ROOM_IMAGE} size={42} />
+                              <GroupAvatar avatarBg={mode === 'dark' ? '#F1F5F9' : '#0F172A'} avatars={room.PARTICIPANT_AVATARS} nicknames={room.PARTICIPANT_NICKNAMES} roomImage={room.ROOM_IMAGE} size={42} />
                             ) : (
-                              <Avatar src={room.TARGET_AVATAR ? `${API}${room.TARGET_AVATAR}` : null} sx={{ width: 42, height: 42, backgroundColor: getAvatarColor(room.TARGET_NICKNAME), fontWeight: 800 }}>
+                              <Avatar src={room.TARGET_AVATAR ? `${API}${room.TARGET_AVATAR}` : null} sx={{ width: 42, height: 42, backgroundColor: mode === 'dark' ? '#F1F5F9' : '#0F172A', color: mode === 'dark' ? '#0F172A' : '#fff', fontWeight: 800 }}>
                                 {getInitial(room.TARGET_NICKNAME)}
                               </Avatar>
                             )}
@@ -1660,33 +1704,40 @@ export default function Messages() {
                         <ListItemText
                           primary={
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.2 }}>
-                              <Typography sx={{ fontWeight: isActive ? 800 : 700, fontSize: '0.9rem', color: '#0F172A', display: 'flex', alignItems: 'center' }}>
+                              <Typography sx={{ fontWeight: isActive ? 800 : 700, fontSize: '0.9rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center' }}>
                                 {room.TARGET_NICKNAME || (room.ROOM_TYPE === 'GROUP' ? (room.ROOM_NAME || '그룹 채팅방') : '')}
                                 {isMuted && <NotificationsOff sx={{ fontSize: 13, color: '#94A3B8', ml: 0.5 }} />}
                               </Typography>
-                              {/* 💡 우측 상단 기존 시간 표시는 구조 통합을 위해 제거/비워둠 */}
                               <Typography sx={{ fontSize: '0.7rem', color: '#94A3B8' }}></Typography>
                             </Box>
                           }
                           secondary={
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, maxWidth: '85%', overflow: 'hidden' }}>
-                                {room.LAST_IS_STICKER && <SentimentSatisfiedAlt sx={{ fontSize: 13, color: '#94A3B8', flexShrink: 0 }} />}
-                                {room.LAST_HAS_IMAGE && !room.LAST_IS_STICKER && <ImageOutlined sx={{ fontSize: 13, color: '#94A3B8', flexShrink: 0 }} />}
-                                {room.LAST_HAS_FILE && !room.LAST_IS_STICKER && !room.LAST_HAS_IMAGE && <AttachFile sx={{ fontSize: 13, color: '#94A3B8', flexShrink: 0 }} />}
-
-                                <Typography sx={{ fontSize: '0.8rem', color: room.UNREAD_COUNT ? '#0F172A' : '#64748B', fontWeight: room.UNREAD_COUNT ? 700 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {room.LAST_IS_STICKER ? '이모티콘을 보냈습니다.'
-                                    : room.LAST_HAS_IMAGE ? '사진을 보냈습니다.'
-                                      : room.LAST_HAS_FILE ? '파일을 보냈습니다.'
-                                        : room.LAST_MESSAGE || ''}
-                                </Typography>
-
-                                <Typography sx={{ fontSize: '0.75rem', color: hasMyMention ? '#EF4444' : '#94A3B8', flexShrink: 0, ml: 0.5, fontWeight: (room.UNREAD_COUNT || hasMyMention) ? 700 : 400 }}>
-                                  · {formatListTimeRelative(room.LAST_MESSAGE_AT)}
-                                </Typography>
+                                {room.TYPING_USERS?.length > 0 ? (
+                                  <Typography sx={{
+                                    fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, fontStyle: 'italic'
+                                    , whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                                  }}>
+                                    {room.TYPING_USERS[0]}님이 입력 중...
+                                  </Typography>
+                                ) : (
+                                  <>
+                                    {room.LAST_IS_STICKER && <SentimentSatisfiedAlt sx={{ fontSize: 13, color: '#94A3B8', flexShrink: 0 }} />}
+                                    {room.LAST_HAS_IMAGE && !room.LAST_IS_STICKER && <ImageOutlined sx={{ fontSize: 13, color: '#94A3B8', flexShrink: 0 }} />}
+                                    {room.LAST_HAS_FILE && !room.LAST_IS_STICKER && !room.LAST_HAS_IMAGE && <AttachFile sx={{ fontSize: 13, color: '#94A3B8', flexShrink: 0 }} />}
+                                    <Typography sx={{ fontSize: '0.8rem', color: room.UNREAD_COUNT ? (mode === 'dark' ? '#F1F5F9' : '#0F172A') : '#64748B', fontWeight: room.UNREAD_COUNT ? 700 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      {room.LAST_IS_STICKER ? '이모티콘을 보냈습니다.'
+                                        : room.LAST_HAS_IMAGE ? '사진을 보냈습니다.'
+                                          : room.LAST_HAS_FILE ? '파일을 보냈습니다.'
+                                            : room.LAST_MESSAGE || ''}
+                                    </Typography>
+                                    <Typography sx={{ fontSize: '0.75rem', color: '#94A3B8', flexShrink: 0, ml: 0.5 }}>
+                                      · {formatListTimeRelative(room.LAST_MESSAGE_AT)}
+                                    </Typography>
+                                  </>
+                                )}
                               </Box>
-
                               {room.UNREAD_COUNT > 0 && (
                                 <Box sx={{ backgroundColor: '#EF4444', color: '#fff', fontSize: '0.6rem', fontWeight: 800, px: 0.6, py: 0.1, borderRadius: 10, flexShrink: 0 }}>
                                   {room.UNREAD_COUNT}
@@ -1712,18 +1763,21 @@ export default function Messages() {
 
           {!roomId ? (
             <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <Box sx={{ width: 80, height: 80, borderRadius: '50%', border: '2px solid #0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
-                <MailOutline sx={{ fontSize: 40, color: '#0F172A' }} />
+              <Box sx={{ width: 80, height: 80, borderRadius: '50%', border: `2px solid ${mode === 'dark' ? '#F1F5F9' : '#0F172A'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
+                <MailOutline sx={{ fontSize: 40, color: 'var(--text-primary)' }} />
               </Box>
-              <Typography sx={{ fontWeight: 800, fontSize: '1.2rem', color: '#0F172A', mb: 1 }}>내 메시지</Typography>
-              <Typography sx={{ fontSize: '0.85rem', color: '#64748B' }}>친구나 그룹에게 비공개 사진과 메시지를 보내보세요.</Typography>
+              <Typography sx={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--text-primary)', mb: 1 }}>내 메시지</Typography>
+              <Typography sx={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>친구나 그룹에게 비공개 사진과 메시지를 보내보세요.</Typography>
             </Box>
           ) : (loadingChat || !roomInfo) ? (
             <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CircularProgress /></Box>
           ) : (
             <>
               {deleteMode ? (
-                <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 3, py: 2, backgroundColor: '#0F172A', color: '#fff', animation: 'slideIn 0.2s ease' }}>
+                <Box sx={{
+                  position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 3, py: 2, backgroundColor: mode === 'dark' ? '#22253A' : '#0F172A', color: '#fff'
+                  , animation: 'slideIn 0.2s ease'
+                }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <IconButton size="small" onClick={() => { setDeleteMode(false); setSelectedDeleteIds([]); }} sx={{ color: '#fff' }}><Close /></IconButton>
                     <Typography sx={{ fontWeight: 700, fontSize: '1rem' }}>{selectedDeleteIds.length}개 선택됨</Typography>
@@ -1731,14 +1785,18 @@ export default function Messages() {
                   <Button variant="contained" color="error" onClick={executeBulkDelete} disabled={selectedDeleteIds.length === 0} sx={{ fontWeight: 800, borderRadius: 2 }}>삭제</Button>
                 </Box>
               ) : (
-                <Box sx={{ display: 'flex', flexDirection: 'column', backgroundColor: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #E2E8F0', zIndex: 10 }}>
+                <Box sx={{
+                  display: 'flex', flexDirection: 'column', borderBottom: '1px solid var(--border-color)',
+                  backdropFilter: 'blur(12px)', zIndex: 10
+                }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1.5 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <IconButton size="small" onClick={() => navigate('/messages')} sx={{ color: '#64748B', display: { md: 'none' }, mr: 1 }}><ArrowBack /></IconButton>
+                      <IconButton size="small" onClick={() => navigate('/messages')} sx={{ color: 'var(--text-secondary)', display: { md: 'none' }, mr: 1 }}><ArrowBack /></IconButton>
 
                       {isGroup ? (
                         <Box sx={{ mr: 1, cursor: 'pointer' }} onClick={() => setSettingsOpen(true)}>
                           <GroupAvatar
+                            avatarBg={mode === 'dark' ? '#F1F5F9' : '#0F172A'}
                             avatars={roomInfo?.PARTICIPANT_AVATARS}
                             nicknames={roomInfo?.PARTICIPANT_NICKNAMES}
                             roomImage={roomInfo?.ROOM_IMAGE}
@@ -1758,7 +1816,12 @@ export default function Messages() {
                             <Avatar
                               src={displayAvatar ? (displayAvatar.startsWith('http') ? displayAvatar : `${API}${displayAvatar}`) : undefined}
                               onClick={() => navigate(`/user/${displayTitle}`)}
-                              sx={{ width: 36, height: 36, backgroundColor: '#0F172A', color: '#fff', fontWeight: 800, cursor: 'pointer' }}
+                              sx={{
+                                width: 36, height: 36,
+                                backgroundColor: mode === 'dark' ? '#F1F5F9' : '#0F172A',
+                                color: mode === 'dark' ? '#0F172A' : '#fff',
+                                fontWeight: 800, cursor: 'pointer'
+                              }}
                             >
                               {getInitial(displayTitle)}
                             </Avatar>
@@ -1768,10 +1831,10 @@ export default function Messages() {
 
                       <Box sx={{ ml: 0.5 }}>
                         <Typography
-                          sx={{ fontWeight: 800, fontSize: '0.95rem', color: '#0F172A', cursor: 'pointer' }}
+                          sx={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-primary)', cursor: 'pointer' }}
                           onClick={() => isGroup ? setSettingsOpen(true) : navigate(`/user/${displayTitle}`)}
                         >
-                          {displayTitle}
+                          {displayTitle}{isGroup && roomInfo?.MEMBER_COUNT ? ` (${roomInfo.MEMBER_COUNT})` : ''}
                         </Typography>
 
                         {(isOnline || activityLabel) && !isGroup && (
@@ -1785,16 +1848,16 @@ export default function Messages() {
                             onClick={handleOpenParticipantsModal}
                             sx={{ display: 'flex', alignItems: 'center', gap: 0.3, cursor: 'pointer', '&:hover': { opacity: 0.7 } }}
                           >
-                            <PeopleOutline sx={{ fontSize: 13, color: '#64748B' }} />
-                            <Typography sx={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 600 }}>
+                            <PeopleOutline sx={{ fontSize: 13, color: 'var(--text-secondary)' }} />
+                            <Typography sx={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
                               참여자 {roomInfo?.MEMBER_COUNT}명
                             </Typography>
-                            <ExpandMore sx={{ fontSize: 13, color: '#64748B' }} />
+                            <ExpandMore sx={{ fontSize: 13, color: 'var(--text-secondary)' }} />
                           </Box>
                         )}
                       </Box>
                     </Box>
-                    <IconButton onClick={() => setSettingsOpen(true)} sx={{ color: '#0F172A' }}><InfoOutlined /></IconButton>
+                    <IconButton onClick={() => setSettingsOpen(true)} sx={{ color: 'var(--text-primary)' }}><InfoOutlined /></IconButton>
                   </Box>
                 </Box>
               )}
@@ -1818,7 +1881,7 @@ export default function Messages() {
                     <Avatar
                       src={peerProfile.AVATAR ? (peerProfile.AVATAR.startsWith('http') ? peerProfile.AVATAR : `${API}${peerProfile.AVATAR}`) : undefined}
                       onClick={() => navigate(`/user/${peerProfile.NICKNAME}`)}
-                      sx={{ width: 80, height: 80, fontSize: '2rem', backgroundColor: '#0F172A', fontWeight: 800, cursor: 'pointer', transition: 'opacity 0.2s', '&:hover': { opacity: 0.8 } }}
+                      sx={{ width: 80, height: 80, fontSize: '2rem', backgroundColor: 'var(--text-primary)', fontWeight: 800, cursor: 'pointer', transition: 'opacity 0.2s', '&:hover': { opacity: 0.8 } }}
                     >
                       {getInitial(peerProfile.NICKNAME)}
                     </Avatar>
@@ -1845,20 +1908,20 @@ export default function Messages() {
                     )}
 
                     {peerProfile.BIO_SHORT && (
-                      <Typography sx={{ fontSize: '0.85rem', color: '#64748B' }}>{peerProfile.BIO_SHORT}</Typography>
+                      <Typography sx={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{peerProfile.BIO_SHORT}</Typography>
                     )}
 
                     <Stack direction="row" spacing={3} sx={{ my: 1 }}>
                       {[['게시물', peerProfile.POST_CNT], ['팔로워', peerProfile.FOLLOWER_CNT], ['팔로잉', peerProfile.FOLLOWING_CNT]].map(([label, val]) => (
                         <Box key={label} sx={{ textAlign: 'center' }}>
                           <Typography sx={{ fontWeight: 800, fontSize: '1rem' }}>{val ?? 0}</Typography>
-                          <Typography sx={{ fontSize: '0.72rem', color: '#64748B' }}>{label}</Typography>
+                          <Typography sx={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{label}</Typography>
                         </Box>
                       ))}
                     </Stack>
 
                     {/* 문구 변경 및 '대화를 시작해보세요!' 추가 */}
-                    <Typography sx={{ fontSize: '0.85rem', color: '#64748B', textAlign: 'center', mt: 1, lineHeight: 1.6 }}>
+                    <Typography sx={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textAlign: 'center', mt: 1, lineHeight: 1.6 }}>
                       {peerProfile.I_FOLLOW === 'ACCEPTED' && peerProfile.THEY_FOLLOW === 'ACCEPTED'
                         ? '서로 팔로우하고 있습니다.'
                         : peerProfile.I_FOLLOW === 'ACCEPTED'
@@ -1867,7 +1930,7 @@ export default function Messages() {
                             ? '상대방이 팔로우하고 있습니다.'
                             : '서로 팔로우하고 있지 않습니다.'}
                       <br />
-                      <span style={{ fontWeight: 700, color: '#0F172A' }}>대화를 시작해보세요!</span>
+                      <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>대화를 시작해보세요!</span>
                     </Typography>
                   </Box>
                 )}
@@ -1885,24 +1948,39 @@ export default function Messages() {
                   const colors = getBubbleColors(isMe);
                   const isSticker = isStickerMessage(msg);
                   const stickerEmoji = isSticker ? getStickerEmoji(msg) : null;
+                  const isEmoticon = msg.IS_EMOTICON === true || msg.IS_EMOTICON === 'Y' ||
+                    (typeof msg.MESSAGE === 'string' && msg.MESSAGE.startsWith('__EMOTICON__'));
+
+                  const rawEmoticonPath = isEmoticon
+                    ? (msg.EMOTICON_URL || msg.MESSAGE?.replace('__EMOTICON__', ''))
+                    : null;
+
+                  const emoticonSrc = rawEmoticonPath
+                    ? (rawEmoticonPath.startsWith('http') || rawEmoticonPath.startsWith('blob:')
+                      ? rawEmoticonPath
+                      : `${API}${rawEmoticonPath}`)
+                    : null;
                   const readAt = readAtMap[msg.MESSAGE_ID];
 
                   return (
                     <React.Fragment key={msg.MESSAGE_ID || idx}>
                       {showDateDivider && (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, my: 1.5 }}>
-                          <Box sx={{ flex: 1, height: '1px', backgroundColor: '#E2E8F0' }} />
+                          <Box sx={{ flex: 1, height: '1px', backgroundColor: mode === 'dark' ? '#2D3148' : '#E2E8F0' }} />
                           <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: 600, whiteSpace: 'nowrap' }}>
                             {formatDateLabel(msg.SENT_AT)}
                           </Typography>
-                          <Box sx={{ flex: 1, height: '1px', backgroundColor: '#E2E8F0' }} />
+                          <Box sx={{ flex: 1, height: '1px', backgroundColor: mode === 'dark' ? '#2D3148' : '#E2E8F0' }} />
                         </Box>
                       )}
 
                       {isSystem ? (
                         <Box sx={{ display: 'flex', justifyContent: 'center', my: 0.5 }}>
-                          <Box sx={{ px: 2, py: 0.6, backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 10, backdropFilter: 'blur(4px)' }}>
-                            <Typography sx={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 500, textAlign: 'center' }}>
+                          <Box sx={{
+                            px: 2, py: 0.6, backgroundColor: mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                            borderRadius: 10, backdropFilter: 'blur(4px)'
+                          }}>
+                            <Typography sx={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 500, textAlign: 'center' }}>
                               {msg.MESSAGE}
                             </Typography>
                           </Box>
@@ -1929,7 +2007,7 @@ export default function Messages() {
                                 <Avatar
                                   src={msg.SENDER_AVATAR ? (msg.SENDER_AVATAR.startsWith('http') ? msg.SENDER_AVATAR : `${API}${msg.SENDER_AVATAR}`) : undefined}
                                   onClick={(e) => { e.stopPropagation(); navigate(`/user/${msg.SENDER_NICKNAME}`); }}
-                                  sx={{ width: 32, height: 32, backgroundColor: '#0F172A', fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer' }}
+                                  sx={{ width: 32, height: 32, backgroundColor: 'var(--text-primary)', fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer' }}
                                 >
                                   {getInitial(msg.SENDER_NICKNAME)}
                                 </Avatar>
@@ -1938,16 +2016,22 @@ export default function Messages() {
 
                             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: isSticker ? 120 : '70%' }}>
                               {showAvatar && !isMe && (
-                                <Typography sx={{ fontSize: '0.75rem', color: '#64748B', mb: 0.5, ml: 0.5, fontWeight: 600 }}>
+                                <Typography sx={{ fontSize: '0.75rem', color: 'var(--text-secondary)', mb: 0.5, ml: 0.5, fontWeight: 600 }}>
                                   {msg.SENDER_NICKNAME}
                                 </Typography>
                               )}
                               <Stack direction={isMe ? 'row-reverse' : 'row'} alignItems="flex-end" spacing={0.5}>
-                                {/* 1. 말풍선 (가장 안쪽) */}
                                 {isSticker ? (
                                   <Box sx={{ fontSize: '4rem', lineHeight: 1, animation: 'stickerBounce 0.4s ease', userSelect: 'none', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.15))' }}>
                                     {stickerEmoji}
                                   </Box>
+                                ) : isEmoticon ? (
+                                  <Box
+                                    component="img"
+                                    src={emoticonSrc}
+                                    sx={{ width: 100, height: 100, objectFit: 'cover', borderRadius: 2, cursor: 'zoom-in', display: 'block' }}
+                                    onClick={(e) => { e.stopPropagation(); handleChatImageClick(emoticonSrc); }}
+                                  />
                                 ) : (
                                   <Box sx={{ px: 2, py: 1.2, backgroundColor: colors.bg, color: colors.text, border: colors.border, borderRadius: getBubbleBorderRadius(isMe), boxShadow: bubbleStyle === 'outlined' ? 'none' : '0 2px 8px rgba(0,0,0,0.02)', wordBreak: 'break-word', position: 'relative' }}>
                                     {msg.IS_DELETED === 'Y' ? (
@@ -2009,27 +2093,68 @@ export default function Messages() {
                                   </IconButton>
                                 )}
                               </Stack>
-                              {/* 그룹 읽음 아바타 */}
-                              {isMe && isGroup && msg.READ_BY && msg.READ_BY.length > 0 && (
-                                <Box sx={{ display: 'flex', flexDirection: 'row', gap: 0.4, mt: 0.5, justifyContent: 'flex-end' }}>
-                                  {msg.READ_BY.slice(0, 5).map((r, i) => (
+                              {/* 읽음 아바타 + 리액션 한 줄로 */}
+                              <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 0.5, mt: 0.5, justifyContent: isMe ? 'flex-end' : 'flex-start', flexWrap: 'wrap' }}>
+                                {/* 그룹 읽음 아바타 */}
+                                {isMe && isGroup && msg.READ_BY && msg.READ_BY.length > 0 &&
+                                  msg.READ_BY.slice(0, 5).map((r, i) => (
                                     <Avatar
                                       key={i}
                                       src={r.avatar || undefined}
                                       sx={{
-                                        width: 24, height: 24, // 👈 18에서 24로 크기 증가
-                                        fontSize: '0.65rem',   // 👈 0.5에서 0.65로 폰트 크기 증가
-                                        fontWeight: 800,
-                                        border: '1.5px solid #fff',
-                                        backgroundColor: '#0F172A',
+                                        width: 20, height: 20,
+                                        fontSize: '0.55rem', fontWeight: 800,
+                                        border: `1.5px solid ${mode === 'dark' ? '#1A1D27' : '#fff'}`,
+                                        backgroundColor: 'var(--text-primary)',
                                         boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
                                       }}
                                     >
                                       {getInitial(r.nickname)}
                                     </Avatar>
-                                  ))}
-                                </Box>
-                              )}
+                                  ))
+                                }
+
+                                {/* 리액션 표시 (누가 했는지 툴팁) */}
+                                {reactions[msg.MESSAGE_ID] && Object.entries(reactions[msg.MESSAGE_ID]).map(([emoji, data]) => (
+                                  <Box
+                                    key={emoji}
+                                    onClick={(e) => { e.stopPropagation(); handleReaction(msg.MESSAGE_ID, emoji); }}
+                                    title={data.users?.join(', ')}
+                                    sx={{
+                                      display: 'flex', alignItems: 'center', gap: 0.3,
+                                      backgroundColor: data.myReaction ? '#EFF6FF' : (mode === 'dark' ? '#22253A' : '#F1F5F9'),
+                                      border: data.myReaction ? '1px solid #2563EB' : '1px solid var(--border-color)',
+                                      borderRadius: 10, px: 0.8, py: 0.2, cursor: 'pointer',
+                                      transition: 'all 0.15s', '&:hover': { opacity: 0.8 },
+                                      position: 'relative',
+                                    }}
+                                  >
+                                    <Typography sx={{ fontSize: '0.82rem', lineHeight: 1 }}>{emoji}</Typography>
+                                    <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: data.myReaction ? '#2563EB' : 'var(--text-secondary)' }}>
+                                      {data.count}
+                                    </Typography>
+                                    {/* 리액션한 사람 아바타 (최대 3명) */}
+                                    {data.users && data.users.length > 0 && (
+                                      <Box sx={{ display: 'flex', ml: 0.3 }}>
+                                        {data.users.slice(0, 3).map((nick, i) => (
+                                          <Avatar
+                                            key={i}
+                                            sx={{
+                                              width: 14, height: 14,
+                                              fontSize: '0.45rem', fontWeight: 800,
+                                              backgroundColor: '#2563EB',
+                                              border: `1px solid ${mode === 'dark' ? '#1A1D27' : '#fff'}`,
+                                              ml: i > 0 ? -0.5 : 0,
+                                            }}
+                                          >
+                                            {getInitial(nick)}
+                                          </Avatar>
+                                        ))}
+                                      </Box>
+                                    )}
+                                  </Box>
+                                ))}
+                              </Box>
                             </Box>
                           </Box>
                         </Box>
@@ -2048,7 +2173,7 @@ export default function Messages() {
                       <Box sx={{ width: 36, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
                         <Avatar
                           src={avatarSrc}
-                          sx={{ width: 32, height: 32, backgroundColor: '#0F172A', fontSize: '0.7rem', fontWeight: 800 }}
+                          sx={{ width: 32, height: 32, backgroundColor: 'var(--text-primary)', fontSize: '0.7rem', fontWeight: 800 }}
                         >
                           {getInitial(nickname)}
                         </Avatar>
@@ -2059,7 +2184,7 @@ export default function Messages() {
                             {nickname}
                           </Typography>
                         )}
-                        <Box sx={{ px: 2, py: 1.8, backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: '0px 16px 16px 16px', display: 'flex', gap: 0.5 }}>
+                        <Box sx={{ px: 2, py: 1.8, backgroundColor: 'var(--bg-paper)', border: '1px solid var(--border-color)', borderRadius: '0px 16px 16px 16px', display: 'flex', gap: 0.5 }}>
                           {['-0.32s', '-0.16s', '0s'].map((delay, i) => (
                             <Box key={i} sx={{ width: 6, height: 6, backgroundColor: '#94A3B8', borderRadius: '50%', animation: 'typingBounce 1.4s infinite ease-in-out both', animationDelay: delay }} />
                           ))}
@@ -2077,14 +2202,13 @@ export default function Messages() {
                       right: 24,
                       zIndex: 30,
                       width: 40, height: 40, borderRadius: '50%',
-                      backgroundColor: 'rgba(255,255,255,0.9)',
-                      color: '#0F172A',
+                      backgroundColor: mode === 'dark' ? 'rgba(26,29,39,0.9)' : 'rgba(255,255,255,0.9)',
+                      color: 'var(--text-primary)',
                       backdropFilter: 'blur(8px)',
-                      border: '1px solid #E2E8F0',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                       animation: 'fadeIn 0.2s ease',
-                      '&:hover': { backgroundColor: '#F1F5F9' }
+                      '&:hover': { backgroundColor: 'var(--hover-bg)' }
                     }}
                   >
                     <ExpandMore sx={{ fontSize: 24 }} />
@@ -2094,20 +2218,26 @@ export default function Messages() {
               </Box>
 
               {editingMessageId && (
-                <Box sx={{ px: 2, py: 1, backgroundColor: '#EFF6FF', borderTop: '1px solid #BFDBFE', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box sx={{
+                  px: 2, py: 1, backgroundColor: mode === 'dark' ? '#1E2D4A' : '#EFF6FF',
+                  borderTop: `1px solid ${mode === 'dark' ? '#2D4A7A' : '#BFDBFE'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                }}>
                   <Typography sx={{ fontSize: '0.8rem', color: '#2563EB', fontWeight: 700 }}>메시지 수정 중...</Typography>
                   <IconButton size="small" onClick={() => { setEditingMessageId(null); setNewMessage(''); }} sx={{ color: '#2563EB' }}><Close fontSize="small" /></IconButton>
                 </Box>
               )}
 
               {isBlocked ? (
-                <Box sx={{ p: 2, backgroundColor: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', flexShrink: 0, minHeight: 74 }}>
-                  <Typography sx={{ fontSize: '0.85rem', color: '#64748B', fontWeight: 600 }}>
+                <Box sx={{ p: 2, backgroundColor: 'var(--bg-default)', borderTop: `1px solid ${mode === 'dark' ? '#2D3148' : '#E2E8F0'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', flexShrink: 0, minHeight: 74 }}>
+                  <Typography sx={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
                     {blockText}
                   </Typography>
                 </Box>
               ) : (
-                <Box component="form" onSubmit={handleSend} sx={{ p: 2, backgroundColor: '#fff', borderTop: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+                <Box component="form" onSubmit={handleSend} sx={{
+                  p: 2, borderTop: '1px solid var(--border-color)',
+                  display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0
+                }}>
                   <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept="image/*,video/*,*/*" onChange={handleFileUpload} />
                   <IconButton sx={{ color: '#94A3B8' }} onClick={() => fileInputRef.current?.click()}><ImageOutlined /></IconButton>
                   <IconButton sx={{ color: '#94A3B8' }} onClick={(e) => setStickerAnchorEl(e.currentTarget)}><SentimentSatisfiedAlt /></IconButton>
@@ -2123,9 +2253,9 @@ export default function Messages() {
                         position: 'absolute',
                         left: 0, top: 0, width: '100%', height: '100%',
                         px: 2, py: 1.2, borderRadius: 3,
-                        backgroundColor: '#F1F5F9',
+                        backgroundColor: 'var(--hover-bg)',
                         fontSize: '0.95rem',
-                        color: '#0F172A',
+                        color: 'var(--text-primary)',
                         pointerEvents: 'none',
                         overflowX: 'auto',
                         overflowY: 'hidden',
@@ -2139,7 +2269,7 @@ export default function Messages() {
                       ) : (
                         newMessage.split(/(@[a-zA-Z0-9가-힣_-]+)/g).map((part, index) => (
                           part.startsWith('@') && part.length > 1 ? (
-                            <span key={index} style={{ color: '#2563EB', fontWeight: 800 }}>
+                            <span key={index} style={{ color: 'var(--text-primary)', fontWeight: 400 }}>
                               {part}
                             </span>
                           ) : (
@@ -2153,7 +2283,7 @@ export default function Messages() {
                       fullWidth
                       value={newMessage}
                       onChange={(e) => handleTypingInput(e.target.value)}
-                      onKeyDown={handleInputKeyDown} // 👈 Alt+Enter 트리거
+                      onKeyDown={handleInputKeyDown}
                       onPaste={handlePaste}
                       onScroll={(e) => {
                         if (overlayRef.current) overlayRef.current.scrollLeft = e.target.scrollLeft;
@@ -2162,7 +2292,7 @@ export default function Messages() {
                       sx={{
                         px: 2, py: 1.2, fontSize: '0.95rem',
                         color: 'transparent', // 입력 글자 자체는 숨김
-                        caretColor: '#0F172A', // 커서는 까맣게 유지
+                        caretColor: 'var(--text-primary)', // 커서는 까맣게 유지
                         zIndex: 1, // 최상단으로 올림
                         '& input': {
                           backgroundColor: 'transparent',
@@ -2171,7 +2301,10 @@ export default function Messages() {
                       }}
                     />
                   </Box>
-                  <IconButton type="submit" disabled={!newMessage.trim()} sx={{ backgroundColor: newMessage.trim() ? '#2563EB' : '#E2E8F0', color: '#fff', '&:hover': { backgroundColor: '#1D4ED8' }, transition: 'all 0.2s', p: 1.2 }}>
+                  <IconButton type="submit" disabled={!newMessage.trim()} sx={{
+                    backgroundColor: newMessage.trim() ? '#2563EB' : (mode === 'dark' ? '#2D3148' : '#E2E8F0')
+                    , color: '#fff', '&:hover': { backgroundColor: '#1D4ED8' }, transition: 'all 0.2s', p: 1.2
+                  }}>
                     <SendRounded sx={{ fontSize: 20 }} />
                   </IconButton>
                 </Box>
@@ -2179,40 +2312,67 @@ export default function Messages() {
             </>
           )}
         </Box>
-      </Box>
+      </Box >
 
       {/* 메시지 옵션 메뉴 */}
-      <Menu anchorEl={anchorElMessage} open={Boolean(anchorElMessage)} onClose={handleCloseMessageOption} PaperProps={{ sx: { borderRadius: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', minWidth: 150 } }}>
+      < Menu anchorEl={anchorElMessage} open={Boolean(anchorElMessage)} onClose={handleCloseMessageOption} PaperProps={{ sx: { borderRadius: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', minWidth: 150 } }
+      }>
+        {/* 리액션 선택 바 */}
+        {selectedMessage && selectedMessage.IS_DELETED !== 'Y' && (
+          <Box sx={{ display: 'flex', gap: 0.5, px: 1.5, py: 1, borderBottom: '1px solid var(--border-color)' }}>
+            {REACTION_EMOJIS.map(emoji => (
+              <Box
+                key={emoji}
+                onClick={() => handleReaction(selectedMessage.MESSAGE_ID, emoji)}
+                sx={{
+                  fontSize: '1.4rem', cursor: 'pointer', borderRadius: '50%',
+                  width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: reactions[selectedMessage.MESSAGE_ID]?.[emoji]?.myReaction ? '2px solid #2563EB' : '2px solid transparent',
+                  transition: 'transform 0.15s', '&:hover': { transform: 'scale(1.2)' }
+                }}
+              >
+                {emoji}
+              </Box>
+            ))}
+          </Box>
+        )}
         {selectedMessage?.SENDER_NICKNAME === myNickname &&
           !isStickerMessage(selectedMessage) &&
           !selectedMessage?.IMAGE_URL &&
           !selectedMessage?.FILE_URL && (
+
             <MenuItem onClick={handleEditMessageClick} sx={{ fontSize: '0.85rem' }}>
-              <EditOutlined fontSize="small" sx={{ mr: 1, color: '#64748B' }} /> 수정
+              <EditOutlined fontSize="small" sx={{ mr: 1, color: 'var(--text-secondary)' }} /> 수정
             </MenuItem>
           )}
-        {selectedMessage?.SENDER_NICKNAME === myNickname && (
-          <MenuItem onClick={handleDeleteMessageForAll} sx={{ fontSize: '0.85rem' }}>
-            <DeleteOutline fontSize="small" sx={{ mr: 1, color: '#64748B' }} /> 모든 사람에게서 삭제
-          </MenuItem>
-        )}
-        {selectedMessage && (
-          <MenuItem onClick={handleDeleteMessageForMe} sx={{ fontSize: '0.85rem' }}>
-            <DeleteOutline fontSize="small" sx={{ mr: 1, color: '#64748B' }} /> 나에게서만 삭제
-          </MenuItem>
-        )}
-        {selectedMessage?.SENDER_NICKNAME !== myNickname && (
-          <MenuItem onClick={handleReportMessage} sx={{ fontSize: '0.85rem', color: '#EF4444' }}>
-            <ReportGmailerrorred fontSize="small" sx={{ mr: 1 }} /> 신고
-          </MenuItem>
-        )}
-      </Menu>
+        {
+          selectedMessage?.SENDER_NICKNAME === myNickname && (
+            <MenuItem onClick={handleDeleteMessageForAll} sx={{ fontSize: '0.85rem' }}>
+              <DeleteOutline fontSize="small" sx={{ mr: 1, color: 'var(--text-secondary)' }} /> 모든 사람에게서 삭제
+            </MenuItem>
+          )
+        }
+        {
+          selectedMessage && (
+            <MenuItem onClick={handleDeleteMessageForMe} sx={{ fontSize: '0.85rem' }}>
+              <DeleteOutline fontSize="small" sx={{ mr: 1, color: 'var(--text-secondary)' }} /> 나에게서만 삭제
+            </MenuItem>
+          )
+        }
+        {
+          selectedMessage?.SENDER_NICKNAME !== myNickname && (
+            <MenuItem onClick={handleReportMessage} sx={{ fontSize: '0.85rem', color: '#EF4444' }}>
+              <ReportGmailerrorred fontSize="small" sx={{ mr: 1 }} /> 신고
+            </MenuItem>
+          )
+        }
+      </Menu >
 
       {/* 새 채팅 다이얼로그 */}
-      <Dialog open={createChatOpen} onClose={() => { setCreateChatOpen(false); setSelectedUsers([]); setNewChatSearchQuery(''); setNewChatSearchResults([]); }} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3, minHeight: 400 } }}>
-        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.1rem', textAlign: 'center', borderBottom: '1px solid #E2E8F0', pb: 1.5 }}>새 채팅</DialogTitle>
+      < Dialog open={createChatOpen} onClose={() => { setCreateChatOpen(false); setSelectedUsers([]); setNewChatSearchQuery(''); setNewChatSearchResults([]); }} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3, minHeight: 400 } }}>
+        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.1rem', textAlign: 'center', borderBottom: `1px solid ${mode === 'dark' ? '#2D3148' : '#E2E8F0'}`, pb: 1.5 }}>새 채팅</DialogTitle>
         <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column' }}>
-          <Box sx={{ p: 2, borderBottom: '1px solid #E2E8F0' }}>
+          <Box sx={{ p: 2, borderBottom: `1px solid ${mode === 'dark' ? '#2D3148' : '#E2E8F0'}` }}>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: selectedUsers.length > 0 ? 1 : 0 }}>
               {selectedUsers.map(u => (
                 <Box key={u.USER_ID} onClick={() => toggleUserSelection(u)} sx={{ backgroundColor: '#EFF6FF', color: '#2563EB', fontSize: '0.75rem', fontWeight: 700, px: 1.2, py: 0.5, borderRadius: 1.5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -2227,7 +2387,7 @@ export default function Messages() {
               <ListItem button key={user.USER_ID} onClick={() => toggleUserSelection(user)} sx={{ py: 1 }}>
                 <Checkbox checked={!!selectedUsers.find(u => u.USER_ID === user.USER_ID)} sx={{ p: 0, mr: 2 }} />
                 <ListItemAvatar sx={{ minWidth: 40 }}>
-                  <Avatar src={user.AVATAR ? `${API}${user.AVATAR}` : null} sx={{ width: 32, height: 32, backgroundColor: '#0F172A', fontSize: '0.75rem', fontWeight: 800 }}>
+                  <Avatar src={user.AVATAR ? `${API}${user.AVATAR}` : null} sx={{ width: 32, height: 32, backgroundColor: 'var(--text-primary)', fontSize: '0.75rem', fontWeight: 800 }}>
                     {getInitial(user.NICKNAME)}
                   </Avatar>
                 </ListItemAvatar>
@@ -2236,31 +2396,43 @@ export default function Messages() {
             ))}
           </List>
         </DialogContent>
-        <DialogActions sx={{ p: 2, borderTop: '1px solid #E2E8F0' }}>
+        <DialogActions sx={{ p: 2, borderTop: `1px solid ${mode === 'dark' ? '#2D3148' : '#E2E8F0'}` }}>
           <Button fullWidth variant="contained" disabled={selectedUsers.length === 0} onClick={handleStartNewChat} sx={{ borderRadius: 2, fontWeight: 700, py: 1.2, boxShadow: 'none' }}>
             {selectedUsers.length > 1 ? '단체 채팅 시작' : '개인 채팅 시작'}
           </Button>
         </DialogActions>
-      </Dialog>
+      </Dialog >
 
       {/* 채팅방 설정 */}
-      <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 4, backgroundColor: '#F8FAFC' } }}>
-        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 800, fontSize: '1.2rem', borderBottom: '1px solid #E2E8F0', backgroundColor: '#fff', py: 2 }}>
+      < Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 4, backgroundColor: 'var(--bg-default)' } }}>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 800, fontSize: '1.2rem', borderBottom: `1px solid ${mode === 'dark' ? '#2D3148' : '#E2E8F0'}`, backgroundColor: 'var(--bg-paper)', py: 2 }}>
           채팅방 설정
-          <IconButton onClick={() => setSettingsOpen(false)} size="small" sx={{ backgroundColor: '#F1F5F9' }}><Close fontSize="small" /></IconButton>
+          <IconButton onClick={() => setSettingsOpen(false)} size="small" sx={{ backgroundColor: 'var(--hover-bg)' }}><Close fontSize="small" /></IconButton>
         </DialogTitle>
         <DialogContent sx={{ p: 3 }}>
           {isGroup && (
-            <Box sx={{ backgroundColor: '#fff', p: 2.5, borderRadius: 3, border: '1px solid #E2E8F0', mb: 2 }}>
+            <Box sx={{ backgroundColor: 'var(--bg-paper)', p: 2.5, borderRadius: 3, border: '1px solid var(--border-color)', mb: 2 }}>
               <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', mb: 2 }}>채팅방 정보 수정</Typography>
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, mb: 2.5 }}>
                 <Box onClick={() => roomImageRef.current?.click()} sx={{ cursor: 'pointer', position: 'relative' }}>
-                  {currentRoomImageSrc ? (
-                    <Avatar src={currentRoomImageSrc} sx={{ width: 72, height: 72 }} />
+                  {deleteRoomImage ? (
+                    <GroupAvatar
+                      avatarBg={mode === 'dark' ? '#F1F5F9' : '#0F172A'}
+                      avatars={roomInfo?.PARTICIPANT_AVATARS}
+                      nicknames={roomInfo?.PARTICIPANT_NICKNAMES}
+                      roomImage={null}
+                      size={72}
+                    />
+                  ) : roomImagePreview ? (
+                    <Avatar src={roomImagePreview} sx={{ width: 72, height: 72 }} />
                   ) : (
-                    <Box sx={{ width: 72, height: 72, borderRadius: '50%', backgroundColor: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <GroupOutlined sx={{ fontSize: 32, color: '#fff' }} />
-                    </Box>
+                    <GroupAvatar
+                      avatarBg={mode === 'dark' ? '#F1F5F9' : '#0F172A'}
+                      avatars={roomInfo?.PARTICIPANT_AVATARS}
+                      nicknames={roomInfo?.PARTICIPANT_NICKNAMES}
+                      roomImage={roomInfo?.ROOM_IMAGE}
+                      size={72}
+                    />
                   )}
                   <Box sx={{ position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, backgroundColor: '#2563EB', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff' }}>
                     <EditOutlined sx={{ fontSize: 13, color: '#fff' }} />
@@ -2285,8 +2457,8 @@ export default function Messages() {
                 onChange={(e) => setRoomNameEdit(e.target.value)}
                 placeholder="채팅방 이름을 입력해주세요"
                 sx={{
-                  backgroundColor: '#F8FAFC',
-                  border: `1px solid ${!roomNameEdit.trim() ? '#FCA5A5' : '#E2E8F0'}`,
+                  backgroundColor: 'var(--bg-default)',
+                  border: `1px solid ${!roomNameEdit.trim() ? '#FCA5A5' : (mode === 'dark' ? '#2D3148' : '#E2E8F0')}`,
                   borderRadius: 2, px: 2, py: 1, fontSize: '0.9rem', mb: 0.5
                 }}
               />
@@ -2301,7 +2473,7 @@ export default function Messages() {
                 disabled={!roomNameEdit.trim()}
                 sx={{
                   mt: 1, borderRadius: 2, fontWeight: 700, boxShadow: 'none', py: 1,
-                  '&.Mui-disabled': { backgroundColor: '#E2E8F0', color: '#94A3B8' }
+                  '&.Mui-disabled': { backgroundColor: mode === 'dark' ? '#2D3148' : '#E2E8F0', color: '#94A3B8' }
                 }}
               >
                 저장
@@ -2309,7 +2481,7 @@ export default function Messages() {
             </Box>
           )}
 
-          <Box sx={{ backgroundColor: '#fff', p: 2.5, borderRadius: 3, border: '1px solid #E2E8F0', mb: 2, boxShadow: '0 2px 12px rgba(0,0,0,0.02)' }}>
+          <Box sx={{ backgroundColor: 'var(--bg-paper)', p: 2.5, borderRadius: 3, border: '1px solid var(--border-color)', mb: 2, boxShadow: '0 2px 12px rgba(0,0,0,0.02)' }}>
             <FormControlLabel
               control={
                 <Switch
@@ -2324,20 +2496,23 @@ export default function Messages() {
             />
           </Box>
 
-          <Box sx={{ backgroundColor: '#fff', p: 2.5, borderRadius: 3, border: '1px solid #E2E8F0', mb: 2, boxShadow: '0 2px 12px rgba(0,0,0,0.02)' }}>
+          <Box sx={{ backgroundColor: 'var(--bg-paper)', p: 2.5, borderRadius: 3, border: '1px solid var(--border-color)', mb: 2, boxShadow: '0 2px 12px rgba(0,0,0,0.02)' }}>
             <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', mb: 2 }}>배경색 변경</Typography>
             <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
-              {['#F8FAFC', '#EFF6FF', '#FEF2F2', '#F0FDF4', '#FFFBEB', '#F5F3FF', '#FAFAFA', '#18181B'].map(color => (
+              {['#F8FAFC', '#EFF6FF', '#FEF2F2', '#F0FDF4', '#FFFBEB', '#F5F3FF', '#FAFAFA', '#18181B', '#0F1117', '#1A1D27', '#0D1B2A', '#0D1F0D'].map(color => (
                 <Box key={color} onClick={() => handleBgColorChange(color)}
-                  sx={{ width: 44, height: 44, borderRadius: '50%', backgroundColor: color, border: chatBgColor === color ? '3px solid #2563EB' : '1px solid #CBD5E1', cursor: 'pointer', transition: 'transform 0.1s', '&:hover': { transform: 'scale(1.1)' } }}
+                  sx={{
+                    width: 44, height: 44, borderRadius: '50%', backgroundColor: color, border: chatBgColor === color ? '3px solid #2563EB' : `1px solid ${mode === 'dark' ? '#2D3148' : '#CBD5E1'}`
+                    , cursor: 'pointer', transition: 'transform 0.1s', '&:hover': { transform: 'scale(1.1)' }
+                  }}
                 />
               ))}
             </Stack>
           </Box>
 
-          <Box sx={{ backgroundColor: '#fff', p: 2.5, borderRadius: 3, border: '1px solid #E2E8F0', mb: 2, boxShadow: '0 2px 12px rgba(0,0,0,0.02)' }}>
+          <Box sx={{ backgroundColor: 'var(--bg-paper)', p: 2.5, borderRadius: 3, border: '1px solid var(--border-color)', mb: 2, boxShadow: '0 2px 12px rgba(0,0,0,0.02)' }}>
             <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', mb: 2 }}>말풍선 스타일</Typography>
-            <Select fullWidth size="small" value={bubbleStyle} onChange={(e) => handleBubbleStyleChange(e.target.value)} sx={{ borderRadius: 2, backgroundColor: '#F8FAFC' }}>
+            <Select fullWidth size="small" value={bubbleStyle} onChange={(e) => handleBubbleStyleChange(e.target.value)} sx={{ borderRadius: 2, backgroundColor: 'var(--bg-default)' }}>
               <MenuItem value="rounded">둥근 모서리 (기본)</MenuItem>
               <MenuItem value="sharp">각진 모서리</MenuItem>
               <MenuItem value="outlined">테두리형</MenuItem>
@@ -2345,7 +2520,7 @@ export default function Messages() {
           </Box>
 
           {/* FIX 2: 첨부파일 갤러리 — 클릭 시 좌우 화살표로 탐색 */}
-          <Box sx={{ backgroundColor: '#fff', p: 2.5, borderRadius: 3, border: '1px solid #E2E8F0', mb: 2, boxShadow: '0 2px 12px rgba(0,0,0,0.02)' }}>
+          <Box sx={{ backgroundColor: 'var(--bg-paper)', p: 2.5, borderRadius: 3, border: '1px solid var(--border-color)', mb: 2, boxShadow: '0 2px 12px rgba(0,0,0,0.02)' }}>
             <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', mb: 1.5 }}>모든 첨부파일</Typography>
             {allAttachmentImages.length === 0 ? (
               <Typography sx={{ fontSize: '0.8rem', color: '#94A3B8' }}>첨부된 이미지가 없습니다.</Typography>
@@ -2365,24 +2540,24 @@ export default function Messages() {
             )}
           </Box>
 
-          <Button fullWidth variant="outlined" color="error" startIcon={<ExitToApp />} onClick={handleLeaveRoom} sx={{ fontWeight: 800, borderRadius: 2, py: 1.2, backgroundColor: '#fff' }}>
+          <Button fullWidth variant="outlined" color="error" startIcon={<ExitToApp />} onClick={handleLeaveRoom} sx={{ fontWeight: 800, borderRadius: 2, py: 1.2, backgroundColor: 'var(--bg-paper)' }}>
             채팅방 나가기
           </Button>
         </DialogContent>
-      </Dialog>
+      </Dialog >
 
       {/* 확인 모달 */}
-      <Dialog open={confirmModal.open} onClose={() => setConfirmModal({ open: false })} PaperProps={{ sx: { borderRadius: 3, px: 1, py: 1, minWidth: 320 } }}>
-        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.05rem', color: '#0F172A' }}>{confirmModal.title}</DialogTitle>
-        <DialogContent><Typography sx={{ color: '#475569', fontSize: '0.9rem', mt: 0.5 }}>{confirmModal.desc}</Typography></DialogContent>
+      < Dialog open={confirmModal.open} onClose={() => setConfirmModal({ open: false })} PaperProps={{ sx: { borderRadius: 3, px: 1, py: 1, minWidth: 320 } }}>
+        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--text-primary)' }}>{confirmModal.title}</DialogTitle>
+        <DialogContent><Typography sx={{ color: mode === 'dark' ? '#94A3B8' : '#475569', fontSize: '0.9rem', mt: 0.5 }}>{confirmModal.desc}</Typography></DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setConfirmModal({ open: false })} sx={{ color: '#64748B', fontWeight: 700, fontSize: '0.85rem' }}>취소</Button>
+          <Button onClick={() => setConfirmModal({ open: false })} sx={{ color: 'var(--text-secondary)', fontWeight: 700, fontSize: '0.85rem' }}>취소</Button>
           <Button onClick={confirmModal.onConfirm} variant="contained" sx={{ backgroundColor: '#EF4444', color: '#fff', fontWeight: 800, fontSize: '0.85rem', borderRadius: 1.5, boxShadow: 'none', '&:hover': { backgroundColor: '#DC2626' } }}>확인</Button>
         </DialogActions>
-      </Dialog>
+      </Dialog >
 
       {/* 참여자 목록 모달 */}
-      <ParticipantsModal
+      < ParticipantsModal
         open={participantsModalOpen}
         onClose={() => setParticipantsModalOpen(false)}
         participants={participants}
@@ -2390,7 +2565,7 @@ export default function Messages() {
         onClickUser={(nickname) => navigate(`/user/${nickname}`)}
       />
 
-      <MessageReportModal
+      < MessageReportModal
         open={reportModalOpen}
         onClose={() => setReportModalOpen(false)}
         onSuccess={() => setReportSuccessOpen(true)}
@@ -2413,35 +2588,44 @@ export default function Messages() {
         <Alert severity="success" sx={{ fontWeight: 600, fontSize: '0.85rem', borderRadius: 2 }}>저장되었습니다.</Alert>
       </Snackbar>
       <Popover
-        open={Boolean(mentionAnchorEl)}
-        anchorEl={mentionAnchorEl}
-        onClose={() => setMentionAnchorEl(null)}
+        open={Boolean(stickerAnchorEl)}
+        anchorEl={stickerAnchorEl}
+        onClose={() => setStickerAnchorEl(null)}
         anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
         transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-        disableAutoFocus
-        disableEnforceFocus
-        PaperProps={{ sx: { borderRadius: 2, mt: -1, mb: 1, boxShadow: '0 4px 20px rgba(0,0,0,0.1)' } }}
+        PaperProps={{ sx: { borderRadius: 3, p: 1.5, boxShadow: '0 8px 30px rgba(0,0,0,0.12)' } }}
       >
-        <List sx={{ maxHeight: 200, overflowY: 'auto', minWidth: 200, p: 1 }}>
-          {participants
-            .filter(p => p.NICKNAME !== myNickname && p.NICKNAME.toLowerCase().includes(mentionFilter))
-            .map(p => (
-              <ListItem button key={p.USER_ID} onClick={() => handleSelectMention(p.NICKNAME)} sx={{ borderRadius: 1.5, mb: 0.5 }}>
-                <ListItemAvatar sx={{ minWidth: 40 }}>
-                  <Avatar src={p.AVATAR ? (p.AVATAR.startsWith('http') ? p.AVATAR : `${API}${p.AVATAR}`) : undefined} sx={{ width: 28, height: 28, fontSize: '0.75rem', backgroundColor: '#0F172A', fontWeight: 800 }}>
-                    {getInitial(p.NICKNAME)}
-                  </Avatar>
-                </ListItemAvatar>
-                <ListItemText primary={<Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#0F172A' }}>{p.NICKNAME}</Typography>} />
-              </ListItem>
-            ))}
-          {participants.filter(p => p.NICKNAME !== myNickname && p.NICKNAME.toLowerCase().includes(mentionFilter)).length === 0 && (
-            <Box sx={{ p: 2, textAlign: 'center' }}>
-              <Typography sx={{ fontSize: '0.8rem', color: '#94A3B8' }}>일치하는 사용자가 없습니다.</Typography>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, width: 240 }}>
+          {EMOTICON_LIST.map((em) => (
+            <Box
+              key={em.id}
+              onClick={() => {
+                setStickerAnchorEl(null);
+                const optimisticMsg = {
+                  MESSAGE_ID: Date.now(),
+                  SENDER_NICKNAME: myNickname,
+                  MESSAGE: '',
+                  IMAGE_URL: null,
+                  EMOTICON_URL: `${API}${em.src}`,
+                  IS_EMOTICON: true,
+                  SENT_AT: new Date().toISOString(),
+                  IS_READ: 'N', READ_BY: []
+                };
+                setMessages(prev => [...prev, optimisticMsg]);
+                setTimeout(scrollToBottom, 50);
+                fetch(`${API}/messages/${roomId}/send`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                  body: JSON.stringify({ message: `__EMOTICON__${em.src}`, IS_EMOTICON: true })
+                }).catch(() => { });
+              }}
+              sx={{ cursor: 'pointer', borderRadius: 2, overflow: 'hidden', transition: 'transform 0.15s', '&:hover': { transform: 'scale(1.1)' } }}
+            >
+              <Box component="img" src={em.src} sx={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', display: 'block' }} />
             </Box>
-          )}
-        </List>
+          ))}
+        </Box>
       </Popover>
-    </ThemeProvider >
+    </>
   );
 }

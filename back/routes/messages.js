@@ -71,14 +71,12 @@ router.get('/rooms', jwtAuthentication, async (req, res) => {
                       AND (DEL_USER_ID IS NULL OR DEL_USER_ID != :myId)
                 ) AS UNREAD_COUNT
             FROM CHAT_ROOMS r
-            JOIN CHAT_MEMBERS cm1 ON r.ROOM_ID = cm1.ROOM_ID AND cm1.USER_ID = :myId
+JOIN CHAT_MEMBERS cm1 ON r.ROOM_ID = cm1.ROOM_ID AND cm1.USER_ID = :myId AND cm1.IS_HIDDEN = 'N'
             LEFT JOIN CHAT_MEMBERS cm2 ON r.ROOM_ID = cm2.ROOM_ID
                 AND cm2.USER_ID != :myId
                 AND r.ROOM_TYPE = 'DIRECT'
             LEFT JOIN USERS u ON cm2.USER_ID = u.USER_ID
-            WHERE r.ROOM_ID IN (
-                SELECT ROOM_ID FROM CHAT_MEMBERS WHERE USER_ID = :myId
-            )
+           WHERE r.ROOM_ID IN (SELECT ROOM_ID FROM CHAT_MEMBERS WHERE USER_ID = :myId AND IS_HIDDEN = 'N')
             ORDER BY LAST_MESSAGE_AT DESC NULLS LAST
         `;
         const result = await conn.execute(sql, { myId }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
@@ -103,23 +101,22 @@ router.get('/rooms', jwtAuthentication, async (req, res) => {
                 );
                 row.PARTICIPANT_AVATARS = avatarRes.rows.map(r => r.IMAGE_URL);
                 row.PARTICIPANT_NICKNAMES = avatarRes.rows.map(r => r.NICKNAME);
-                // 단체방 이름이 없으면 참여자 닉네임으로 구성
-                if (!row.ROOM_NAME) {
-                    const nicknameRes = await conn.execute(
-                        `SELECT u.NICKNAME FROM CHAT_MEMBERS cm
-                         JOIN USERS u ON cm.USER_ID = u.USER_ID
-                         WHERE cm.ROOM_ID = :roomId AND cm.USER_ID != :myId AND ROWNUM <= 3`,
-                        { roomId: row.ROOM_ID, myId },
-                        { outFormat: oracledb.OUT_FORMAT_OBJECT }
-                    );
-                    const names = nicknameRes.rows.map(r => r.NICKNAME).join(', ');
-                    row.TARGET_NICKNAME = `${names} (${row.MEMBER_COUNT})`;
-                }
+                const nicknameRes = await conn.execute(
+                    `SELECT u.NICKNAME FROM CHAT_MEMBERS cm
+   JOIN USERS u ON cm.USER_ID = u.USER_ID
+   WHERE cm.ROOM_ID = :roomId AND cm.USER_ID != :myId AND ROWNUM <= 3`,
+                    { roomId: row.ROOM_ID, myId },
+                    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+                );
+                const names = nicknameRes.rows.map(r => r.NICKNAME).join(', ');
+                const displayName = row.ROOM_NAME || names;
+                row.TARGET_NICKNAME = `${displayName} (${row.MEMBER_COUNT})`;
             }
             row.LAST_HAS_IMAGE = !!(row.LAST_IMAGE_URL && !row.LAST_MESSAGE?.trim());
             row.LAST_IS_STICKER = row.LAST_MESSAGE?.startsWith('__STICKER__') || false;
             if (row.LAST_IS_STICKER) row.LAST_MESSAGE = '';
-
+            const isLastEmoticon = row.LAST_MESSAGE?.startsWith('__EMOTICON__') || false;
+            if (isLastEmoticon) { row.LAST_MESSAGE = '이모티콘을 보냈습니다.'; row.LAST_HAS_IMAGE = false; }
             const unreadRes = await conn.execute(
                 `SELECT MESSAGE, IMAGE_URL, SENT_AT,
             u.NICKNAME AS SENDER_NICKNAME
@@ -139,10 +136,23 @@ router.get('/rooms', jwtAuthentication, async (req, res) => {
                 { roomId: row.ROOM_ID, myId, myId2: myId },
                 { outFormat: oracledb.OUT_FORMAT_OBJECT }
             );
-            row.UNREAD_MESSAGES = unreadRes.rows; // 배열로 추가
+            row.UNREAD_MESSAGES = unreadRes.rows;
+
+            const muteRes = await conn.execute(
+                `SELECT IS_MUTED FROM CHAT_MEMBER_SETTINGS WHERE ROOM_ID = :roomId AND USER_ID = :myId`,
+                { roomId: row.ROOM_ID, myId },
+                { outFormat: oracledb.OUT_FORMAT_OBJECT }
+            );
+            row.IS_MUTED = muteRes.rows[0]?.IS_MUTED === 'Y';
             rooms.push(row);
         }
-
+        const now = Date.now();
+        rooms.forEach(room => {
+            const roomTyping = typingStore[room.ROOM_ID] || {};
+            room.TYPING_USERS = Object.entries(roomTyping)
+                .filter(([uid, data]) => String(uid) !== String(myId) && data.expiresAt > now)
+                .map(([, data]) => data.nickname);
+        });
         res.json({ success: true, rooms });
     } catch (err) {
         console.error('[GET /messages/rooms]', err);
@@ -187,6 +197,11 @@ router.post('/room', jwtAuthentication, async (req, res) => {
                 { myId, targetId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
             );
             if (roomRes.rows.length > 0) {
+                await conn.execute(
+                    `UPDATE CHAT_MEMBERS SET IS_HIDDEN = 'N' WHERE ROOM_ID = :roomId AND USER_ID = :myId`,
+                    { roomId: roomRes.rows[0].ROOM_ID, myId },
+                    { autoCommit: true }
+                );
                 return res.json({ success: true, roomId: roomRes.rows[0].ROOM_ID });
             }
         }
@@ -248,9 +263,9 @@ router.get('/:roomId', jwtAuthentication, async (req, res) => {
     try {
         conn = await db.getConnection();
 
-        // 권한 확인
         const authCheck = await conn.execute(
-            `SELECT COUNT(*) AS CNT FROM CHAT_MEMBERS WHERE ROOM_ID = :roomId AND USER_ID = :myId`,
+            `SELECT COUNT(*) AS CNT FROM CHAT_MEMBERS WHERE ROOM_ID = :roomId AND USER_ID = :myId AND IS_HIDDEN = 'N'
+`,
             { roomId, myId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
         if (authCheck.rows[0].CNT === 0) {
@@ -300,7 +315,7 @@ router.get('/:roomId', jwtAuthentication, async (req, res) => {
 
         const msgRes = await conn.execute(
             `SELECT m.MESSAGE_ID, m.MESSAGE, m.SENT_AT, m.IS_READ,
-            m.IMAGE_URL, m.IS_EDITED, m.IS_SYSTEM, m.IS_DELETED,
+       m.IMAGE_URL, m.IS_EDITED, m.IS_SYSTEM, m.IS_DELETED, m.IS_EMOTICON,
             u.NICKNAME AS SENDER_NICKNAME,
             u.USER_ID AS SENDER_ID,
             (SELECT IMAGE_URL FROM PROFILE_IMAGES WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS SENDER_AVATAR
@@ -337,7 +352,7 @@ router.get('/:roomId', jwtAuthentication, async (req, res) => {
 router.post('/:roomId/send', jwtAuthentication, async (req, res) => {
     const myId = req.user?.userId ?? req.user?.id;
     const { roomId } = req.params;
-    const { message, IS_SYSTEM } = req.body;  // IS_SYSTEM 추가
+    const { message, IS_SYSTEM, IS_EMOTICON } = req.body;
 
     if (!message || !message.trim()) {
         return res.status(400).json({ success: false, message: '메시지를 입력해주세요.' });
@@ -349,9 +364,9 @@ router.post('/:roomId/send', jwtAuthentication, async (req, res) => {
     try {
         conn = await db.getConnection();
         await conn.execute(
-            `INSERT INTO CHAT_MESSAGES (MESSAGE_ID, ROOM_ID, SENDER_ID, MESSAGE, IS_SYSTEM, SENT_AT)
-             VALUES (SEQ_MSG_ID.NEXTVAL, :roomId, :myId, :message, :isSystem, SYSDATE)`,
-            { roomId, myId, message, isSystem },
+            `INSERT INTO CHAT_MESSAGES (MESSAGE_ID, ROOM_ID, SENDER_ID, MESSAGE, IS_SYSTEM, IS_EMOTICON, SENT_AT)
+ VALUES (SEQ_MSG_ID.NEXTVAL, :roomId, :myId, :message, :isSystem, :isEmoticon, SYSDATE)`,
+            { roomId, myId, message, isSystem, isEmoticon: IS_EMOTICON === true ? 'Y' : 'N' },
             { autoCommit: true }
         );
         res.json({ success: true });
@@ -503,22 +518,32 @@ router.delete('/:roomId/leave', jwtAuthentication, async (req, res) => {
     try {
         conn = await db.getConnection();
 
-        // 1. 내 메시지들 soft delete (나에게서만)
         await conn.execute(
             `UPDATE CHAT_MESSAGES SET DEL_USER_ID = :myId
              WHERE ROOM_ID = :roomId AND (DEL_USER_ID IS NULL OR DEL_USER_ID != :myId)`,
             { myId, roomId }, { autoCommit: false }
         );
 
-        // 2. CHAT_MEMBERS에서 나 제거
-        await conn.execute(
-            `DELETE FROM CHAT_MEMBERS WHERE ROOM_ID = :roomId AND USER_ID = :myId`,
-            { roomId, myId }, { autoCommit: false }
+        const roomTypeRes = await conn.execute(
+            `SELECT ROOM_TYPE FROM CHAT_ROOMS WHERE ROOM_ID = :roomId`,
+            { roomId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
+        const roomType = roomTypeRes.rows[0]?.ROOM_TYPE;
 
-        // 3. 방에 아무도 없으면 방 + 메시지 완전 삭제
+        if (roomType === 'DIRECT') {
+            await conn.execute(
+                `UPDATE CHAT_MEMBERS SET IS_HIDDEN = 'Y' WHERE ROOM_ID = :roomId AND USER_ID = :myId`,
+                { roomId, myId }, { autoCommit: false }
+            );
+        } else {
+            await conn.execute(
+                `DELETE FROM CHAT_MEMBERS WHERE ROOM_ID = :roomId AND USER_ID = :myId`,
+                { roomId, myId }, { autoCommit: false }
+            );
+        }
         const cntRes = await conn.execute(
-            `SELECT COUNT(*) AS CNT FROM CHAT_MEMBERS WHERE ROOM_ID = :roomId`,
+            `SELECT COUNT(*) AS CNT FROM CHAT_MEMBERS WHERE ROOM_ID = :roomId AND IS_HIDDEN = 'N'
+`,
             { roomId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
 
@@ -710,6 +735,95 @@ router.get('/:roomId/peer-profile', jwtAuthentication, async (req, res) => {
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
         res.json({ success: true, peer: result.rows[0] || null });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (conn) await conn.close();
+    }
+});
+
+router.put('/:roomId/mute', jwtAuthentication, async (req, res) => {
+    const myId = req.user?.userId ?? req.user?.id;
+    const { roomId } = req.params;
+    const { isMuted } = req.body;
+    let conn;
+    try {
+        conn = await db.getConnection();
+        await conn.execute(
+            `MERGE INTO CHAT_MEMBER_SETTINGS s
+       USING DUAL ON (s.ROOM_ID = :roomId AND s.USER_ID = :myId)
+       WHEN MATCHED THEN UPDATE SET IS_MUTED = :isMuted
+       WHEN NOT MATCHED THEN INSERT (ROOM_ID, USER_ID, IS_MUTED)
+       VALUES (:roomId, :myId, :isMuted)`,
+            { roomId, myId, isMuted: isMuted ? 'Y' : 'N' },
+            { autoCommit: true }
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (conn) await conn.close();
+    }
+});
+
+// 리액션 추가/취소
+router.post('/:roomId/messages/:messageId/reaction', jwtAuthentication, async (req, res) => {
+    const myId = req.user?.userId ?? req.user?.id;
+    const { roomId, messageId } = req.params;
+    const { emoji } = req.body;
+    let conn;
+    try {
+        conn = await db.getConnection();
+        const existing = await conn.execute(
+            `SELECT REACTION_ID FROM CHAT_REACTIONS WHERE MESSAGE_ID = :messageId AND USER_ID = :myId AND EMOJI = :emoji`,
+            { messageId, myId, emoji }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        if (existing.rows.length > 0) {
+            await conn.execute(
+                `DELETE FROM CHAT_REACTIONS WHERE MESSAGE_ID = :messageId AND USER_ID = :myId AND EMOJI = :emoji`,
+                { messageId, myId, emoji }, { autoCommit: true }
+            );
+            return res.json({ success: true, action: 'removed' });
+        }
+        await conn.execute(
+            `INSERT INTO CHAT_REACTIONS (REACTION_ID, MESSAGE_ID, ROOM_ID, USER_ID, EMOJI, CREATED_AT)
+             VALUES (SEQ_REACTION_ID.NEXTVAL, :messageId, :roomId, :myId, :emoji, SYSDATE)`,
+            { messageId, roomId, myId, emoji }, { autoCommit: true }
+        );
+        res.json({ success: true, action: 'added' });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (conn) await conn.close();
+    }
+});
+
+// 메시지별 리액션 조회 (GET /:roomId 에서 messages 가져올 때 같이 포함시키거나 별도 호출)
+router.get('/:roomId/reactions', jwtAuthentication, async (req, res) => {
+    const myId = req.user?.userId ?? req.user?.id;
+    const { roomId } = req.params;
+    let conn;
+    try {
+        conn = await db.getConnection();
+        const result = await conn.execute(
+            `SELECT r.MESSAGE_ID, r.EMOJI, r.USER_ID, u.NICKNAME
+             FROM CHAT_REACTIONS r
+             JOIN USERS u ON r.USER_ID = u.USER_ID
+             WHERE r.ROOM_ID = :roomId
+             ORDER BY r.CREATED_AT ASC`,
+            { roomId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        // MESSAGE_ID별로 그룹핑
+        const grouped = {};
+        for (const row of result.rows) {
+            const mid = row.MESSAGE_ID;
+            if (!grouped[mid]) grouped[mid] = {};
+            if (!grouped[mid][row.EMOJI]) grouped[mid][row.EMOJI] = { count: 0, users: [], myReaction: false };
+            grouped[mid][row.EMOJI].count++;
+            grouped[mid][row.EMOJI].users.push(row.NICKNAME);
+            if (row.USER_ID === myId) grouped[mid][row.EMOJI].myReaction = true;
+        }
+        res.json({ success: true, reactions: grouped });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     } finally {

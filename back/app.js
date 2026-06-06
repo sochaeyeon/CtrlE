@@ -36,6 +36,7 @@ app.use('/explore', exploreRouter);
 app.use('/messages', messagesRouter);
 app.use('/activity', activityRouter);
 
+
 async function startServer() {
   try {
     await db.init();
