@@ -300,6 +300,7 @@ router.get('/list', jwtAuthentication, async (req, res) => {
                 p.CONTENT    AS "description",
                 p.USER_ID    AS "userId",
                 p.CREATED_AT AS "createdAt",
+                u.BIO_SHORT AS "bioShort",
                 c.CATEGORY_NAME AS "category",
                 u.NICKNAME   AS "writer",
                 u.BIO        AS "role",
@@ -378,6 +379,7 @@ router.get('/recommended', jwtAuthentication, async (req, res) => {
                 p.CREATED_AT AS "createdAt",
                 c.CATEGORY_NAME AS "category",
                 u.NICKNAME   AS "writer",
+                u.BIO_SHORT AS "bioShort",
                 u.BIO        AS "role",
                 (SELECT image_url FROM profile_images
                  WHERE user_id = u.user_id AND is_main = 'Y' AND rownum = 1) AS "avatar",
@@ -856,8 +858,8 @@ router.put('/:postId', jwtAuthentication, async (req, res) => {
 
         await conn.execute(
             `UPDATE POSTS SET TITLE = :title, CATEGORY_ID = :categoryId, LOCATION = :location,
-     HIDE_LIKE_COUNT = :hideLike, DISABLE_COMMENTS = :disableComments, UPDATED_AT = SYSDATE
-     WHERE POST_ID = :postId`,
+             HIDE_LIKE_COUNT = :hideLike, DISABLE_COMMENTS = :disableComments, UPDATED_AT = SYSDATE
+             WHERE POST_ID = :postId`,
             { title, categoryId, location: location || null, hideLike: hide_like_count || 'N', disableComments: disable_comments || 'N', postId },
             { autoCommit: false }
         );
@@ -874,6 +876,34 @@ router.put('/:postId', jwtAuthentication, async (req, res) => {
             lob.end();
         });
 
+        // ✅ 이미지 처리: 기존 첨부파일 삭제 후 content에서 재추출하여 재등록
+        await conn.execute(
+            `DELETE FROM ATTACHED_FILES WHERE TARGET_TYPE = 'POST' AND TARGET_ID = :postId`,
+            { postId }, { autoCommit: false }
+        );
+
+        const mediaRegex = /<(?:img|video)[^>]+src="([^">]+)"/g;
+        let match;
+        while ((match = mediaRegex.exec(content)) !== null) {
+            const fileUrl = match[1];
+            // 절대 URL이면 상대 경로로 변환, 이미 상대 경로면 그대로
+            const relativeUrl = fileUrl.startsWith('http://localhost:3010')
+                ? fileUrl.replace('http://localhost:3010', '')
+                : fileUrl.startsWith('/uploads')
+                    ? fileUrl
+                    : null;
+
+            if (relativeUrl) {
+                await conn.execute(
+                    `INSERT INTO ATTACHED_FILES (FILE_ID, USER_ID, TARGET_TYPE, TARGET_ID, FILE_URL)
+                     VALUES (SEQ_FILE_ID.NEXTVAL, :userId, 'POST', :postId, :fileUrl)`,
+                    { userId, postId, fileUrl: relativeUrl },
+                    { autoCommit: false }
+                );
+            }
+        }
+
+        // 태그 처리
         await conn.execute(`DELETE FROM POST_TAGS WHERE POST_ID = :postId`, { postId }, { autoCommit: false });
         if (tags && tags.length > 0) {
             for (const tagName of tags) {
@@ -887,6 +917,7 @@ router.put('/:postId', jwtAuthentication, async (req, res) => {
                 await conn.execute(`INSERT INTO POST_TAGS (POST_ID, TAG_ID) VALUES (:postId, :tagId)`, { postId, tagId }, { autoCommit: false });
             }
         }
+
         await conn.commit();
         return res.json({ success: true, postId });
     } catch (err) {

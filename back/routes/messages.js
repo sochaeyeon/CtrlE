@@ -62,21 +62,30 @@ router.get('/rooms', jwtAuthentication, async (req, res) => {
                         ORDER BY cm_inner.SENT_AT DESC
                     ) WHERE ROWNUM = 1
                 ) AS LAST_SENDER_AVATAR,
-                (
-                    SELECT COUNT(*) FROM CHAT_MESSAGES
-                    WHERE ROOM_ID = r.ROOM_ID
-                      AND SENDER_ID != :myId
-                      AND IS_READ = 'N'
-                      AND IS_DELETED = 'N'
-                      AND (DEL_USER_ID IS NULL OR DEL_USER_ID != :myId)
-                ) AS UNREAD_COUNT
+               (
+    SELECT COUNT(*) FROM CHAT_MESSAGES msg2
+    WHERE msg2.ROOM_ID = r.ROOM_ID
+      AND msg2.SENDER_ID != :myId
+      AND msg2.IS_READ = 'N'
+      AND msg2.IS_DELETED = 'N'
+      AND NOT EXISTS (
+          SELECT 1 FROM CHAT_MESSAGE_DELETES d
+          WHERE d.MESSAGE_ID = msg2.MESSAGE_ID AND d.USER_ID = :myId
+      )
+) AS UNREAD_COUNT
             FROM CHAT_ROOMS r
 JOIN CHAT_MEMBERS cm1 ON r.ROOM_ID = cm1.ROOM_ID AND cm1.USER_ID = :myId AND cm1.IS_HIDDEN = 'N'
             LEFT JOIN CHAT_MEMBERS cm2 ON r.ROOM_ID = cm2.ROOM_ID
                 AND cm2.USER_ID != :myId
                 AND r.ROOM_TYPE = 'DIRECT'
             LEFT JOIN USERS u ON cm2.USER_ID = u.USER_ID
-           WHERE r.ROOM_ID IN (SELECT ROOM_ID FROM CHAT_MEMBERS WHERE USER_ID = :myId AND IS_HIDDEN = 'N')
+       WHERE r.ROOM_ID IN (SELECT ROOM_ID FROM CHAT_MEMBERS WHERE USER_ID = :myId AND IS_HIDDEN = 'N')
+  AND (
+    r.ROOM_TYPE = 'GROUP'
+    OR EXISTS (
+      SELECT 1 FROM CHAT_MESSAGES WHERE ROOM_ID = r.ROOM_ID AND IS_SYSTEM = 'N'
+    )
+  )
             ORDER BY LAST_MESSAGE_AT DESC NULLS LAST
         `;
         const result = await conn.execute(sql, { myId }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
@@ -127,7 +136,7 @@ JOIN CHAT_MEMBERS cm1 ON r.ROOM_ID = cm1.ROOM_ID AND cm1.USER_ID = :myId AND cm1
            AND cm.SENDER_ID != :myId
            AND cm.IS_READ = 'N'
            AND cm.IS_DELETED = 'N'
-           AND (cm.DEL_USER_ID IS NULL OR cm.DEL_USER_ID != :myId2)
+AND NOT EXISTS (SELECT 1 FROM CHAT_MESSAGE_DELETES d WHERE d.MESSAGE_ID = cm.MESSAGE_ID AND d.USER_ID = :myId2)
          ORDER BY cm.SENT_AT DESC
      ) sub
      JOIN USERS u ON sub.SENDER_ID = u.USER_ID
@@ -321,10 +330,11 @@ router.get('/:roomId', jwtAuthentication, async (req, res) => {
             (SELECT IMAGE_URL FROM PROFILE_IMAGES WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS SENDER_AVATAR
      FROM CHAT_MESSAGES m
      JOIN USERS u ON m.SENDER_ID = u.USER_ID
-     WHERE m.ROOM_ID = :roomId
-       AND (m.IS_SYSTEM = 'Y' OR (
-           m.DEL_USER_ID IS NULL OR m.DEL_USER_ID != :myId
-       ))
+WHERE m.ROOM_ID = :roomId
+  AND NOT EXISTS (
+      SELECT 1 FROM CHAT_MESSAGE_DELETES d
+      WHERE d.MESSAGE_ID = m.MESSAGE_ID AND d.USER_ID = :myId
+  )
      ORDER BY m.SENT_AT ASC`,
             { roomId, myId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
@@ -450,10 +460,6 @@ router.put('/:roomId/edit', jwtAuthentication, async (req, res) => {
     }
 });
 
-// ─────────────────────────────────────────────
-// DELETE /messages/:roomId/delete-me — 나에게서만 삭제
-// DEL_USER_ID 설정
-// ─────────────────────────────────────────────
 router.delete('/:roomId/delete-me', jwtAuthentication, async (req, res) => {
     const myId = req.user?.userId ?? req.user?.id;
     const { messageIds } = req.body;
@@ -464,8 +470,10 @@ router.delete('/:roomId/delete-me', jwtAuthentication, async (req, res) => {
         conn = await db.getConnection();
         for (const msgId of messageIds) {
             await conn.execute(
-                `UPDATE CHAT_MESSAGES SET DEL_USER_ID = :myId WHERE MESSAGE_ID = :msgId`,
-                { myId, msgId }, { autoCommit: false }
+                `MERGE INTO CHAT_MESSAGE_DELETES d
+         USING DUAL ON (d.MESSAGE_ID = :msgId AND d.USER_ID = :myId)
+         WHEN NOT MATCHED THEN INSERT (MESSAGE_ID, USER_ID) VALUES (:msgId, :myId)`,
+                { msgId, myId }, { autoCommit: false }
             );
         }
         await conn.commit();
@@ -517,11 +525,15 @@ router.delete('/:roomId/leave', jwtAuthentication, async (req, res) => {
 
     try {
         conn = await db.getConnection();
-
         await conn.execute(
-            `UPDATE CHAT_MESSAGES SET DEL_USER_ID = :myId
-             WHERE ROOM_ID = :roomId AND (DEL_USER_ID IS NULL OR DEL_USER_ID != :myId)`,
-            { myId, roomId }, { autoCommit: false }
+            `INSERT INTO CHAT_MESSAGE_DELETES (MESSAGE_ID, USER_ID)
+     SELECT MESSAGE_ID, :myId FROM CHAT_MESSAGES
+     WHERE ROOM_ID = :roomId
+       AND NOT EXISTS (
+           SELECT 1 FROM CHAT_MESSAGE_DELETES d
+           WHERE d.MESSAGE_ID = CHAT_MESSAGES.MESSAGE_ID AND d.USER_ID = :myId2
+       )`,
+            { myId, roomId, myId2: myId }, { autoCommit: false }
         );
 
         const roomTypeRes = await conn.execute(

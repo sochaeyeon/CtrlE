@@ -584,6 +584,8 @@ export default function Messages() {
   const inputWrapperRef = useRef(null);
   const overlayRef = useRef(null);
   const [reactions, setReactions] = useState({});
+  const isCustomBgColorRef = useRef(false);
+
   const mentionReadRoomsRef = useRef(
     JSON.parse(sessionStorage.getItem('mentionReadRooms') || '{}')
   );
@@ -748,26 +750,29 @@ export default function Messages() {
         const data = await res.json();
         if (data.success) {
           setRoomInfo(data.room);
-          // FIX 3: 메시지 업데이트 시 새 메시지만 추가 (기존 상태 유지로 깜빡임 방지)
           setMessages(prev => {
             const localDeletedIds = new Set(
               prev.filter(m => m.IS_DELETED === 'Y').map(m => m.MESSAGE_ID)
             );
             const incoming = data.messages || [];
-            const prevIds = new Set(prev.map(m => m.MESSAGE_ID));
 
-            // 기존 메시지 업데이트 + 새 메시지 추가
             const updated = incoming.map(serverMsg => {
+              // 로컬에서 삭제 처리된 메시지는 덮어쓰지 않음
               if (localDeletedIds.has(serverMsg.MESSAGE_ID)) {
-                return { ...serverMsg, IS_DELETED: 'Y', MESSAGE: '', IMAGE_URL: null, FILE_URL: null, IS_STICKER: false };
+                return {
+                  ...serverMsg,
+                  IS_DELETED: 'Y',
+                  MESSAGE: '',
+                  IMAGE_URL: null,
+                  FILE_URL: null,
+                  IS_STICKER: false
+                };
               }
-              // 옵티미스틱 메시지(숫자 ID)는 서버 메시지로 대체하지 않음
               return serverMsg;
             });
 
             const optimisticMessages = prev.filter(m => {
               if (typeof m.MESSAGE_ID !== 'number' || m.MESSAGE_ID <= Date.now() - 15000) return false;
-
               if (m.IMAGE_URL || m.FILE_URL) {
                 return !incoming.some(s => s.SENDER_NICKNAME === myNickname && (s.IMAGE_URL || s.FILE_URL) && new Date(s.SENT_AT).getTime() > Date.now() - 20000);
               }
@@ -1351,9 +1356,11 @@ export default function Messages() {
           const DEFAULT_DARK = '#0F1117';
           const isDefault = !savedColor || savedColor === DEFAULT_LIGHT || savedColor === DEFAULT_DARK;
           if (isDefault) {
-            setIsCustomBgColor(false);
-            setChatBgColor(mode === 'dark' ? DEFAULT_DARK : DEFAULT_LIGHT);
+            if (!isCustomBgColorRef.current) {
+              setChatBgColor(mode === 'dark' ? DEFAULT_DARK : DEFAULT_LIGHT);
+            }
           } else {
+            isCustomBgColorRef.current = true;
             setIsCustomBgColor(true);
             setChatBgColor(savedColor);
           }
@@ -1382,14 +1389,17 @@ export default function Messages() {
   };
 
   const handleBgColorChange = async (color) => {
+    if (color === chatBgColor) return;
     const DEFAULT_LIGHT = '#F8FAFC';
     const DEFAULT_DARK = '#0F1117';
     const isDefault = color === DEFAULT_LIGHT || color === DEFAULT_DARK;
     setIsCustomBgColor(!isDefault);
+    isCustomBgColorRef.current = !isDefault;
     setChatBgColor(color);
     saveSettings(color, bubbleStyle);
     const colorNames = {
-      '#F8FAFC': '기본', '#EFF6FF': '파란색', '#FEF2F2': '빨간색',
+      '#F8FAFC': '기본', '#0F1117': '기본',
+      '#EFF6FF': '파란색', '#FEF2F2': '빨간색',
       '#F0FDF4': '초록색', '#FFFBEB': '노란색', '#F5F3FF': '보라색',
       '#FAFAFA': '흰색', '#18181B': '어두운 색',
     };
@@ -1582,7 +1592,7 @@ export default function Messages() {
 
   return (
     <>
-      <Box sx={{ display: 'flex', height: 'calc(100vh - 48px)', backgroundColor: 'var(--bg-paper)', overflow: 'hidden' }}>
+      <Box sx={{ display: 'flex', height: '100vh', backgroundColor: 'var(--bg-paper)', overflow: 'hidden' }}>
 
         <Box sx={{
           width: { xs: '100%', md: 360 },
@@ -1730,8 +1740,7 @@ export default function Messages() {
                                       {room.LAST_IS_STICKER ? '이모티콘을 보냈습니다.'
                                         : room.LAST_HAS_IMAGE ? '사진을 보냈습니다.'
                                           : room.LAST_HAS_FILE ? '파일을 보냈습니다.'
-                                            : room.LAST_MESSAGE || ''}
-                                    </Typography>
+                                            : room.LAST_MESSAGE?.startsWith('__SHARE__') ? '게시글을 공유했습니다.' : room.LAST_MESSAGE || ''}                                    </Typography>
                                     <Typography sx={{ fontSize: '0.75rem', color: '#94A3B8', flexShrink: 0, ml: 0.5 }}>
                                       · {formatListTimeRelative(room.LAST_MESSAGE_AT)}
                                     </Typography>
@@ -1787,7 +1796,8 @@ export default function Messages() {
               ) : (
                 <Box sx={{
                   display: 'flex', flexDirection: 'column', borderBottom: '1px solid var(--border-color)',
-                  backdropFilter: 'blur(12px)', zIndex: 10
+                  backdropFilter: 'blur(12px)', zIndex: 10,
+                  backgroundColor: 'var(--bg-paper)',
                 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1.5 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -1996,7 +2006,11 @@ export default function Messages() {
                                 checked={selectedDeleteIds.includes(msg.MESSAGE_ID)}
                                 onChange={() => toggleSelectDelete(msg.MESSAGE_ID)}
                                 onClick={(e) => e.stopPropagation()}
-                                sx={{ p: 0 }}
+                                sx={{
+                                  p: 0,
+                                  color: 'var(--text-secondary)',
+                                  '&.Mui-checked': { color: '#2563EB' },
+                                }}
                               />
                             </Box>
                           )}
@@ -2059,7 +2073,39 @@ export default function Messages() {
                                             <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{msg.FILE_NAME || '파일'}</Typography>
                                           </Box>
                                         )}
-                                        {msg.MESSAGE && msg.MESSAGE.trim() && (
+                                        {msg.MESSAGE?.startsWith('__SHARE__') ? (() => {
+                                          try {
+                                            const data = JSON.parse(msg.MESSAGE.replace('__SHARE__', ''));
+                                            const thumb = data.image
+                                              ? (data.image.startsWith('http') ? data.image : `${API}${data.image}`)
+                                              : null;
+                                            return (
+                                              <Box
+                                                onClick={(e) => { e.stopPropagation(); navigate(`/post/${data.postId}`); }}
+                                                sx={{ cursor: 'pointer', borderRadius: 1.5, overflow: 'hidden', border: `1px solid ${isMe && bubbleStyle !== 'outlined' ? 'rgba(255,255,255,0.25)' : 'var(--border-color)'}`, minWidth: 350, maxWidth: 400, mt: 0.5 }}
+                                              >
+                                                {thumb && (
+                                                  <Box component="img" src={thumb}
+                                                    sx={{ width: '100%', height: 260, objectFit: 'cover', display: 'block' }}
+                                                  />
+                                                )}
+                                                <Box sx={{ p: 1.2, backgroundColor: isMe && bubbleStyle !== 'outlined' ? 'rgba(0,0,0,0.15)' : (mode === 'dark' ? '#1A1D27' : '#F8FAFC') }}>
+                                                  <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: isMe && bubbleStyle !== 'outlined' ? '#fff' : 'var(--text-primary)', lineHeight: 1.4, mb: 0.3 }}>
+                                                    {data.title}
+                                                  </Typography>
+                                                  <Typography sx={{ fontSize: '0.7rem', color: isMe && bubbleStyle !== 'outlined' ? 'rgba(255,255,255,0.6)' : '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    게시글 보기 →
+                                                  </Typography>
+                                                  {data.text && (
+                                                    <Typography sx={{ fontSize: '0.78rem', color: isMe && bubbleStyle !== 'outlined' ? 'rgba(255,255,255,0.85)' : 'var(--text-primary)', mt: 0.8, fontStyle: 'italic' }}>
+                                                      {data.text}
+                                                    </Typography>
+                                                  )}
+                                                </Box>
+                                              </Box>
+                                            );
+                                          } catch { return null; }
+                                        })() : msg.MESSAGE && msg.MESSAGE.trim() && (
                                           <Typography sx={{ fontSize: '0.92rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                                             {renderMessageContent(msg.MESSAGE, isMe, bubbleStyle, navigate, validNicknames)}
                                           </Typography>
@@ -2114,7 +2160,6 @@ export default function Messages() {
                                   ))
                                 }
 
-                                {/* 리액션 표시 (누가 했는지 툴팁) */}
                                 {reactions[msg.MESSAGE_ID] && Object.entries(reactions[msg.MESSAGE_ID]).map(([emoji, data]) => (
                                   <Box
                                     key={emoji}
@@ -2126,32 +2171,12 @@ export default function Messages() {
                                       border: data.myReaction ? '1px solid #2563EB' : '1px solid var(--border-color)',
                                       borderRadius: 10, px: 0.8, py: 0.2, cursor: 'pointer',
                                       transition: 'all 0.15s', '&:hover': { opacity: 0.8 },
-                                      position: 'relative',
                                     }}
                                   >
                                     <Typography sx={{ fontSize: '0.82rem', lineHeight: 1 }}>{emoji}</Typography>
                                     <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: data.myReaction ? '#2563EB' : 'var(--text-secondary)' }}>
                                       {data.count}
                                     </Typography>
-                                    {/* 리액션한 사람 아바타 (최대 3명) */}
-                                    {data.users && data.users.length > 0 && (
-                                      <Box sx={{ display: 'flex', ml: 0.3 }}>
-                                        {data.users.slice(0, 3).map((nick, i) => (
-                                          <Avatar
-                                            key={i}
-                                            sx={{
-                                              width: 14, height: 14,
-                                              fontSize: '0.45rem', fontWeight: 800,
-                                              backgroundColor: '#2563EB',
-                                              border: `1px solid ${mode === 'dark' ? '#1A1D27' : '#fff'}`,
-                                              ml: i > 0 ? -0.5 : 0,
-                                            }}
-                                          >
-                                            {getInitial(nick)}
-                                          </Avatar>
-                                        ))}
-                                      </Box>
-                                    )}
                                   </Box>
                                 ))}
                               </Box>
@@ -2236,7 +2261,8 @@ export default function Messages() {
               ) : (
                 <Box component="form" onSubmit={handleSend} sx={{
                   p: 2, borderTop: '1px solid var(--border-color)',
-                  display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0
+                  display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0,
+                  backgroundColor: 'var(--bg-paper)',
                 }}>
                   <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept="image/*,video/*,*/*" onChange={handleFileUpload} />
                   <IconButton sx={{ color: '#94A3B8' }} onClick={() => fileInputRef.current?.click()}><ImageOutlined /></IconButton>
@@ -2269,7 +2295,17 @@ export default function Messages() {
                       ) : (
                         newMessage.split(/(@[a-zA-Z0-9가-힣_-]+)/g).map((part, index) => (
                           part.startsWith('@') && part.length > 1 ? (
-                            <span key={index} style={{ color: 'var(--text-primary)', fontWeight: 400 }}>
+                            <span
+                              key={index}
+                              style={{
+                                color: '#2563EB',
+                                backgroundColor: '#EFF6FF',
+                                borderRadius: '4px',
+                                padding: '1px 4px',
+                                fontWeight: 700,
+                                fontSize: '0.9rem',
+                              }}
+                            >
                               {part}
                             </span>
                           ) : (
@@ -2339,8 +2375,8 @@ export default function Messages() {
         {selectedMessage?.SENDER_NICKNAME === myNickname &&
           !isStickerMessage(selectedMessage) &&
           !selectedMessage?.IMAGE_URL &&
-          !selectedMessage?.FILE_URL && (
-
+          !selectedMessage?.FILE_URL &&
+          !selectedMessage?.MESSAGE?.startsWith('__SHARE__') && (
             <MenuItem onClick={handleEditMessageClick} sx={{ fontSize: '0.85rem' }}>
               <EditOutlined fontSize="small" sx={{ mr: 1, color: 'var(--text-secondary)' }} /> 수정
             </MenuItem>
@@ -2385,7 +2421,14 @@ export default function Messages() {
           <List sx={{ flex: 1, overflowY: 'auto', p: 0 }}>
             {newChatSearchResults.map(user => (
               <ListItem button key={user.USER_ID} onClick={() => toggleUserSelection(user)} sx={{ py: 1 }}>
-                <Checkbox checked={!!selectedUsers.find(u => u.USER_ID === user.USER_ID)} sx={{ p: 0, mr: 2 }} />
+                <Checkbox
+                  checked={!!selectedUsers.find(u => u.USER_ID === user.USER_ID)}
+                  sx={{
+                    p: 0, mr: 2,
+                    color: 'var(--text-secondary)',
+                    '&.Mui-checked': { color: '#2563EB' },
+                  }}
+                />
                 <ListItemAvatar sx={{ minWidth: 40 }}>
                   <Avatar src={user.AVATAR ? `${API}${user.AVATAR}` : null} sx={{ width: 32, height: 32, backgroundColor: 'var(--text-primary)', fontSize: '0.75rem', fontWeight: 800 }}>
                     {getInitial(user.NICKNAME)}
@@ -2499,7 +2542,12 @@ export default function Messages() {
           <Box sx={{ backgroundColor: 'var(--bg-paper)', p: 2.5, borderRadius: 3, border: '1px solid var(--border-color)', mb: 2, boxShadow: '0 2px 12px rgba(0,0,0,0.02)' }}>
             <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', mb: 2 }}>배경색 변경</Typography>
             <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
-              {['#F8FAFC', '#EFF6FF', '#FEF2F2', '#F0FDF4', '#FFFBEB', '#F5F3FF', '#FAFAFA', '#18181B', '#0F1117', '#1A1D27', '#0D1B2A', '#0D1F0D'].map(color => (
+              {[
+                { color: mode === 'dark' ? '#0F1117' : '#F8FAFC' },
+                { color: '#EFF6FF' }, { color: '#FEF2F2' }, { color: '#F0FDF4' },
+                { color: '#FFFBEB' }, { color: '#F5F3FF' }, { color: '#FAFAFA' },
+                { color: '#18181B' },
+              ].map(({ color }) => (
                 <Box key={color} onClick={() => handleBgColorChange(color)}
                   sx={{
                     width: 44, height: 44, borderRadius: '50%', backgroundColor: color, border: chatBgColor === color ? '3px solid #2563EB' : `1px solid ${mode === 'dark' ? '#2D3148' : '#CBD5E1'}`
@@ -2621,10 +2669,55 @@ export default function Messages() {
               }}
               sx={{ cursor: 'pointer', borderRadius: 2, overflow: 'hidden', transition: 'transform 0.15s', '&:hover': { transform: 'scale(1.1)' } }}
             >
-              <Box component="img" src={em.src} sx={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', display: 'block' }} />
+              <Box component="img" src={`${API}${em.src}`} sx={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', display: 'block' }} />
             </Box>
           ))}
         </Box>
+      </Popover>
+      <Popover
+        open={Boolean(mentionAnchorEl)}
+        anchorEl={mentionAnchorEl}
+        onClose={() => setMentionAnchorEl(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        disableAutoFocus
+        disableEnforceFocus
+        PaperProps={{ sx: { borderRadius: 2, mt: -1, mb: 1, boxShadow: '0 4px 20px rgba(0,0,0,0.1)' } }}
+      >
+        {(() => {
+          const mentionableFiltered = (isGroup ? participants : (roomInfo?.TARGET_NICKNAME ? [{ NICKNAME: roomInfo.TARGET_NICKNAME, USER_ID: 'peer', AVATAR: roomInfo.TARGET_AVATAR }] : []))
+            .filter(p => p.NICKNAME !== myNickname && p.NICKNAME.toLowerCase().includes(mentionFilter));
+          return (
+            <List sx={{ maxHeight: 200, overflowY: 'auto', minWidth: 200, p: 1 }}>
+              {mentionableFiltered.length === 0 ? (
+                <Box sx={{ p: 2, textAlign: 'center' }}>
+                  <Typography sx={{ fontSize: '0.8rem', color: '#94A3B8' }}>일치하는 사용자가 없습니다.</Typography>
+                </Box>
+              ) : mentionableFiltered.map((p, idx) => (
+                <ListItem
+                  button
+                  key={p.USER_ID}
+                  onClick={() => handleSelectMention(p.NICKNAME)}
+                  sx={{
+                    borderRadius: 1.5, mb: 0.5,
+                    backgroundColor: idx === mentionIndex ? '#EFF6FF' : 'transparent',
+                    '&:hover': { backgroundColor: 'var(--bg-default)' }
+                  }}
+                >
+                  <ListItemAvatar sx={{ minWidth: 40 }}>
+                    <Avatar
+                      src={p.AVATAR ? (p.AVATAR.startsWith('http') ? p.AVATAR : `${API}${p.AVATAR}`) : undefined}
+                      sx={{ width: 28, height: 28, fontSize: '0.75rem', backgroundColor: 'var(--text-primary)', fontWeight: 800 }}
+                    >
+                      {getInitial(p.NICKNAME)}
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText primary={<Typography sx={{ fontSize: '0.85rem', fontWeight: idx === mentionIndex ? 800 : 700, color: idx === mentionIndex ? '#2563EB' : 'var(--text-primary)' }}>{p.NICKNAME}</Typography>} />
+                </ListItem>
+              ))}
+            </List>
+          );
+        })()}
       </Popover>
     </>
   );

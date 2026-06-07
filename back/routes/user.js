@@ -242,7 +242,6 @@ router.get('/mypage/data', jwtAuthentication, async (req, res) => {
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
 
-        // postsRes SELECT에 좋아요수, 댓글수 추가
         const postsRes = await connection.execute(
             `SELECT 
      p.POST_ID AS "id",
@@ -251,7 +250,8 @@ router.get('/mypage/data', jwtAuthentication, async (req, res) => {
      p.CREATED_AT AS "CREATED_AT",
      NVL(c.CATEGORY_NAME, 'General') AS "tag",
 (SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID) AS "likes",
-     (SELECT COUNT(*) FROM COMMENTS WHERE POST_ID = p.POST_ID) AS "commentCount"
+     (SELECT COUNT(*) FROM COMMENTS WHERE POST_ID = p.POST_ID) AS "commentCount",
+     p.VIEW_COUNT AS "views"
    FROM POSTS p
    LEFT JOIN CATEGORIES c ON c.CATEGORY_ID = p.CATEGORY_ID
    WHERE p.USER_ID = :id AND p.STATUS = 'ACTIVE'
@@ -269,7 +269,7 @@ router.get('/mypage/data', jwtAuthentication, async (req, res) => {
             const imgMatch = content ? content.match(/<img[^>]+src=["']([^"']+)["']/) : null;
             const firstImage = imgMatch ? imgMatch[1] : null;
 
-            return { ...row, description: content, images: firstImage };
+            return { ...row, description: content, images: firstImage, views: row.views ?? 0 };
         }));
         const userData = (userRes.rows && userRes.rows.length > 0) ? userRes.rows[0] : {};
         res.status(200).json({ success: true, user: userData, posts: postData });
@@ -630,7 +630,8 @@ router.get('/profile/:nickname', jwtAuthentication, async (req, res) => {
             p.CREATED_AT AS "CREATED_AT",
             NVL(c.CATEGORY_NAME, 'General') AS "tag",
             (SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID) AS "likes",
-            (SELECT COUNT(*) FROM COMMENTS WHERE POST_ID = p.POST_ID) AS "commentCount"
+            (SELECT COUNT(*) FROM COMMENTS WHERE POST_ID = p.POST_ID) AS "commentCount",
+            p.VIEW_COUNT AS "views"
      FROM POSTS p
      LEFT JOIN CATEGORIES c ON c.CATEGORY_ID = p.CATEGORY_ID
      WHERE p.USER_ID = :id AND p.STATUS = 'ACTIVE'
@@ -645,7 +646,7 @@ router.get('/profile/:nickname', jwtAuthentication, async (req, res) => {
                     content = await content.getData();
                 }
                 const imgMatch = content ? content.match(/<img[^>]+src=["']([^"']+)["']/) : null;
-                return { ...row, description: content, images: imgMatch ? imgMatch[1] : null };
+                return { ...row, description: content, images: imgMatch ? imgMatch[1] : null, views: row.views ?? 0 };
             }));
         }
 
@@ -693,7 +694,6 @@ router.get('/search/public', jwtAuthentication, async (req, res) => {
     }
 });
 
-// GET /user/bookmarks
 router.get('/bookmarks', jwtAuthentication, async (req, res) => {
     const userId = req.user.userId;
     let connection;
@@ -707,7 +707,8 @@ router.get('/bookmarks', jwtAuthentication, async (req, res) => {
          p.CREATED_AT AS "CREATED_AT",
          NVL(c.CATEGORY_NAME, 'General') AS "tag",
 (SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID) AS "likes",
-         (SELECT COUNT(*) FROM COMMENTS WHERE POST_ID = p.POST_ID) AS "commentCount"
+         (SELECT COUNT(*) FROM COMMENTS WHERE POST_ID = p.POST_ID) AS "commentCount",
+         p.VIEW_COUNT AS "views"
        FROM BOOKMARKS b
        JOIN POSTS p ON p.POST_ID = b.POST_ID
        LEFT JOIN CATEGORIES c ON c.CATEGORY_ID = p.CATEGORY_ID
@@ -723,7 +724,7 @@ router.get('/bookmarks', jwtAuthentication, async (req, res) => {
                 content = await content.getData();
             }
             const imgMatch = content ? content.match(/<img[^>]+src=["']([^"']+)["']/) : null;
-            return { ...row, description: content, images: imgMatch ? imgMatch[1] : null };
+            return { ...row, description: content, images: imgMatch ? imgMatch[1] : null, views: row.views ?? 0 };
         }));
 
         res.json({ success: true, list: bookmarkData });
@@ -852,14 +853,23 @@ router.post('/mute/:targetId', jwtAuthentication, async (req, res) => {
     finally { await conn.close(); }
 });
 
-// GET /user/tag-search — @ 입력 시 자동완성 (교류 많은 순)
 router.get('/tag-search', jwtAuthentication, async (req, res) => {
     const myId = req.user.userId;
     const { q = '' } = req.query;
     const conn = await db.getConnection();
     try {
-        // q가 비어있으면 교류 많은 순, 있으면 검색+교류 순
         const keyword = q ? `%${q.toLowerCase()}%` : null;
+
+        const tagAllowFilter = `
+        AND (
+          u.TAG_ALLOW = 'EVERYONE'
+          OR (u.TAG_ALLOW = 'FOLLOWING' AND EXISTS (
+            SELECT 1 FROM FOLLOWS f
+            WHERE f.FOLLOWER_ID = :myId8
+              AND f.FOLLOWING_ID = u.USER_ID
+              AND f.STATUS = 'ACCEPTED'
+          ))
+        )`;
 
         const sql = keyword ? `
       SELECT u.USER_ID, u.NICKNAME,
@@ -880,6 +890,7 @@ router.get('/tag-search', jwtAuthentication, async (req, res) => {
         AND u.USER_ID NOT IN (SELECT MUTED_ID  FROM MUTES  WHERE MUTER_ID  = :myId5)
         AND u.USER_ID NOT IN (SELECT BLOCKED_ID FROM BLOCKS WHERE BLOCKER_ID = :myId6)
         AND u.USER_ID NOT IN (SELECT BLOCKER_ID FROM BLOCKS WHERE BLOCKED_ID = :myId7)
+        ${tagAllowFilter}
       ORDER BY INTERACTION_SCORE DESC
       FETCH FIRST 8 ROWS ONLY
     ` : `
@@ -900,13 +911,14 @@ router.get('/tag-search', jwtAuthentication, async (req, res) => {
         AND u.USER_ID NOT IN (SELECT MUTED_ID  FROM MUTES  WHERE MUTER_ID  = :myId5)
         AND u.USER_ID NOT IN (SELECT BLOCKED_ID FROM BLOCKS WHERE BLOCKER_ID = :myId6)
         AND u.USER_ID NOT IN (SELECT BLOCKER_ID FROM BLOCKS WHERE BLOCKED_ID = :myId7)
+        ${tagAllowFilter}
       ORDER BY INTERACTION_SCORE DESC
       FETCH FIRST 8 ROWS ONLY
     `;
 
         const binds = keyword
-            ? { myId, myId2: myId, myId3: myId, myId4: myId, myId5: myId, myId6: myId, myId7: myId, keyword }
-            : { myId, myId2: myId, myId3: myId, myId4: myId, myId5: myId, myId6: myId, myId7: myId };
+            ? { myId, myId2: myId, myId3: myId, myId4: myId, myId5: myId, myId6: myId, myId7: myId, myId8: myId, keyword }
+            : { myId, myId2: myId, myId3: myId, myId4: myId, myId5: myId, myId6: myId, myId7: myId, myId8: myId };
 
         const result = await conn.execute(sql, binds, { outFormat: oracledb.OUT_FORMAT_OBJECT });
         res.json({ success: true, users: result.rows });
@@ -916,7 +928,6 @@ router.get('/tag-search', jwtAuthentication, async (req, res) => {
         await conn.close();
     }
 });
-
 // POST /user/notify-mention — 태그 알림 발송
 router.post('/notify-mention', jwtAuthentication, async (req, res) => {
     const myId = req.user.userId;

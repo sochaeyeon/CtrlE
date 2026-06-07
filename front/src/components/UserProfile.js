@@ -650,7 +650,7 @@ export default function UserProfile() {
             }} />
 
             <Box sx={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', mb: 2 }}>
-              <Avatar src={user.avatar || undefined} sx={{ width: 88, height: 88, backgroundColor: '#0F172A', fontSize: 30, fontWeight: 800, border: '3px solid #FFFFFF', boxShadow: '0 4px 20px rgba(15,23,42,0.12)' }}>
+              <Avatar src={user.avatar || undefined} sx={{ width: 88, height: 88, backgroundColor: mode === 'dark' ? '#F1F5F9' : '#0F172A', color: mode === 'dark' ? '#0F172A' : '#fff', fontSize: 30, fontWeight: 800, border: '3px solid #FFFFFF', boxShadow: '0 4px 20px rgba(15,23,42,0.12)' }}>
                 {getInitial(user.name)}
               </Avatar>
 

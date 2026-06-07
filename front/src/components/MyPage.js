@@ -11,7 +11,7 @@ import {
   CameraAlt, Edit, Favorite, ChatBubbleOutline,
   Close, Check, GitHub, Language, ArrowBack,
   Search, GridOn, Bookmarks, PersonPin, Lock,
-  ViewList, SortRounded, ZoomIn,
+  ViewList, SortRounded, ZoomIn, Videocam, Visibility
 } from '@mui/icons-material';
 import { useColorMode } from '../App';
 
@@ -571,7 +571,8 @@ const EditProfileDialog = ({ open, user, token, onClose, onSave, colors }) => {
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" scroll="paper"
-      PaperProps={{ sx: { borderRadius: 2.5, border: `1px solid ${colors.border}`, boxShadow: '0 24px 64px rgba(15,23,42,0.15)', mx: 2, my: 'auto', maxHeight: '90vh', backgroundColor: colors.paper } }}>
+      disableScrollLock
+      PaperProps={{ sx: { borderRadius: 2.5, border: `1px solid ${colors.border}`, boxShadow: '0 24px 64px rgba(15,23,42,0.15)', mx: 'auto', my: 'auto', maxHeight: '90vh', backgroundColor: colors.paper } }}>
       <DialogTitle sx={{ fontWeight: 800, fontSize: '1rem', color: colors.textPrimary, borderBottom: `1px solid ${colors.border}`, py: 2, px: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         프로필 편집
         <IconButton size="small" onClick={onClose} sx={{ color: colors.textHint }}><Close sx={{ fontSize: 18 }} /></IconButton>
@@ -623,34 +624,68 @@ const CategoryFilterBar = ({ posts, activeCategory, onChange, colors }) => {
   );
 };
 
-// ── PostGrid / PostList ───────────────────────────────────────
 const PostGrid = ({ posts, onPostClick }) => (
   <Grid container spacing={1.5}>
-    {posts.map((post) => (
-      <Grid item xs={4} key={post.id}>
-        <Box onClick={() => onPostClick(post.id)}
-          sx={{
-            position: 'relative', cursor: 'pointer', overflow: 'hidden',
-            borderRadius: 1.5, border: '1px solid #E2E8F0', aspectRatio: '1 / 1',
-            '&:hover .overlay': { opacity: 1 },
-            '&:hover img, &:hover .default-img': { filter: 'brightness(0.55)' },
-          }}>
-          <Box component={post.image ? 'img' : 'div'} src={post.image || undefined} className={post.image ? '' : 'default-img'}
-            sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', transition: 'filter 0.2s', ...(post.image ? {} : { backgroundImage: `url(${API}/uploads/post/defaultImg.png)`, backgroundSize: 'cover', backgroundPosition: 'center' }) }}
-          />
-          <Box className="overlay" sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, opacity: 0, transition: 'opacity 0.2s' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-              <Favorite sx={{ fontSize: 22, color: '#fff' }} />
-              <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.95rem' }}>{post.likes}</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-              <ChatBubbleOutline sx={{ fontSize: 22, color: '#fff' }} />
-              <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.95rem' }}>{post.commentCount}</Typography>
+    {posts.map((post) => {
+      const isReel = post.image && /\.(mp4|webm|mov)(\?|$)/i.test(post.image);
+      const views = post.views ?? 0;
+      return (
+        <Grid item xs={4} key={post.id}>
+          <Box onClick={() => onPostClick(post.id)}
+            sx={{
+              position: 'relative', cursor: 'pointer', overflow: 'hidden',
+              borderRadius: 1.5, border: '1px solid #E2E8F0', aspectRatio: '1 / 1',
+              '&:hover .overlay': { opacity: 1 },
+              '&:hover img, &:hover .default-img, &:hover video': { filter: 'brightness(0.55)' },
+            }}>
+
+            {/* 썸네일 */}
+            {isReel ? (
+              <Box component="video" src={post.image} muted playsInline
+                sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', transition: 'filter 0.2s', pointerEvents: 'none' }} />
+            ) : (
+              <Box component={post.image ? 'img' : 'div'} src={post.image || undefined}
+                className={post.image ? '' : 'default-img'}
+                sx={{
+                  width: '100%', height: '100%', objectFit: 'cover', display: 'block', transition: 'filter 0.2s',
+                  ...(post.image ? {} : { backgroundImage: `url(${API}/uploads/post/defaultImg.png)`, backgroundSize: 'cover', backgroundPosition: 'center' })
+                }}
+              />
+            )}
+
+            {isReel && (
+              <Box sx={{ position: 'absolute', top: 6, right: 6, color: '#fff', filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.7))' }}>
+                <Videocam sx={{ fontSize: 18 }} />
+              </Box>
+            )}
+
+            <Box className="overlay" sx={{ position: 'absolute', inset: 0, opacity: 0, transition: 'opacity 0.2s' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, height: '100%' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                  <Favorite sx={{ fontSize: 22, color: '#fff' }} />
+                  <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.95rem' }}>{post.likes}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                  <ChatBubbleOutline sx={{ fontSize: 22, color: '#fff' }} />
+                  <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.95rem' }}>{post.commentCount}</Typography>
+                </Box>
+              </Box>
+              {views > 0 && (
+                <Box sx={{ position: 'absolute', bottom: 6, left: 6, display: 'flex', alignItems: 'center', gap: 0.4 }}>
+                  {isReel
+                    ? <Videocam sx={{ fontSize: 13, color: '#fff', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.7))' }} />
+                    : <Visibility sx={{ fontSize: 13, color: '#fff', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.7))' }} />
+                  }
+                  <Typography sx={{ color: '#fff', fontSize: '0.72rem', fontWeight: 700, filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.7))' }}>
+                    {views >= 1000 ? `${(views / 1000).toFixed(1)}k` : views}
+                  </Typography>
+                </Box>
+              )}
             </Box>
           </Box>
-        </Box>
-      </Grid>
-    ))}
+        </Grid>
+      );
+    })}
   </Grid>
 );
 
@@ -823,7 +858,7 @@ export default function Mypage() {
         setBookmarks((data.list || []).map(p => ({
           ...p, id: p.id || p.POST_ID, title: p.title || p.TITLE || '',
           tag: p.tag || 'General', likes: p.likes ?? 0, commentCount: p.commentCount ?? 0,
-          image: p.images?.trim() ? (p.images.trim().startsWith('http') ? p.images.trim() : `${API}${p.images.trim()}`) : null,
+          image: p.images?.trim() ? (p.images.trim().startsWith('http') ? p.images.trim() : `${API}${p.images.trim()}`) : null, views: p.views ?? 0,
         })));
       }
     } catch (err) { console.error('북마크 로드 실패:', err); }
@@ -855,7 +890,7 @@ export default function Mypage() {
           setPosts((data.posts || []).map(p => ({
             ...p, id: p.id || p.POST_ID, title: p.title || p.TITLE || '',
             tag: p.tag || 'General', likes: p.likes ?? 0, commentCount: p.commentCount ?? 0,
-            image: p.images?.trim() ? (p.images.trim().startsWith('http') ? p.images.trim() : `${API}${p.images.trim()}`) : null,
+            image: p.images?.trim() ? (p.images.trim().startsWith('http') ? p.images.trim() : `${API}${p.images.trim()}`) : null, views: p.views ?? 0,
           })));
         }
       } catch (err) { console.error('데이터 로드 실패:', err); } finally { setLoading(false); }

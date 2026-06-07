@@ -3,157 +3,91 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Drawer, List, ListItem, ListItemText, ListItemIcon, Box, Typography,
   CssBaseline, Avatar, Tooltip, Badge, IconButton,
-  Dialog, DialogTitle, DialogContent, DialogActions, Button
+  Dialog, DialogTitle, DialogContent, DialogActions, Button,
+  Popover, Switch,
 } from '@mui/material';
 import {
   HomeOutlined, Home, AddBoxOutlined, AddBox, LogoutOutlined,
   NotificationsNoneOutlined, Notifications,
   SearchOutlined, SettingsOutlined, Settings,
   ForumOutlined, Forum,
-  Menu as MenuIcon, ChevronLeft,
+  Menu as MenuIcon,
   BarChartOutlined, BarChart,
+  DarkModeOutlined, LightModeOutlined,
 } from '@mui/icons-material';
 import NotificationSidebar from './NotificationSidebar';
 import { useColorMode } from '../App';
-// ✅ 1. RegisterModal import 추가
 import RegisterModal from './RegisterModal';
 
 const API = 'http://localhost:3010';
-const DRAWER_WIDTH = 260;
+const DRAWER_WIDTH = 245;
 const getInitial = (name) => (name ? name.charAt(0).toUpperCase() : '?');
 
 const MENU_ITEMS = [
-  { text: '피드', icon: <HomeOutlined sx={{ fontSize: 24 }} />, activeIcon: <Home sx={{ fontSize: 24 }} />, path: '/feed' },
-  { text: '탐색', icon: <SearchOutlined sx={{ fontSize: 24 }} />, activeIcon: <SearchOutlined sx={{ fontSize: 24 }} />, path: '/explore' },
-  { text: '메시지', icon: <ForumOutlined sx={{ fontSize: 22 }} />, activeIcon: <Forum sx={{ fontSize: 22 }} />, path: '/messages' },
-  { id: 'noti', text: '알림', icon: <NotificationsNoneOutlined sx={{ fontSize: 24 }} />, activeIcon: <Notifications sx={{ fontSize: 24 }} /> },
-  // ✅ 2. path 제거하고 id 추가 — path가 있으면 Link로 렌더돼서 모달 대신 페이지 이동함
-  { id: 'register', text: '새 게시물', icon: <AddBoxOutlined sx={{ fontSize: 24 }} />, activeIcon: <AddBox sx={{ fontSize: 24 }} /> },
-  { text: '내 활동', icon: <BarChartOutlined sx={{ fontSize: 24 }} />, activeIcon: <BarChart sx={{ fontSize: 24 }} />, path: '/myactivity' },
-  { text: '설정', icon: <SettingsOutlined sx={{ fontSize: 24 }} />, activeIcon: <Settings sx={{ fontSize: 24 }} />, path: '/settings' },
+  { text: '피드', icon: <HomeOutlined sx={{ fontSize: 28 }} />, activeIcon: <Home sx={{ fontSize: 28 }} />, path: '/feed' },
+  { text: '탐색', icon: <SearchOutlined sx={{ fontSize: 28 }} />, activeIcon: <SearchOutlined sx={{ fontSize: 28 }} />, path: '/explore' },
+  { text: '메시지', icon: <ForumOutlined sx={{ fontSize: 26 }} />, activeIcon: <Forum sx={{ fontSize: 26 }} />, path: '/messages' },
+  { id: 'noti', text: '알림', icon: <NotificationsNoneOutlined sx={{ fontSize: 28 }} />, activeIcon: <Notifications sx={{ fontSize: 28 }} /> },
+  { id: 'register', text: '새 게시물', icon: <AddBoxOutlined sx={{ fontSize: 28 }} />, activeIcon: <AddBox sx={{ fontSize: 28 }} /> },
+  { text: '내 활동', icon: <BarChartOutlined sx={{ fontSize: 28 }} />, activeIcon: <BarChart sx={{ fontSize: 28 }} />, path: '/myactivity' },
+  { text: '설정', icon: <SettingsOutlined sx={{ fontSize: 28 }} />, activeIcon: <Settings sx={{ fontSize: 28 }} />, path: '/settings' },
 ];
-
-const DarkModeToggle = ({ mode, toggleColorMode, isOpen, colors }) => {
-  const isDark = mode === 'dark';
-
-  const switchEl = (
-    <Box
-      onClick={toggleColorMode}
-      role="switch"
-      aria-checked={isDark}
-      sx={{
-        position: 'relative',
-        width: 42,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: isDark ? '#FFFFFF' : '#CBD5E1',
-        cursor: 'pointer',
-        flexShrink: 0,
-        transition: 'background-color 0.25s ease',
-        '&:hover': { backgroundColor: isDark ? '#E5E7EB' : '#94A3B8' },
-      }}
-    >
-      <Box sx={{
-        position: 'absolute',
-        top: 3,
-        left: isDark ? 21 : 3,
-        width: 18,
-        height: 18,
-        borderRadius: '50%',
-        backgroundColor: isDark ? '#000000' : '#FFFFFF',
-        transition: 'left 0.25s cubic-bezier(0.4,0,0.2,1)',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
-      }} />
-    </Box>
-  );
-
-  if (isOpen) {
-    return (
-      <Box
-        onClick={toggleColorMode}
-        sx={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          px: 2, py: 1.4, borderRadius: 2.5,
-          border: `1px solid ${colors.border}`,
-          backgroundColor: colors.bg,
-          cursor: 'pointer',
-          transition: 'all 0.2s',
-          '&:hover': { borderColor: colors.borderFocus },
-        }}
-      >
-        <Typography sx={{ fontSize: '0.87rem', fontWeight: 600, color: colors.textSecondary }}>
-          다크 모드
-        </Typography>
-        {switchEl}
-      </Box>
-    );
-  }
-
-  return (
-    <Tooltip title="다크 모드" placement="right" arrow>
-      <Box sx={{ display: 'flex', justifyContent: 'center', cursor: 'pointer' }}>
-        {switchEl}
-      </Box>
-    </Tooltip>
-  );
-};
 
 const NavItem = ({ item, isActive, isOpen, onClick, colors }) => {
   return (
-    <Tooltip title={!isOpen ? item.text : ''} placement="right" arrow>
-      <ListItem
-        button
-        component={item.path ? Link : 'div'}
-        to={item.path || undefined}
-        onClick={onClick}
+    <ListItem
+      button
+      component={item.path ? Link : 'div'}
+      to={item.path || undefined}
+      onClick={onClick}
+      sx={{
+        borderRadius: '12px',
+        py: '10px',
+        px: '12px',
+        mb: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+        color: colors.textPrimary,
+        transition: 'background 0.12s ease',
+        backgroundColor: 'transparent',
+        '&:hover': {
+          backgroundColor: colors.hover,
+          '& .nav-icon': { transform: 'scale(1.05)' },
+        },
+        '&:active': { transform: 'scale(0.97)' },
+      }}
+    >
+      <ListItemIcon
+        className="nav-icon"
         sx={{
-          borderRadius: 2.5,
-          py: 1.8,
-          px: isOpen ? 2 : 1,
-          mb: 1.2,
-          justifyContent: isOpen ? 'flex-start' : 'center',
-          position: 'relative',
-          backgroundColor: isActive ? colors.hover : 'transparent',
-          color: isActive ? colors.textPrimary : colors.textSecondary,
-          whiteSpace: 'nowrap', overflow: 'hidden',
-          transition: 'all 0.18s ease',
-          '&:hover': {
-            backgroundColor: isActive ? colors.hover : colors.hover,
-            color: colors.textPrimary,
-            transform: 'translateX(2px)',
-            '& .nav-icon': { transform: 'scale(1.08)' },
-          },
-          '&::before': isActive ? {
-            content: '""',
-            position: 'absolute',
-            left: 0, top: '22%', bottom: '22%',
-            width: 3,
-            borderRadius: '0 3px 3px 0',
-            backgroundColor: colors.textPrimary,
-          } : {},
+          minWidth: 0,
+          width: 24,
+          justifyContent: 'center',
+          transition: 'transform 0.12s ease',
+          color: 'inherit',
+          flexShrink: 0,
         }}
       >
-        <ListItemIcon
-          className="nav-icon"
-          sx={{
-            minWidth: 42,
-            justifyContent: 'center',
-            transition: 'all 0.18s ease',
-            color: 'inherit',
-            mr: isOpen ? 1.5 : 0,
-          }}
-        >
-          {item.badge
-            ? <Badge badgeContent={item.badge} color="error">{isActive ? item.activeIcon : item.icon}</Badge>
-            : (isActive ? item.activeIcon : item.icon)}
-        </ListItemIcon>
-        <ListItemText
-          primary={item.text}
-          sx={{ opacity: isOpen ? 1 : 0, width: isOpen ? 'auto' : 0, transition: 'opacity 0.18s ease', m: 0 }}
-          primaryTypographyProps={{ fontSize: '0.93rem', fontWeight: isActive ? 800 : 500 }}
-        />
-      </ListItem>
-    </Tooltip>
+        {item.badge
+          ? <Badge badgeContent={item.badge} color="error">{isActive ? item.activeIcon : item.icon}</Badge>
+          : (isActive ? item.activeIcon : item.icon)}
+      </ListItemIcon>
+
+      <Typography sx={{
+        ml: 2,
+        fontSize: '0.9375rem',
+        fontWeight: isActive ? 700 : 400,
+        color: colors.textPrimary,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        opacity: isOpen ? 1 : 0,
+        maxWidth: isOpen ? 160 : 0,
+        transition: 'opacity 0.1s ease, max-width 0.18s cubic-bezier(0.4,0,0.2,1)',
+      }}>
+        {item.text}
+      </Typography>
+    </ListItem>
   );
 };
 
@@ -162,7 +96,6 @@ export default function Menu() {
   const navigate = useNavigate();
   const token = localStorage.getItem('accessToken');
   const { mode, toggleColorMode } = useColorMode();
-
   const colors = {
     bg: mode === 'dark' ? '#0F1117' : '#F8FAFC',
     paper: mode === 'dark' ? '#1A1D27' : '#FFFFFF',
@@ -170,18 +103,20 @@ export default function Menu() {
     borderFocus: mode === 'dark' ? '#4B5280' : '#CBD5E1',
     textPrimary: mode === 'dark' ? '#F1F5F9' : '#0F172A',
     textSecondary: mode === 'dark' ? '#94A3B8' : '#64748B',
-    hover: mode === 'dark' ? '#22253A' : '#F8FAFC',
+    hover: mode === 'dark' ? '#22253A' : '#F1F5F9',
   };
 
-  const [isOpen, setIsOpen] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [notiOpen, setNotiOpen] = useState(
     () => localStorage.getItem('notiSidebarOpen') === 'true'
   );
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [moreAnchorEl, setMoreAnchorEl] = useState(null);
   const [user, setUser] = useState({ name: '사용자', handle: '@user', avatar: null });
 
-  const drawerWidth = isOpen ? DRAWER_WIDTH : 80;
+  const drawerOpen = isHovered && !notiOpen && !registerOpen;
+  const drawerWidth = drawerOpen ? DRAWER_WIDTH : 72;
 
   useEffect(() => {
     if (!token) return;
@@ -200,6 +135,14 @@ export default function Menu() {
     })();
   }, [token]);
 
+  useEffect(() => {
+    const handler = (e) => {
+      setUser(prev => ({ ...prev, avatar: e.detail.avatar }));
+    };
+    window.addEventListener('avatarUpdated', handler);
+    return () => window.removeEventListener('avatarUpdated', handler);
+  }, []);
+
   const handleMenuClick = (item) => {
     if (item.id === 'noti') {
       setNotiOpen(true);
@@ -208,7 +151,7 @@ export default function Menu() {
     if (item.id === 'register') setRegisterOpen(true);
   };
 
-  const handleLogoutClick = (e) => { e.stopPropagation(); setLogoutOpen(true); };
+  const handleLogoutClick = (e) => { e.stopPropagation(); setMoreAnchorEl(null); setLogoutOpen(true); };
   const confirmLogout = () => { setLogoutOpen(false); localStorage.removeItem('accessToken'); navigate('/'); };
 
   return (
@@ -216,40 +159,54 @@ export default function Menu() {
       <CssBaseline />
       <Drawer
         variant="permanent"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
         sx={{
-          width: drawerWidth, flexShrink: 0,
+          width: 72,
+          flexShrink: 0,
           '& .MuiDrawer-paper': {
-            width: drawerWidth,
-            transition: 'width 0.25s cubic-bezier(0.4,0,0.2,1)',
+            width: drawerOpen ? DRAWER_WIDTH : 72,
             boxSizing: 'border-box',
             borderRight: `1px solid ${colors.border}`,
             backgroundColor: `${colors.paper} !important`,
-            px: isOpen ? 1.5 : 0.5,
-            py: 2,
-            display: 'flex', flexDirection: 'column',
+            px: '12px',
+            py: '8px',
+            display: 'flex',
+            flexDirection: 'column',
             overflowX: 'hidden',
+            overflow: 'hidden',
+            transition: 'width 0.18s cubic-bezier(0.4,0,0.2,1)',
           },
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: isOpen ? 'space-between' : 'center', mb: 3, px: 1.5 }}>
-          {isOpen && (
-            <Box component={Link} to="/feed" sx={{ display: 'flex', alignItems: 'center', gap: 1.2, textDecoration: 'none' }}>
-              <Box sx={{
-                width: 32, height: 32, borderRadius: 1.2,
-                backgroundColor: colors.textPrimary,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Typography sx={{ color: colors.paper, fontWeight: 900, fontSize: '0.85rem' }}>{'<>'}</Typography>
-              </Box>
-              <Typography sx={{ color: colors.textPrimary, fontWeight: 800, fontSize: '1.3rem' }}>CtrlE</Typography>
+        {/* ── 로고 */}
+        <Box sx={{ px: '12px', py: '24px', mb: '4px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
+          <Box
+            component={Link}
+            to="/feed"
+            sx={{ display: 'flex', alignItems: 'center', textDecoration: 'none', gap: 2 }}
+          >
+            <Box sx={{
+              width: 32, height: 32, borderRadius: 1.2,
+              backgroundColor: colors.textPrimary,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              <Typography sx={{ color: colors.paper, fontWeight: 900, fontSize: '0.75rem' }}>{'<>'}</Typography>
             </Box>
-          )}
-          <IconButton onClick={() => setIsOpen(!isOpen)} sx={{ color: colors.textSecondary }}>
-            {isOpen ? <ChevronLeft /> : <MenuIcon />}
-          </IconButton>
+            <Typography sx={{
+              color: colors.textPrimary, fontWeight: 800, fontSize: '1.3rem',
+              whiteSpace: 'nowrap',
+              opacity: drawerOpen ? 1 : 0,
+              maxWidth: drawerOpen ? 120 : 0,
+              overflow: 'hidden',
+              transition: 'opacity 0.1s ease, max-width 0.18s cubic-bezier(0.4,0,0.2,1)',
+            }}>CtrlE</Typography>
+          </Box>
         </Box>
 
-        <Box sx={{ flex: 1, px: 0.5 }}>
+        {/* ── 메뉴 */}
+        <Box sx={{ flex: 1 }}>
           <List disablePadding>
             {MENU_ITEMS.map(item => (
               <NavItem
@@ -258,10 +215,9 @@ export default function Menu() {
                 isActive={
                   (item.path && location.pathname === item.path) ||
                   (item.id === 'noti' && notiOpen) ||
-                  // ✅ register 모달 열려있을 때 활성 표시
                   (item.id === 'register' && registerOpen)
                 }
-                isOpen={isOpen}
+                isOpen={drawerOpen}
                 onClick={() => handleMenuClick(item)}
                 colors={colors}
                 mode={mode}
@@ -270,78 +226,142 @@ export default function Menu() {
           </List>
         </Box>
 
-        <Box sx={{ px: isOpen ? 1 : 0, mb: 2, display: 'flex', justifyContent: isOpen ? 'stretch' : 'center' }}>
-          <DarkModeToggle
-            mode={mode}
-            toggleColorMode={toggleColorMode}
-            isOpen={isOpen}
-            colors={colors}
-          />
-        </Box>
-
-        {isOpen ? (
-          <Box sx={{
-            display: 'flex', alignItems: 'center', gap: 1.5,
-            px: 1.2, py: 1.2, borderRadius: 2.5,
-            border: `1px solid ${colors.border}`,
-            backgroundColor: colors.bg,
-            transition: 'all 0.2s',
-            '&:hover': { borderColor: colors.borderFocus },
+        {/* ── 더보기 (햄버거) */}
+        <ListItem
+          button
+          onClick={(e) => setMoreAnchorEl(e.currentTarget)}
+          sx={{
+            borderRadius: '12px',
+            py: '10px',
+            px: '12px',
+            mb: '4px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            color: colors.textPrimary,
+            transition: 'background 0.12s ease',
+            backgroundColor: Boolean(moreAnchorEl) ? colors.hover : 'transparent',
+            '&:hover': { backgroundColor: colors.hover },
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 0, width: 24, justifyContent: 'center', color: 'inherit', flexShrink: 0 }}>
+            <MenuIcon sx={{ fontSize: 24 }} />
+          </ListItemIcon>
+          <Typography sx={{
+            ml: 2, fontSize: '0.9375rem', fontWeight: 400,
+            color: colors.textPrimary, whiteSpace: 'nowrap', overflow: 'hidden',
+            opacity: drawerOpen ? 1 : 0,
+            maxWidth: drawerOpen ? 160 : 0,
+            transition: 'opacity 0.1s ease, max-width 0.18s cubic-bezier(0.4,0,0.2,1)',
           }}>
+            더 보기
+          </Typography>
+        </ListItem>
+
+        {/* ── 더보기 Popover */}
+        <Popover
+          open={Boolean(moreAnchorEl)}
+          anchorEl={moreAnchorEl}
+          onClose={() => setMoreAnchorEl(null)}
+          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+          PaperProps={{
+            sx: {
+              backgroundColor: colors.paper,
+              border: `1px solid ${colors.border}`,
+              borderRadius: '16px',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+              minWidth: 220,
+              py: 1,
+              overflow: 'hidden',
+            },
+          }}
+        >
+          {/* 다크모드 행 */}
+          <Box
+            onClick={toggleColorMode}
+            sx={{
+              display: 'flex', alignItems: 'center',
+              px: 2, py: 1.2, cursor: 'pointer',
+              transition: 'background 0.12s ease',
+              '&:hover': { backgroundColor: colors.hover },
+            }}
+          >
+            {mode === 'dark'
+              ? <LightModeOutlined sx={{ fontSize: 22, color: colors.textPrimary }} />
+              : <DarkModeOutlined sx={{ fontSize: 22, color: colors.textPrimary }} />
+            }
+            <Typography sx={{ ml: 1.5, fontSize: '0.9rem', fontWeight: 500, color: colors.textPrimary, flex: 1 }}>
+              {mode === 'dark' ? '라이트 모드' : '다크 모드'}
+            </Typography>
+            <Switch
+              checked={mode === 'dark'}
+              size="small"
+              onClick={(e) => e.stopPropagation()}
+              onChange={toggleColorMode}
+              sx={{ ml: 1 }}
+            />
+          </Box>
+
+          {/* 구분선 */}
+          <Box sx={{ height: '1px', backgroundColor: colors.border, my: 0.5 }} />
+
+          {/* 로그아웃 행 */}
+          <Box
+            onClick={handleLogoutClick}
+            sx={{
+              display: 'flex', alignItems: 'center',
+              px: 2, py: 1.2, cursor: 'pointer',
+              transition: 'background 0.12s ease',
+              '&:hover': { backgroundColor: colors.hover },
+            }}
+          >
+            <LogoutOutlined sx={{ fontSize: 22, color: '#EF4444' }} />
+            <Typography sx={{ ml: 1.5, fontSize: '0.9rem', fontWeight: 500, color: '#EF4444' }}>
+              로그아웃
+            </Typography>
+          </Box>
+        </Popover>
+
+        {/* ── 프로필 */}
+        <Box
+          onClick={() => navigate('/mypage')}
+          sx={{
+            display: 'flex', alignItems: 'center',
+            px: '12px', py: '10px', borderRadius: '12px',
+            cursor: 'pointer',
+            transition: 'background 0.12s ease',
+            '&:hover': { backgroundColor: colors.hover },
+          }}
+        >
+          <Box sx={{ width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Avatar
-              onClick={() => navigate('/mypage')}
               src={user.avatar}
               sx={{
-                width: 44, height: 44,
+                width: 36, height: 36, flexShrink: 0,
                 backgroundColor: colors.textPrimary,
-                fontSize: '1rem', fontWeight: 800, cursor: 'pointer',
+                fontSize: '0.95rem', fontWeight: 800,
                 border: `2px solid ${colors.border}`,
               }}
             >
               {getInitial(user.name)}
             </Avatar>
-            <Box onClick={() => navigate('/mypage')} sx={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
-              <Typography sx={{ fontWeight: 800, fontSize: '0.85rem', color: colors.textPrimary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {user.name}
-              </Typography>
-              <Typography sx={{ fontSize: '0.72rem', color: colors.textSecondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {user.handle}
-              </Typography>
-            </Box>
-            <Tooltip title="로그아웃" placement="top" arrow>
-              <IconButton
-                size="small"
-                onClick={handleLogoutClick}
-                sx={{ p: 0.5, color: colors.textSecondary, '&:hover': { color: '#EF4444' } }}
-              >
-                <LogoutOutlined sx={{ fontSize: 18 }} />
-              </IconButton>
-            </Tooltip>
           </Box>
-        ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
-            <Tooltip title="프로필" placement="right" arrow>
-              <IconButton onClick={() => navigate('/mypage')} sx={{ p: 0 }}>
-                <Avatar
-                  src={user.avatar}
-                  sx={{
-                    width: 44, height: 44,
-                    backgroundColor: colors.textPrimary,
-                    fontSize: '1rem', fontWeight: 800,
-                    border: `2px solid ${colors.border}`,
-                  }}
-                >
-                  {getInitial(user.name)}
-                </Avatar>
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="로그아웃" placement="right" arrow>
-              <IconButton size="small" onClick={handleLogoutClick} sx={{ color: colors.textSecondary, '&:hover': { color: '#EF4444' } }}>
-                <LogoutOutlined sx={{ fontSize: 20 }} />
-              </IconButton>
-            </Tooltip>
+          <Box sx={{
+            ml: 2, minWidth: 0,
+            opacity: drawerOpen ? 1 : 0,
+            maxWidth: drawerOpen ? 160 : 0,
+            overflow: 'hidden',
+            transition: 'opacity 0.1s ease, max-width 0.18s cubic-bezier(0.4,0,0.2,1)',
+          }}>
+            <Typography sx={{ fontWeight: 600, fontSize: '0.875rem', color: colors.textPrimary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {user.name}
+            </Typography>
+            <Typography sx={{ fontSize: '0.78rem', color: colors.textSecondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {user.handle}
+            </Typography>
           </Box>
-        )}
+        </Box>
       </Drawer>
 
       <NotificationSidebar
@@ -359,28 +379,47 @@ export default function Menu() {
         onClose={() => setLogoutOpen(false)}
         PaperProps={{
           sx: {
-            borderRadius: 3, px: 1, py: 1,
+            borderRadius: '12px', px: 0, py: 0,
             boxShadow: '0 24px 64px rgba(0,0,0,0.4)',
             minWidth: 320,
             backgroundColor: colors.paper,
             border: `1px solid ${colors.border}`,
+            overflow: 'hidden',
           },
         }}
       >
-        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.15rem', color: colors.textPrimary }}>로그아웃</DialogTitle>
-        <DialogContent>
-          <Typography sx={{ color: colors.textSecondary, fontSize: '0.92rem', mt: 0.5 }}>
+        <DialogTitle sx={{
+          fontWeight: 700, fontSize: '1rem',
+          color: colors.textPrimary, textAlign: 'center',
+          borderBottom: `1px solid ${colors.border}`,
+          pb: 2,
+        }}>
+          로그아웃
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Typography sx={{ color: colors.textSecondary, fontSize: '0.9rem', textAlign: 'center' }}>
             정말 로그아웃 하시겠습니까?
           </Typography>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setLogoutOpen(false)} sx={{ color: colors.textSecondary, fontWeight: 700, fontSize: '0.88rem' }}>취소</Button>
+        <DialogActions sx={{ flexDirection: 'column', p: 0, borderTop: `1px solid ${colors.border}` }}>
           <Button
             onClick={confirmLogout}
-            variant="contained"
-            sx={{ backgroundColor: '#EF4444', color: '#fff', fontWeight: 800, fontSize: '0.88rem', borderRadius: 1.5, boxShadow: 'none', px: 2.5, '&:hover': { backgroundColor: '#DC2626' } }}
+            fullWidth
+            sx={{
+              py: 1.5, fontWeight: 700, fontSize: '0.875rem',
+              color: '#EF4444',
+              borderBottom: `1px solid ${colors.border}`,
+              borderRadius: 0,
+            }}
           >
             로그아웃
+          </Button>
+          <Button
+            onClick={() => setLogoutOpen(false)}
+            fullWidth
+            sx={{ py: 1.5, fontWeight: 400, fontSize: '0.875rem', color: colors.textPrimary, borderRadius: 0 }}
+          >
+            취소
           </Button>
         </DialogActions>
       </Dialog>

@@ -898,16 +898,34 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
       const data = await res.json();
 
       if (res.ok && data.success) {
+        const feedRes = await fetch(`${API}/feed/${postId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const feedData = await feedRes.json();
+
+        const imgRegex = /<img[^>]+src="([^">]+)"/g;
+        let imgMatch;
+        const extractedImages = [];
+        while ((imgMatch = imgRegex.exec(finalContent)) !== null) {
+          const src = imgMatch[1];
+          extractedImages.push(
+            src.startsWith('http://localhost:3010')
+              ? src.replace('http://localhost:3010', '')
+              : src
+          );
+        }
+
         isDirtyRef.current = false;
         setIsDirty(false);
         onClose?.();
         if (onSaved) {
-          onSaved();
+          onSaved(feedData.success ? {
+            ...feedData.feed,
+            images: extractedImages.join(','), 
+          } : null);
         } else {
           navigate(`/post/${postId}`);
         }
-      } else {
-        setErrorMsg(data.message || '수정에 실패했습니다.');
       }
     } catch {
       setErrorMsg('서버와 연결할 수 없습니다.');

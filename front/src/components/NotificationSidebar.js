@@ -4,6 +4,7 @@ import {
   Drawer, Box, Typography, Avatar, IconButton, Button, CircularProgress
 } from '@mui/material';
 import { Close, Check, PersonOff } from '@mui/icons-material';
+import { useColorMode } from '../App';
 
 const API = 'http://localhost:3010';
 const getInitial = (name) => (name ? name.charAt(0).toUpperCase() : '?');
@@ -47,6 +48,7 @@ const TOKEN = () => localStorage.getItem('accessToken');
 
 export default function NotificationSidebar({ open, onClose }) {
   const navigate = useNavigate();
+  const { mode } = useColorMode();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeFilter, setActiveFilter] = useState('모두');
@@ -180,13 +182,18 @@ export default function NotificationSidebar({ open, onClose }) {
 
   return (
     <Drawer anchor="left" open={open} onClose={onClose}
-      PaperProps={{ sx: { width: { xs: '100%', sm: 400 }, backgroundColor: '#FFFFFF', borderRight: '1px solid #E2E8F0' } }}>
-      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', height: '100%' }}>
+      PaperProps={{
+        sx: {
+          width: { xs: '100%', sm: 400 },
+          backgroundColor: 'var(--bg-paper)',
+          borderRight: '1px solid var(--border-color)'
+        }
+      }}>
+      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: 'var(--bg-paper)' }}>
 
-        {/* 헤더 */}
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-          <Typography sx={{ fontSize: '1.4rem', fontWeight: 800, color: '#0F172A' }}>알림</Typography>
-          <IconButton onClick={onClose} sx={{ color: '#64748B' }}><Close /></IconButton>
+          <Typography sx={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)' }}>알림</Typography>
+          <IconButton onClick={onClose} sx={{ color: 'var(--text-secondary)' }}><Close /></IconButton>
         </Box>
 
         {/* 필터 */}
@@ -206,9 +213,9 @@ export default function NotificationSidebar({ open, onClose }) {
               cursor: 'pointer',
               flexShrink: 0,
               border: '1px solid transparent',
-              backgroundColor: activeFilter === f ? '#0F172A' : '#F1F5F9',
-              color: activeFilter === f ? '#FFFFFF' : '#0F172A',
-              borderColor: activeFilter === f ? '#0F172A' : '#E2E8F0',
+              backgroundColor: activeFilter === f ? 'var(--text-primary)' : 'var(--hover-bg)',
+              color: activeFilter === f ? 'var(--bg-paper)' : 'var(--text-primary)',
+              borderColor: activeFilter === f ? 'var(--text-primary)' : 'var(--border-color)',
               transition: 'background-color 0.15s, color 0.15s, border-color 0.15s',
               '&:last-child': { mr: 2 },
             }}>
@@ -233,8 +240,7 @@ export default function NotificationSidebar({ open, onClose }) {
               if (!items?.length) return null;
               return (
                 <Box key={group} sx={{ mb: 3 }}>
-                  <Typography sx={{ fontSize: '0.95rem', fontWeight: 800, mb: 1.5, px: 1, color: '#0F172A' }}>
-                    {group}
+                  <Typography sx={{ fontSize: '0.95rem', fontWeight: 800, mb: 1.5, px: 1, color: 'var(--text-primary)' }}>                    {group}
                   </Typography>
                   {items.map(notif => (
                     <Box key={notif.NOTI_ID}
@@ -243,22 +249,22 @@ export default function NotificationSidebar({ open, onClose }) {
                         display: 'flex', alignItems: 'center', gap: 1.5,
                         mb: 0.5, p: 1.2, borderRadius: 3,
                         cursor: 'pointer',
-                        backgroundColor: notif.IS_READ === 'N' ? '#F0F7FF' : 'transparent',
+                        backgroundColor: notif.IS_READ === 'N' ? (mode === 'dark' ? '#1E2D4A' : '#F0F7FF') : 'transparent',
+                        '&:hover': { backgroundColor: 'var(--hover-bg)' },
                         transition: 'background-color 0.15s',
-                        '&:hover': { backgroundColor: '#F1F5F9' }
                       }}>
                       <Avatar
                         src={notif.SENDER_AVATAR ? `${API}${notif.SENDER_AVATAR}` : undefined}
                         onClick={(e) => { e.stopPropagation(); onClose(); navigate(`/user/${notif.SENDER_NICKNAME}`); }}
-                        sx={{ width: 44, height: 44, backgroundColor: '#0F172A', color: '#fff', fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
+                        sx={{ width: 44, height: 44, backgroundColor: 'var(--text-primary)', color: 'var(--bg-paper)', fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
                         {!notif.SENDER_AVATAR && getInitial(notif.SENDER_NICKNAME)}
                       </Avatar>
 
                       <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography sx={{ fontSize: '0.88rem', lineHeight: 1.4, color: '#0F172A' }}>
+                        <Typography sx={{ fontSize: '0.88rem', lineHeight: 1.4, color: 'var(--text-primary)' }}>
                           <Box component="span" sx={{ fontWeight: 800 }}>{notif.SENDER_NICKNAME}</Box>
                           {getNotiMessage(notif.NOTI_TYPE)}
-                          <Box component="span" sx={{ color: '#94A3B8', ml: 0.6, fontSize: '0.78rem' }}>
+                          <Box component="span" sx={{ color: 'var(--text-secondary)', ml: 0.6, fontSize: '0.78rem' }}>
                             {formatTime(notif.CREATED_AT)}
                           </Box>
                         </Typography>
@@ -273,7 +279,9 @@ export default function NotificationSidebar({ open, onClose }) {
                           </Button>
                           <Button size="small" onClick={(e) => { e.stopPropagation(); rejectRequest(notif); }}
                             disabled={pendingId === notif.NOTI_ID}
-                            sx={{ backgroundColor: '#F1F5F9', color: '#0F172A', fontSize: '0.78rem', fontWeight: 700, borderRadius: 1.5, px: 1.5, py: 0.5, minWidth: 52, textTransform: 'none', border: '1px solid #E2E8F0', '&:hover': { backgroundColor: '#E2E8F0' } }}>
+                            sx={{
+                              backgroundColor: 'var(--hover-bg)', color: 'var(--text-primary)', fontSize: '0.78rem', fontWeight: 700, borderRadius: 1.5, px: 1.5, py: 0.5, minWidth: 52, textTransform: 'none', border: '1px solid var(--border-color)', '&:hover': { backgroundColor: 'var(--border-color)' }
+                            }}>
                             거절
                           </Button>
                         </Box>
@@ -284,15 +292,20 @@ export default function NotificationSidebar({ open, onClose }) {
                           disabled={pendingId === notif.NOTI_ID}
                           sx={{
                             flexShrink: 0,
-                            backgroundColor: notif.IS_FOLLOWING === 'Y' ? '#F1F5F9' : '#0F172A',
-                            color: notif.IS_FOLLOWING === 'Y' ? '#0F172A' : '#fff',
+                            backgroundColor: notif.IS_FOLLOWING === 'Y' ? 'var(--hover-bg)' : 'var(--text-primary)',
+                            color: notif.IS_FOLLOWING === 'Y' ? 'var(--text-primary)' : 'var(--bg-paper)',
+                            border: notif.IS_FOLLOWING === 'Y' ? '1px solid var(--border-color)' : 'none',
+                            '&:hover': {
+                              backgroundColor: notif.IS_FOLLOWING === 'Y'
+                                ? (mode === 'dark' ? '#3D4258' : '#E2E8F0')
+                                : (mode === 'dark' ? '#CBD5E1' : '#334155'),
+                            },
                             fontSize: '0.78rem', fontWeight: 700, borderRadius: 1.5,
                             px: 1.5, py: 0.5, minWidth: 64, textTransform: 'none', boxShadow: 'none',
-                            border: notif.IS_FOLLOWING === 'Y' ? '1px solid #E2E8F0' : 'none',
-                            '&:hover': { backgroundColor: notif.IS_FOLLOWING === 'Y' ? '#E2E8F0' : '#334155' }
                           }}>
                           {pendingId === notif.NOTI_ID
-                            ? <CircularProgress size={12} sx={{ color: notif.IS_FOLLOWING === 'Y' ? '#0F172A' : '#fff' }} />
+                            ? <CircularProgress size={12} sx={{ color: notif.IS_FOLLOWING === 'Y' ? 'var(--text-primary)' : 'var(--bg-paper)' }}
+                            />
                             : notif.IS_FOLLOWING === 'Y' ? '팔로잉' : '팔로우'}
                         </Button>
                       )}
