@@ -16,9 +16,11 @@ import {
   ReplyOutlined, VisibilityOutlined, Close,
   MoreHoriz, Edit, Delete, SmartToyOutlined, AutoAwesome,
   RefreshOutlined, PlayArrow,
+  LocationOn, ChevronLeft, ChevronRight, VolumeOff, VolumeUp
 } from '@mui/icons-material';
 import { useColorMode } from '../App';
 import EditModal from './EditModal';
+import ReactDOM from 'react-dom';
 
 const API = 'http://localhost:3010';
 
@@ -47,9 +49,6 @@ const COMMENT_REPORT_REASONS = [
   { value: 'OTHER', label: '기타' },
 ];
 
-// ──────────────────────────────────────────
-//  Helpers
-// ──────────────────────────────────────────
 const resolveImageSrc = (src) =>
   src ? src.replace(/src="\/uploads/g, `src="${API}/uploads`) : '';
 
@@ -60,10 +59,18 @@ const tagMeta = (tag, mode) => {
   return { ...m, bg: mode === 'dark' ? m.darkBg : m.bg };
 };
 
-const formatDate = (dateStr) => {
+const formatRelativeTime = (dateStr) => {
   if (!dateStr) return '';
   const d = new Date(dateStr);
   if (isNaN(d)) return dateStr;
+  const diff = Date.now() - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (diff < 60000) return '방금 전';
+  if (mins < 60) return `${mins}분 전`;
+  if (hours < 24) return `${hours}시간 전`;
+  if (days < 7) return `${days}일 전`;
   return d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
 };
 
@@ -354,39 +361,103 @@ const InlineCodeCopyWrapper = ({ children, codeText }) => {
   );
 };
 
-// ──────────────────────────────────────────
-//  ImageGallery
-// ──────────────────────────────────────────
 const ImageGallery = ({ images, colors }) => {
   const [active, setActive] = useState(0);
+  const [lightbox, setLightbox] = useState(false);
+
   if (!images?.length) return null;
+
+  const prev = (e) => { e.stopPropagation(); setActive(i => (i - 1 + images.length) % images.length); };
+  const next = (e) => { e.stopPropagation(); setActive(i => (i + 1) % images.length); };
+
   return (
-    <Box sx={{ mb: 3 }}>
-      <Box sx={{ width: '100%', borderRadius: 2, overflow: 'hidden', border: `1px solid ${colors.border}`, backgroundColor: colors.codeBg, maxHeight: 480, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Box component="img" src={resolveImageSrc(images[active])} alt={`이미지 ${active + 1}`}
-          sx={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', animation: 'scaleIn 0.2s ease both', '@keyframes scaleIn': { from: { opacity: 0, transform: 'scale(0.97)' }, to: { opacity: 1, transform: 'scale(1)' } } }} />
+    <>
+      <Box sx={{ mb: 3 }}>
+        <Box
+          onClick={() => setLightbox(true)}
+          sx={{ width: '100%', borderRadius: 2, overflow: 'hidden', border: `1px solid ${colors.border}`, backgroundColor: colors.codeBg, maxHeight: 480, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-in', position: 'relative' }}
+        >
+          <Box component="img" src={resolveImageSrc(images[active])} alt=""
+            sx={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+          {images.length > 1 && (
+            <>
+              <IconButton size="small" onClick={prev} sx={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', backgroundColor: 'rgba(0,0,0,0.45)', color: '#fff', '&:hover': { backgroundColor: 'rgba(0,0,0,0.65)' }, width: 32, height: 32 }}>
+                <ChevronLeft sx={{ fontSize: 20 }} />
+              </IconButton>
+              <IconButton size="small" onClick={next} sx={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', backgroundColor: 'rgba(0,0,0,0.45)', color: '#fff', '&:hover': { backgroundColor: 'rgba(0,0,0,0.65)' }, width: 32, height: 32 }}>
+                <ChevronRight sx={{ fontSize: 20 }} />
+              </IconButton>
+              <Box sx={{ position: 'absolute', top: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: '0.7rem', fontWeight: 700, px: 1, py: 0.3, borderRadius: 2 }}>
+                {active + 1} / {images.length}
+              </Box>
+            </>
+          )}
+        </Box>
+        {images.length > 1 && (
+          <Stack direction="row" spacing={1} sx={{ mt: 1.5, overflowX: 'auto', pb: 0.5 }}>
+            {images.map((img, i) => (
+              <Box key={i} onClick={() => setActive(i)}
+                sx={{ width: 64, height: 64, flexShrink: 0, borderRadius: 1.5, overflow: 'hidden', border: active === i ? `2px solid ${colors.accent}` : `2px solid ${colors.border}`, cursor: 'pointer' }}>
+                <Box component="img" src={resolveImageSrc(img)} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </Box>
+            ))}
+          </Stack>
+        )}
       </Box>
-      {images.length > 1 && (
-        <Stack direction="row" spacing={1} sx={{ mt: 1.5, overflowX: 'auto', pb: 0.5 }}>
-          {images.map((img, i) => (
-            <Box key={i} onClick={() => setActive(i)}
-              sx={{ width: 64, height: 64, flexShrink: 0, borderRadius: 1.5, overflow: 'hidden', border: active === i ? `2px solid ${colors.accent}` : `2px solid ${colors.border}`, cursor: 'pointer', transition: 'border-color 0.15s' }}>
-              <Box component="img" src={resolveImageSrc(img)} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            </Box>
-          ))}
-        </Stack>
-      )}
-    </Box>
+
+      {/* 라이트박스 모달 */}
+      <Modal open={lightbox} onClose={() => setLightbox(false)}
+        sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}
+        slotProps={{ backdrop: { sx: { backgroundColor: 'rgba(0,0,0,0.92)' } } }}>
+        <Box onClick={() => setLightbox(false)} sx={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh', outline: 'none' }}>
+          <Box component="img" src={resolveImageSrc(images[active])} onClick={e => e.stopPropagation()}
+            sx={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: 1, display: 'block' }} />
+          {images.length > 1 && (
+            <>
+              <IconButton onClick={e => { e.stopPropagation(); setActive(i => (i - 1 + images.length) % images.length); }}
+                sx={{ position: 'absolute', left: -52, top: '50%', transform: 'translateY(-50%)', color: '#fff', backgroundColor: 'rgba(255,255,255,0.15)', '&:hover': { backgroundColor: 'rgba(255,255,255,0.28)' } }}>
+                <ChevronLeft />
+              </IconButton>
+              <IconButton onClick={e => { e.stopPropagation(); setActive(i => (i + 1) % images.length); }}
+                sx={{ position: 'absolute', right: -52, top: '50%', transform: 'translateY(-50%)', color: '#fff', backgroundColor: 'rgba(255,255,255,0.15)', '&:hover': { backgroundColor: 'rgba(255,255,255,0.28)' } }}>
+                <ChevronRight />
+              </IconButton>
+              <Box sx={{ position: 'absolute', bottom: -28, left: '50%', transform: 'translateX(-50%)', color: '#fff', fontSize: '0.8rem', fontWeight: 600 }}>
+                {active + 1} / {images.length}
+              </Box>
+            </>
+          )}
+          <IconButton onClick={() => setLightbox(false)} sx={{ position: 'absolute', top: 8, right: 8, color: '#fff', backgroundColor: 'rgba(0,0,0,0.45)' }}>
+            <Close sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Box>
+      </Modal>
+    </>
   );
 };
 
-// ──────────────────────────────────────────
-//  VideoPlayer
-// ──────────────────────────────────────────
 const VideoPlayer = ({ src, colors }) => {
   const videoRef = useRef(null);
+  const containerRef = useRef(null);
   const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [muted, setMuted] = useState(true);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!videoRef.current) return;
+        if (entry.isIntersecting) {
+          videoRef.current.play().then(() => setPlaying(true)).catch(() => { });
+        } else {
+          videoRef.current.pause();
+          setPlaying(false);
+        }
+      },
+      { threshold: 0.1 }
+    );
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   const toggle = () => {
     const v = videoRef.current;
@@ -395,54 +466,64 @@ const VideoPlayer = ({ src, colors }) => {
     else { v.play().then(() => setPlaying(true)).catch(() => { }); }
   };
 
-  const handleTimeUpdate = () => {
-    const v = videoRef.current;
-    if (!v || !v.duration) return;
-    setProgress((v.currentTime / v.duration) * 100);
-  };
-
-  const handleEnded = () => setPlaying(false);
-
-  const handleProgressClick = (e) => {
-    const v = videoRef.current;
-    const bar = e.currentTarget;
-    const rect = bar.getBoundingClientRect();
-    const ratio = (e.clientX - rect.left) / rect.width;
-    if (v && v.duration) { v.currentTime = ratio * v.duration; }
-  };
-
   return (
-    <Box sx={{ mb: 3, borderRadius: 2, overflow: 'hidden', border: `1px solid ${colors.border}`, backgroundColor: '#000', position: 'relative', maxHeight: 520 }}>
-      <Box component="video"
-        ref={videoRef}
-        src={src}
-        onTimeUpdate={handleTimeUpdate}
-        onEnded={handleEnded}
-        playsInline
-        style={{ width: '100%', maxHeight: 520, objectFit: 'contain', display: 'block' }}
-      />
-      {!playing && (
-        <Box onClick={toggle}
-          sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backgroundColor: 'rgba(0,0,0,0.25)', transition: 'background 0.2s', '&:hover': { backgroundColor: 'rgba(0,0,0,0.4)' } }}>
-          <Box sx={{ width: 56, height: 56, borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 24px rgba(0,0,0,0.4)' }}>
-            <PlayArrow sx={{ fontSize: 32, color: '#0F172A', ml: 0.5 }} />
+    <Box ref={containerRef} sx={{ mb: 3 }}>
+      <Box sx={{
+        position: 'relative',
+        width: '100%',
+        borderRadius: 2,
+        overflow: 'hidden',
+        backgroundColor: '#000',
+        aspectRatio: '9/16',
+        cursor: 'pointer',
+      }}>
+        <video
+          ref={videoRef}
+          src={src}
+          muted={muted}
+          playsInline
+          loop
+          autoPlay
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          onClick={toggle}
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+        />
+        {!playing && (
+          <Box onClick={toggle} sx={{
+            position: 'absolute', inset: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            backgroundColor: 'rgba(0,0,0,0.25)',
+          }}>
+            <Box sx={{
+              width: 52, height: 52, borderRadius: '50%',
+              backgroundColor: 'rgba(255,255,255,0.9)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Box sx={{ width: 0, height: 0, borderTop: '10px solid transparent', borderBottom: '10px solid transparent', borderLeft: '18px solid #0F172A', ml: '3px' }} />
+            </Box>
           </Box>
+        )}
+        <Box
+          onClick={e => { e.stopPropagation(); setMuted(m => { videoRef.current.muted = !m; return !m; }); }}
+          sx={{
+            position: 'absolute', bottom: 12, right: 12,
+            backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: '50%',
+            width: 36, height: 36,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer',
+          }}
+        >
+          {muted
+            ? <VolumeOff sx={{ fontSize: 18, color: '#fff' }} />
+            : <VolumeUp sx={{ fontSize: 18, color: '#fff' }} />
+          }
         </Box>
-      )}
-      {playing && (
-        <Box onClick={toggle} sx={{ position: 'absolute', inset: 0, cursor: 'pointer' }} />
-      )}
-      <Box onClick={handleProgressClick}
-        sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', cursor: 'pointer' }}>
-        <Box sx={{ height: '100%', width: `${progress}%`, background: 'linear-gradient(90deg, #569CD6 0%, #4EC9B0 100%)', transition: 'width 0.15s linear', borderRadius: '0 2px 2px 0' }} />
       </Box>
     </Box>
   );
 };
 
-// ──────────────────────────────────────────
-//  ReportModal
-// ──────────────────────────────────────────
 const ReportModal = ({ open, onClose, reportUrl, token, onSuccess, onDuplicate, colors, title = '신고하기', reasons = REPORT_REASONS }) => {
   const [reason, setReason] = useState('');
   const [detail, setDetail] = useState('');
@@ -605,27 +686,118 @@ const renderContentWithCopy = (html, colors, wrapperSx = null) => {
     </Box>
   );
 };
+const ProfileHoverCard = ({ nickname, token, anchorEl, colors, navigate, onMouseEnter, onMouseLeave }) => {
+  const [data, setData] = useState(null);
+  const [followStatus, setFollowStatus] = useState('NONE');
+  const [pos, setPos] = useState({ top: 0, left: 0 });
 
+  useEffect(() => {
+    if (!anchorEl || !nickname) { setData(null); return; }
+    const rect = anchorEl.getBoundingClientRect();
+    setPos({
+      top: rect.bottom + window.scrollY + 8,
+      left: Math.min(rect.left + window.scrollX, window.innerWidth - 320),
+    });
+    fetch(`${API}/user/profile/${nickname}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => { if (d.success) { setData(d); setFollowStatus(d.user?.FOLLOW_STATUS || 'NONE'); } })
+      .catch(() => { });
+  }, [anchorEl, nickname, token]);
+
+  if (!anchorEl || !data) return null;
+
+  const handleFollow = async (e) => {
+    e.stopPropagation();
+    const prev = followStatus;
+    setFollowStatus('OPTIMISTIC');
+    try {
+      const res = await fetch(`${API}/user/follow/${data.user.USER_ID}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      const d = await res.json();
+      if (d.success) setFollowStatus(d.status);
+      else setFollowStatus(prev);
+    } catch { setFollowStatus(prev); }
+  };
+
+  const latestPosts = (data.posts || []).slice(0, 3);
+  const followBtnSx = followStatus === 'ACCEPTED'
+    ? { backgroundColor: colors.paper, color: colors.textPrimary, border: `1px solid ${colors.border}` }
+    : (followStatus === 'PENDING' || followStatus === 'OPTIMISTIC')
+      ? { backgroundColor: colors.hover, color: colors.textMuted, border: `1px solid ${colors.border}` }
+      : { backgroundColor: '#2563EB', color: '#fff', '&:hover': { backgroundColor: '#1D4ED8' } };
+  const followLabel = followStatus === 'ACCEPTED' ? '팔로잉' : (followStatus === 'PENDING' || followStatus === 'OPTIMISTIC') ? '요청됨' : '팔로우';
+
+  return ReactDOM.createPortal(
+    <Box onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}
+      sx={{
+        position: 'absolute', top: pos.top, left: pos.left, width: 300, zIndex: 9999,
+        backgroundColor: colors.paper, border: `1px solid ${colors.border}`,
+        borderRadius: 2.5, boxShadow: '0 8px 40px rgba(15,23,42,0.14)', p: 2.5,
+        animation: 'hoverFadeUp 0.15s ease both',
+        '@keyframes hoverFadeUp': { from: { opacity: 0, transform: 'translateY(6px)' }, to: { opacity: 1, transform: 'translateY(0)' } },
+      }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, cursor: 'pointer' }}
+          onClick={() => navigate(`/user/${data.user.NICKNAME}`)}>
+          <Avatar src={resolveAvatarSrc(data.user.AVATAR)}
+            sx={{ width: 44, height: 44, backgroundColor: colors.textPrimary, fontWeight: 800 }}>
+            {getInitial(data.user.NICKNAME)}
+          </Avatar>
+          <Box>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', color: colors.textPrimary }}>{data.user.NICKNAME}</Typography>
+            {data.user.BIO_SHORT && (
+              <Typography sx={{ fontSize: '0.72rem', color: colors.textHint }}>{data.user.BIO_SHORT}</Typography>
+            )}
+          </Box>
+        </Box>
+        {!data.isMe && (
+          <Button size="small" onClick={handleFollow}
+            sx={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'none', px: 1.5, py: 0.4, borderRadius: 1, ...followBtnSx }}>
+            {followLabel}
+          </Button>
+        )}
+      </Box>
+      <Stack direction="row" spacing={2} sx={{ mb: 1.5 }}>
+        {[
+          { label: '게시물', value: data.posts?.length ?? 0 },
+          { label: '팔로워', value: data.user.FOLLOWER_CNT ?? 0 },
+          { label: '팔로잉', value: data.user.FOLLOWING_CNT ?? 0 },
+        ].map(s => (
+          <Box key={s.label} sx={{ textAlign: 'center' }}>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.88rem', color: colors.textPrimary }}>{s.value}</Typography>
+            <Typography sx={{ fontSize: '0.7rem', color: colors.textHint }}>{s.label}</Typography>
+          </Box>
+        ))}
+      </Stack>
+      {latestPosts.length > 0 && (
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0.5 }}>
+          {latestPosts.map(p => (
+            <Box key={p.id} onClick={() => navigate(`/post/${p.id}`)}
+              sx={{ aspectRatio: '1', borderRadius: 1, overflow: 'hidden', backgroundColor: colors.inputBg, cursor: 'pointer', '&:hover': { opacity: 0.8 }, transition: 'opacity 0.15s' }}>
+              <Box component="img"
+                src={p.images ? (p.images.startsWith('http') ? p.images : `${API}${p.images}`) : `${API}/uploads/post/defaultImg.png`}
+                sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Box>,
+    document.body
+  );
+};
 const AIAnswerSection = ({ postId, token, colors, postUpdatedAt, isMyPost }) => {
   const [loading, setLoading] = useState(false);
   const [answer, setAnswer] = useState(null);
   const [aiCreatedAt, setAiCreatedAt] = useState(null);
   const [error, setError] = useState(null);
-  const [collapsed, setCollapsed] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
     if (!postId) return;
-    fetch(`${API}/feed/${postId}/ai-answer`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    fetch(`${API}/feed/${postId}/ai-answer`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(data => {
-        if (data.success && data.answer) {
-          setAnswer(data.answer);
-          setAiCreatedAt(data.createdAt);
-        }
-      })
-      .catch(() => { });
+        if (data.success && data.answer) { setAnswer(data.answer); setAiCreatedAt(data.updatedAt || data.createdAt); }
+      }).catch(() => { });
   }, [postId, token]);
 
   const isStale = useMemo(() => {
@@ -636,12 +808,9 @@ const AIAnswerSection = ({ postId, token, colors, postUpdatedAt, isMyPost }) => 
   const requestAnswer = async () => {
     setLoading(true); setError(null);
     try {
-      const res = await fetch(`${API}/feed/${postId}/ai-answer`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(`${API}/feed/${postId}/ai-answer`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
-      if (data.success) { setAnswer(data.answer); setAiCreatedAt(new Date().toISOString()); }
+      if (data.success) { setAnswer(data.answer); setAiCreatedAt(new Date().toISOString()); setModalOpen(true); }
       else throw new Error(data.message);
     } catch { setError('AI 답변 생성 중 오류가 발생했습니다.'); }
     finally { setLoading(false); }
@@ -656,109 +825,136 @@ const AIAnswerSection = ({ postId, token, colors, postUpdatedAt, isMyPost }) => 
     '& pre': { backgroundColor: '#0D1117', color: '#D4D4D4', borderRadius: '6px', p: 1.5, fontSize: '0.76rem', fontFamily: '"JetBrains Mono",monospace', overflowX: 'auto', lineHeight: 1.7, my: 1, border: '1px solid #1E293B' },
   };
 
-  // 타인이고 AI 답변 없을 때
-  if (!isMyPost && !answer && !loading) {
+  // 타인: 버튼 없음, 답변 있을 때만 보기 버튼
+  if (!isMyPost) {
+    if (!answer) return null;
     return (
-      <Box sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2, p: 2.5, textAlign: 'center' }}>
-        <Box sx={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #569CD6, #4EC9B0)', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 1.5 }}>
-          <SmartToyOutlined sx={{ fontSize: 18, color: '#fff' }} />
-        </Box>
-        <Typography sx={{ fontSize: '0.8rem', color: colors.textMuted, lineHeight: 1.7, mb: 1.5 }}>
-          아직 작성자가 AI 답변을 생성하지 않았어요!<br />
-          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, color: colors.textPrimary, fontWeight: 700 }}>
-            <ChatBubbleOutline sx={{ fontSize: 14 }} />
-            댓글로 먼저 도움을 드려보세요
+      <>
+        <Box sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2, overflow: 'hidden' }}>
+          <Box sx={{ px: 2, py: 1.8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: colors.mode === 'dark' ? 'linear-gradient(135deg, rgba(86,156,214,0.15) 0%, rgba(78,201,176,0.08) 100%)' : 'linear-gradient(135deg, rgba(86,156,214,0.1) 0%, rgba(78,201,176,0.05) 100%)' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ width: 28, height: 28, borderRadius: 1, background: 'linear-gradient(135deg, #569CD6 0%, #4EC9B0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <SmartToyOutlined sx={{ fontSize: 15, color: '#fff' }} />
+              </Box>
+              <Typography sx={{ fontWeight: 800, fontSize: '0.82rem', color: colors.textPrimary }}>AI 답변</Typography>
+              <Chip label="Beta" size="small" sx={{ height: 14, fontSize: '0.58rem', fontWeight: 700, background: 'linear-gradient(135deg, #569CD6, #4EC9B0)', color: '#fff', px: 0.2 }} />
+            </Box>
+            <Button size="small" onClick={() => setModalOpen(true)}
+              sx={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'none', borderRadius: 1.5, px: 1.5, background: 'linear-gradient(135deg, #569CD6 0%, #4EC9B0 100%)', color: '#fff', boxShadow: 'none' }}>
+              답변 보기
+            </Button>
           </Box>
-        </Typography>
-        <Button size="small" variant="outlined"
-          onClick={() => document.getElementById('comments')?.scrollIntoView({ behavior: 'smooth' })}
-          sx={{ fontSize: '0.78rem', fontWeight: 700, textTransform: 'none', borderRadius: 1.5, borderColor: colors.border, color: colors.textMuted, '&:hover': { borderColor: colors.accent, color: colors.accent } }}>
-          댓글 달러 가기
-        </Button>
-      </Box>
+        </Box>
+        <Modal open={modalOpen} onClose={() => setModalOpen(false)} closeAfterTransition slots={{ backdrop: Backdrop }}
+          slotProps={{ backdrop: { timeout: 200, sx: { backgroundColor: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(6px)' } } }}>
+          <Fade in={modalOpen}>
+            <Box sx={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: { xs: '92vw', sm: 640 }, maxHeight: '80vh', backgroundColor: colors.paper, borderRadius: 3, border: `1px solid ${colors.border}`, boxShadow: '0 24px 80px rgba(15,23,42,0.25)', display: 'flex', flexDirection: 'column', outline: 'none', overflow: 'hidden' }}>
+              <Box sx={{ px: 3, py: 2, borderBottom: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(135deg, rgba(86,156,214,0.12) 0%, rgba(78,201,176,0.06) 100%)' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box sx={{ width: 30, height: 30, borderRadius: 1.5, background: 'linear-gradient(135deg, #569CD6 0%, #4EC9B0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <SmartToyOutlined sx={{ fontSize: 16, color: '#fff' }} />
+                  </Box>
+                  <Typography sx={{ fontWeight: 800, fontSize: '0.95rem', color: colors.textPrimary }}>AI 답변</Typography>
+                  <Chip label="Beta" size="small" sx={{ height: 16, fontSize: '0.6rem', fontWeight: 700, background: 'linear-gradient(135deg, #569CD6, #4EC9B0)', color: '#fff' }} />
+                </Box>
+                <IconButton size="small" onClick={() => setModalOpen(false)} sx={{ color: colors.textHint }}>
+                  <Close sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Box>
+              <Box sx={{ flex: 1, overflowY: 'auto', px: 3, py: 2.5, '&::-webkit-scrollbar': { width: 4 }, '&::-webkit-scrollbar-thumb': { backgroundColor: colors.border, borderRadius: 2 } }}>
+                {renderContentWithCopy(answer, colors, commentBodySx)}
+              </Box>
+            </Box>
+          </Fade>
+        </Modal>
+      </>
     );
   }
 
+  // 내 글
   return (
-    <Box sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2, overflow: 'hidden' }}>
-      {/* 헤더 */}
-      <Box sx={{ px: 2, py: 1.8, borderBottom: collapsed ? 'none' : `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: colors.mode === 'dark' ? 'linear-gradient(135deg, rgba(86,156,214,0.15) 0%, rgba(78,201,176,0.08) 100%)' : 'linear-gradient(135deg, rgba(86,156,214,0.1) 0%, rgba(78,201,176,0.05) 100%)', cursor: 'pointer' }}
-        onClick={() => setCollapsed(v => !v)}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Box sx={{ width: 28, height: 28, borderRadius: 1, background: 'linear-gradient(135deg, #569CD6 0%, #4EC9B0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <SmartToyOutlined sx={{ fontSize: 15, color: '#fff' }} />
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+    <>
+      <Box sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2, overflow: 'hidden' }}>
+        <Box sx={{ px: 2, py: 1.8, borderBottom: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: colors.mode === 'dark' ? 'linear-gradient(135deg, rgba(86,156,214,0.15) 0%, rgba(78,201,176,0.08) 100%)' : 'linear-gradient(135deg, rgba(86,156,214,0.1) 0%, rgba(78,201,176,0.05) 100%)' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ width: 28, height: 28, borderRadius: 1, background: 'linear-gradient(135deg, #569CD6 0%, #4EC9B0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <SmartToyOutlined sx={{ fontSize: 15, color: '#fff' }} />
+            </Box>
             <Typography sx={{ fontWeight: 800, fontSize: '0.82rem', color: colors.textPrimary }}>AI 답변</Typography>
             <Chip label="Beta" size="small" sx={{ height: 14, fontSize: '0.58rem', fontWeight: 700, background: 'linear-gradient(135deg, #569CD6, #4EC9B0)', color: '#fff', px: 0.2 }} />
           </Box>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          {answer && !collapsed && isMyPost && (
-            <Tooltip title="다시 분석" onClick={e => { e.stopPropagation(); requestAnswer(); }}>
-              <IconButton size="small" disabled={loading} sx={{ color: colors.textHint, p: 0.4, '&:hover': { color: colors.accent } }}>
-                <RefreshOutlined sx={{ fontSize: 14 }} />
-              </IconButton>
-            </Tooltip>
-          )}
-          <Box sx={{ transform: collapsed ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.2s', display: 'flex', color: colors.textHint }}>
-            <ArrowUpward sx={{ fontSize: 15 }} />
-          </Box>
-        </Box>
-      </Box>
-
-      {!collapsed && (
-        <Box sx={{ px: 2, py: 2 }}>
-          {/* 수정 감지 배너 — 내 글일 때만 */}
-          {isStale && isMyPost && !loading && (
-            <Box sx={{ mb: 2, px: 1.5, py: 1, backgroundColor: colors.mode === 'dark' ? '#2A1F0A' : '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 1.5 }}>
-              <Typography sx={{ fontSize: '0.75rem', color: '#92400E', fontWeight: 600, mb: 0.4 }}>게시글이 수정되었습니다</Typography>
-              <Typography sx={{ fontSize: '0.72rem', color: '#B45309', mb: 1 }}>새로운 내용으로 AI 답변을 다시 받아보시겠어요?</Typography>
-              <Button size="small" variant="contained" onClick={requestAnswer}
-                sx={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'none', borderRadius: 1, px: 1.5, py: 0.5, background: 'linear-gradient(135deg, #569CD6 0%, #4EC9B0 100%)', boxShadow: 'none', color: '#fff' }}>
-                다시 분석하기
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {answer && (
+              <Button size="small" onClick={() => setModalOpen(true)}
+                sx={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'none', borderRadius: 1.5, px: 1.5, background: 'linear-gradient(135deg, #569CD6 0%, #4EC9B0 100%)', color: '#fff', boxShadow: 'none' }}>
+                답변 보기
               </Button>
-            </Box>
-          )}
-
-          {/* 내 글: AI 답변 없을 때 */}
-          {!answer && !loading && isMyPost && (
-            <Box sx={{ textAlign: 'center', py: 2.5 }}>
-              <Box sx={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, #569CD6, #4EC9B0)', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 1.5, boxShadow: '0 4px 16px rgba(86,156,214,0.3)' }}>
-                <AutoAwesome sx={{ fontSize: 20, color: '#fff' }} />
-              </Box>
-              <Typography sx={{ fontSize: '0.78rem', color: colors.textMuted, mb: 1.5, lineHeight: 1.6 }}>
-                AI가 에러를 분석하고<br />해결 방법을 제안해드립니다
-              </Typography>
-              <Button variant="contained" onClick={requestAnswer} size="small"
-                sx={{ background: 'linear-gradient(135deg, #569CD6 0%, #4EC9B0 100%)', color: '#fff', fontWeight: 700, textTransform: 'none', borderRadius: 1.5, px: 2, py: 0.8, boxShadow: '0 4px 12px rgba(86,156,214,0.35)', fontSize: '0.78rem' }}>
+            )}
+            {!answer && !loading && (
+              <Button size="small" variant="contained" onClick={requestAnswer}
+                sx={{ background: 'linear-gradient(135deg, #569CD6 0%, #4EC9B0 100%)', color: '#fff', fontWeight: 700, textTransform: 'none', borderRadius: 1.5, px: 2, py: 0.6, boxShadow: 'none', fontSize: '0.78rem' }}>
                 <AutoAwesome sx={{ fontSize: 13, mr: 0.6 }} />AI 답변 받기
               </Button>
-            </Box>
-          )}
-
-          {loading && (
-            <Box sx={{ py: 1.5 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                <Box sx={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg, #569CD6, #4EC9B0)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'pulse 1.5s ease-in-out infinite', '@keyframes pulse': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.6 } } }}>
-                  <SmartToyOutlined sx={{ fontSize: 12, color: '#fff' }} />
-                </Box>
-                <Typography sx={{ fontSize: '0.78rem', color: colors.textMuted }}>분석 중...</Typography>
-              </Box>
-              <LinearProgress sx={{ borderRadius: 1, backgroundColor: colors.border, '& .MuiLinearProgress-bar': { background: 'linear-gradient(90deg, #569CD6 0%, #4EC9B0 100%)' } }} />
-            </Box>
-          )}
-
-          {error && <Alert severity="error" sx={{ borderRadius: 1.5, fontSize: '0.78rem' }}>{error}</Alert>}
-
-          {answer && !loading && (
-            <Box sx={{ maxHeight: 'calc(100vh - 300px)', overflowY: 'auto', '&::-webkit-scrollbar': { width: 4 }, '&::-webkit-scrollbar-thumb': { backgroundColor: colors.border, borderRadius: 2 } }}>
-              {renderContentWithCopy(answer, colors, commentBodySx)}
-            </Box>
-          )}
+            )}
+            {loading && <CircularProgress size={16} sx={{ color: colors.accent }} />}
+          </Box>
         </Box>
-      )}
-    </Box>
+
+        {/* 수정 감지 배너 */}
+        {isStale && !loading && (
+          <Box sx={{ px: 2, py: 1.5, backgroundColor: colors.mode === 'dark' ? '#2A1F0A' : '#FFFBEB', border: `1px solid #FDE68A`, borderRadius: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box>
+              <Typography sx={{ fontSize: '0.75rem', color: '#92400E', fontWeight: 600 }}>게시글이 수정되었습니다</Typography>
+              <Typography sx={{ fontSize: '0.72rem', color: '#B45309' }}>새로운 내용으로 AI 답변을 다시 받아보시겠어요?</Typography>
+            </Box>
+            <Button size="small" variant="contained" onClick={requestAnswer}
+              sx={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'none', borderRadius: 1, px: 1.5, py: 0.5, background: 'linear-gradient(135deg, #569CD6 0%, #4EC9B0 100%)', boxShadow: 'none', color: '#fff', whiteSpace: 'nowrap', ml: 1 }}>
+              다시 분석
+            </Button>
+          </Box>
+        )}
+
+        {error && (
+          <Box sx={{ px: 2, py: 1.5 }}>
+            <Alert severity="error" sx={{ borderRadius: 1.5, fontSize: '0.78rem' }}>{error}</Alert>
+          </Box>
+        )}
+      </Box>
+
+      {/* AI 답변 모달 */}
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} closeAfterTransition slots={{ backdrop: Backdrop }}
+        slotProps={{ backdrop: { timeout: 200, sx: { backgroundColor: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(6px)' } } }}>
+        <Fade in={modalOpen}>
+          <Box sx={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: { xs: '92vw', sm: 640 }, maxHeight: '80vh', backgroundColor: colors.paper, borderRadius: 3, border: `1px solid ${colors.border}`, boxShadow: '0 24px 80px rgba(15,23,42,0.25)', display: 'flex', flexDirection: 'column', outline: 'none', overflow: 'hidden' }}>
+            <Box sx={{ px: 3, py: 2, borderBottom: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(135deg, rgba(86,156,214,0.12) 0%, rgba(78,201,176,0.06) 100%)' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ width: 30, height: 30, borderRadius: 1.5, background: 'linear-gradient(135deg, #569CD6 0%, #4EC9B0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <SmartToyOutlined sx={{ fontSize: 16, color: '#fff' }} />
+                </Box>
+                <Typography sx={{ fontWeight: 800, fontSize: '0.95rem', color: colors.textPrimary }}>AI 답변</Typography>
+                <Chip label="Beta" size="small" sx={{ height: 16, fontSize: '0.6rem', fontWeight: 700, background: 'linear-gradient(135deg, #569CD6, #4EC9B0)', color: '#fff' }} />
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Tooltip title="다시 분석">
+                  <IconButton size="small" disabled={loading} onClick={requestAnswer} sx={{ color: colors.textHint, '&:hover': { color: colors.accent } }}>
+                    <RefreshOutlined sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+                <IconButton size="small" onClick={() => setModalOpen(false)} sx={{ color: colors.textHint }}>
+                  <Close sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Box>
+            </Box>
+            <Box sx={{ flex: 1, overflowY: 'auto', px: 3, py: 2.5, '&::-webkit-scrollbar': { width: 4 }, '&::-webkit-scrollbar-thumb': { backgroundColor: colors.border, borderRadius: 2 } }}>
+              {loading
+                ? <Box sx={{ py: 4 }}><LinearProgress sx={{ borderRadius: 1, '& .MuiLinearProgress-bar': { background: 'linear-gradient(90deg, #569CD6 0%, #4EC9B0 100%)' } }} /></Box>
+                : renderContentWithCopy(answer, colors, commentBodySx)
+              }
+            </Box>
+          </Box>
+        </Fade>
+      </Modal>
+    </>
   );
 };
 
@@ -772,6 +968,30 @@ const CommentItem = ({ comment, index, depth = 0, onReply, onDelete, onEdit, myN
   const [editContent, setEditContent] = useState('');
   const [reportOpen, setReportOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const [commentLiked, setCommentLiked] = useState((comment.MY_LIKE ?? 0) > 0);
+  const [commentLikeCount, setCommentLikeCount] = useState(comment.LIKE_COUNT ?? 0);
+  const [repliesOpen, setRepliesOpen] = useState(true);
+  const [hoverAnchor, setHoverAnchor] = useState(null);
+  const [hoverVisible, setHoverVisible] = useState(false);
+  const leaveTimer = useRef(null);
+  const hoverTimer = useRef(null);
+
+  const handleCommentLike = async (e) => {
+    e.stopPropagation();
+    const next = !commentLiked;
+    setCommentLiked(next);
+    setCommentLikeCount(c => c + (next ? 1 : -1));
+    try {
+      await fetch(`${API}/feed/${comment.POST_ID}/comment/${comment.COMMENT_ID}/like`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {
+      setCommentLiked(!next);
+      setCommentLikeCount(c => c + (next ? -1 : 1));
+    }
+  };
 
   const handleEditSubmit = async () => {
     try {
@@ -809,19 +1029,23 @@ const CommentItem = ({ comment, index, depth = 0, onReply, onDelete, onEdit, myN
     <Box sx={{ animation: `fadeUp 0.3s ease ${index * 0.04}s both`, '@keyframes fadeUp': { from: { opacity: 0, transform: 'translateY(8px)' }, to: { opacity: 1, transform: 'translateY(0)' } } }}>
       <Box sx={{
         display: 'flex', gap: 1.5, py: 2,
-        pl: isReply ? `${depth * 16}px` : 0,
+        pl: depth === 1 ? 2 : depth === 2 ? 4 : 0,
+        ml: depth === 1 ? 1 : depth === 2 ? 2 : 0,
         borderBottom: `1px solid ${colors.border}`,
-        backgroundColor: isReply
-          ? (colors.mode === 'dark' ? 'rgba(86,156,214,0.05)' : '#F8FAFF')
-          : 'transparent',
-        borderRadius: 2,
+        borderLeft: depth === 1
+          ? `3px solid ${colors.accent}60`
+          : depth === 2
+            ? `3px solid ${colors.textHint}40`
+            : 'none',
+        backgroundColor: depth === 1
+          ? (colors.mode === 'dark' ? 'rgba(86,156,214,0.04)' : '#F8FAFF')
+          : depth === 2
+            ? (colors.mode === 'dark' ? 'rgba(100,116,139,0.04)' : '#F9FAFB')
+            : 'transparent',
+        borderRadius: depth > 0 ? '0 8px 8px 0' : 2,
         animation: highlighted ? 'commentPulse 1.5s ease 3' : 'none',
         '@keyframes commentPulse': {
-          '0%, 100%': {
-            backgroundColor: isReply
-              ? (colors.mode === 'dark' ? 'rgba(86,156,214,0.05)' : '#F8FAFF')
-              : 'transparent'
-          },
+          '0%, 100%': { backgroundColor: depth === 1 ? (colors.mode === 'dark' ? 'rgba(86,156,214,0.04)' : '#F8FAFF') : 'transparent' },
           '50%': { backgroundColor: colors.mode === 'dark' ? 'rgba(37,99,235,0.25)' : '#DBEAFE' },
         },
         '&:last-child': { borderBottom: 'none' },
@@ -829,6 +1053,15 @@ const CommentItem = ({ comment, index, depth = 0, onReply, onDelete, onEdit, myN
       }}>
         <Avatar src={resolveAvatarSrc(comment.AVATAR)}
           sx={{ width: isReply ? 28 : 34, height: isReply ? 28 : 34, flexShrink: 0, backgroundColor: colors.textPrimary, fontSize: isReply ? '0.65rem' : '0.75rem', fontWeight: 800, cursor: 'pointer' }}
+          onMouseEnter={e => {
+            clearTimeout(leaveTimer.current);
+            const el = e.currentTarget;
+            hoverTimer.current = setTimeout(() => { setHoverAnchor(el); setHoverVisible(true); }, 400);
+          }}
+          onMouseLeave={() => {
+            clearTimeout(hoverTimer.current);
+            leaveTimer.current = setTimeout(() => { setHoverVisible(false); setHoverAnchor(null); }, 200);
+          }}
           onClick={() => { if (!comment.WRITER) return; navigate(comment.WRITER === myNickname ? '/mypage' : `/user/${comment.WRITER}`); }}>
           {getInitial(comment.WRITER || comment.writer)}
         </Avatar>
@@ -846,7 +1079,7 @@ const CommentItem = ({ comment, index, depth = 0, onReply, onDelete, onEdit, myN
             )}
             {(comment.CREATED_AT || comment.createdAt) && (
               <Typography sx={{ fontSize: '0.72rem', color: colors.textHint }}>
-                {formatDate(comment.CREATED_AT || comment.createdAt)}
+                {formatRelativeTime(comment.CREATED_AT || comment.createdAt)}
               </Typography>
             )}
             <IconButton size="small" onClick={e => { e.stopPropagation(); setMenuAnchor(e.currentTarget); }} sx={{ ml: 'auto', color: colors.textHint, p: 0.3 }}>
@@ -892,16 +1125,32 @@ const CommentItem = ({ comment, index, depth = 0, onReply, onDelete, onEdit, myN
             renderContentWithCopy(comment.CONTENT || comment.content || '', colors, commentBodySx)
           )}
 
-          {depth < 2 && (
-            <Button size="small" startIcon={<ReplyOutlined sx={{ fontSize: 13 }} />} onClick={() => onReply(comment)}
-              sx={{ mt: 0.5, color: colors.textHint, fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', px: 0, minWidth: 0, '&:hover': { color: colors.accent, backgroundColor: 'transparent' } }}>
-              답글
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+            {depth < 2 && (
+              <Button size="small" startIcon={<ReplyOutlined sx={{ fontSize: 13 }} />} onClick={() => onReply(comment)}
+                sx={{ color: colors.textHint, fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', px: 0, minWidth: 0, '&:hover': { color: colors.accent, backgroundColor: 'transparent' } }}>
+                답글
+              </Button>
+            )}
+            {comment.replies?.length > 0 && (
+              <Button size="small" onClick={() => setRepliesOpen(o => !o)}
+                sx={{ color: colors.textHint, fontSize: '0.72rem', fontWeight: 600, textTransform: 'none', px: 0.5, minWidth: 0, '&:hover': { color: colors.accent, backgroundColor: 'transparent' } }}>
+                {repliesOpen ? `▲ 답글 ${comment.replies.length}개 숨기기` : `▼ 답글 ${comment.replies.length}개 보기`}
+              </Button>
+            )}
+            <Button size="small"
+              startIcon={commentLiked
+                ? <Favorite sx={{ fontSize: 13, color: '#EF4444' }} />
+                : <FavoriteBorderOutlined sx={{ fontSize: 13 }} />}
+              onClick={handleCommentLike}
+              sx={{ color: commentLiked ? '#EF4444' : colors.textHint, fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', px: 0.5, minWidth: 0, '&:hover': { color: '#EF4444', backgroundColor: 'transparent' } }}>
+              {commentLikeCount > 0 ? commentLikeCount : ''}
             </Button>
-          )}
+          </Box>
         </Box>
       </Box>
 
-      {comment.replies?.map((reply, ri) => (
+      {repliesOpen && comment.replies?.map((reply, ri) => (
         <CommentItem key={reply.COMMENT_ID || reply.id} comment={reply} index={ri} depth={depth + 1}
           onReply={onReply} myNickname={myNickname} navigate={navigate} postWriter={postWriter}
           colors={colors} onDelete={onDelete} onEdit={onEdit} token={token} commentModules={commentModules}
@@ -935,6 +1184,17 @@ const CommentItem = ({ comment, index, depth = 0, onReply, onDelete, onEdit, myN
           </Box>
         </Fade>
       </Modal>
+      {hoverVisible && (
+        <ProfileHoverCard
+          nickname={comment.WRITER || comment.writer}
+          token={token}
+          anchorEl={hoverAnchor}
+          colors={colors}
+          navigate={navigate}
+          onMouseEnter={() => clearTimeout(leaveTimer.current)}
+          onMouseLeave={() => { leaveTimer.current = setTimeout(() => { setHoverVisible(false); setHoverAnchor(null); }, 200); }}
+        />
+      )}
     </Box>
   );
 };
@@ -948,6 +1208,8 @@ export default function PostDetail() {
   const colors = makeColors(mode);
   const [editOpen, setEditOpen] = useState(false);
   const [highlightedCommentNickname, setHighlightedCommentNickname] = useState(null);
+  const [editSuccessOpen, setEditSuccessOpen] = useState(false);
+  const [deleteSuccessOpen, setDeleteSuccessOpen] = useState(false);
 
   useEffect(() => {
     if (!location.state?.highlightComment || !location.state?.highlightNickname) return;
@@ -997,6 +1259,11 @@ export default function PostDetail() {
   const clickTimerRef = useRef(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [aiModal, setAiModal] = useState(false);
+  const [writerHoverAnchor, setWriterHoverAnchor] = useState(null);
+  const [writerHoverVisible, setWriterHoverVisible] = useState(false);
+  const writerLeaveTimer = useRef(null);
+  const writerHoverTimer = useRef(null);
+
   const commentImageHandler = useCallback(() => {
     const input = document.createElement('input');
     input.type = 'file'; input.accept = 'image/*'; input.click();
@@ -1132,7 +1399,10 @@ export default function PostDetail() {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) navigate('/feed');
+      if (res.ok) {
+        const from = location.state?.from || '/feed';
+        navigate(from, { replace: true, state: { deletedPost: true } });
+      }
     } catch { }
     setDeleteOpen(false);
   };
@@ -1200,9 +1470,16 @@ export default function PostDetail() {
     ? (feed.IMAGES || feed.images).split(',').map(s => s.trim()).filter(Boolean)
     : [];
 
-  const videoUrl = feed.VIDEO_URL || feed.videoUrl || null;
+  const isReelPost = (feed.CATEGORY_NAME || feed.category || '') === 'REEL';
+  const videoUrl = (() => {
+    if (feed.VIDEO_URL || feed.videoUrl) return feed.VIDEO_URL || feed.videoUrl;
+    if (isReelPost) {
+      const match = (feed.DESCRIPTION || feed.description || feed.CONTENT || feed.content || '').match(/src="([^"]+\.mp4[^"]*)"/);
+      return match ? (match[1].startsWith('http') ? match[1] : `${API}${match[1]}`) : null;
+    }
+    return null;
+  })();
 
-  // 카테고리가 ERROR 인지 확인 (CATEGORY_NAME 또는 category 필드 모두 체크)
   const categoryName = feed.CATEGORY_NAME || feed.category || '';
   const isError = categoryName === 'ERROR' || categoryName === '트러블슈팅 / 에러 해결';
 
@@ -1218,10 +1495,16 @@ export default function PostDetail() {
         backdropFilter: 'blur(12px)', borderBottom: `1px solid ${colors.border}`,
       }}>
         <Box sx={{ maxWidth: 800, mx: 'auto', px: { xs: 2, md: 4 }, py: 1.5, display: 'flex', alignItems: 'center', gap: 2 }}>
-          <IconButton size="small" onClick={() => navigate('/feed')} sx={{ color: colors.textMuted }}>
+          <IconButton size="small" onClick={() => {
+            const from = location.state?.from || '/feed';
+            navigate(from, { replace: true });
+          }} sx={{ color: colors.textMuted }}>
             <ArrowBack sx={{ fontSize: 20 }} />
           </IconButton>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }} onClick={() => navigate('/feed')}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }} onClick={() => {
+            const from = location.state?.from || '/feed';
+            navigate(from, { replace: true });
+          }}>
             <Box sx={{ width: 26, height: 26, borderRadius: 1, backgroundColor: colors.textPrimary, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Typography sx={{ color: colors.paper, fontWeight: 900, fontSize: '0.7rem' }}>{'<>'}</Typography>
             </Box>
@@ -1246,17 +1529,8 @@ export default function PostDetail() {
             <Box>
               {isError && (
                 <Box sx={{ display: { xs: 'block', xl: 'none' }, mb: 3 }}>
-                  <AIAnswerSection
-                    postId={postId}
-                    token={token}
-                    colors={colors}
-                    postUpdatedAt={feed.UPDATED_AT || feed.updatedAt}
-                    isMyPost={(feed.WRITER || feed.writer) === myNickname}
-                  />
                 </Box>
               )}
-
-              {/* 게시물 본문 카드 */}
               <Box onClick={handleCardClick}
                 sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2.5, p: { xs: 2.5, md: 4 }, mb: 3, animation: 'fadeUp 0.4s ease both', cursor: 'default', position: 'relative', overflow: 'hidden', '@keyframes fadeUp': { from: { opacity: 0, transform: 'translateY(16px)' }, to: { opacity: 1, transform: 'translateY(0)' } } }}>
                 <HeartOverlay trigger={heartTrigger} />
@@ -1264,7 +1538,16 @@ export default function PostDetail() {
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer', '&:hover .writer-name': { color: colors.accent } }}
                     onClick={e => { e.stopPropagation(); handleProfileClick(feed.WRITER || feed.writer); }}>
                     <Avatar src={resolveAvatarSrc(feed.AVATAR || feed.avatar)}
-                      sx={{ width: 44, height: 44, backgroundColor: colors.textPrimary, fontWeight: 800, fontSize: '1rem', boxShadow: '0 2px 10px rgba(15,23,42,0.12)', transition: 'all 0.2s', '&:hover': { boxShadow: `0 4px 16px rgba(86,156,214,0.3)` } }}>
+                      sx={{ width: 44, height: 44, backgroundColor: colors.textPrimary, fontWeight: 800, fontSize: '1rem', boxShadow: '0 2px 10px rgba(15,23,42,0.12)', transition: 'all 0.2s', '&:hover': { boxShadow: `0 4px 16px rgba(86,156,214,0.3)` } }}
+                      onMouseEnter={e => {
+                        clearTimeout(writerLeaveTimer.current);
+                        const el = e.currentTarget;
+                        writerHoverTimer.current = setTimeout(() => { setWriterHoverAnchor(el); setWriterHoverVisible(true); }, 400);
+                      }}
+                      onMouseLeave={() => {
+                        clearTimeout(writerHoverTimer.current);
+                        writerLeaveTimer.current = setTimeout(() => { setWriterHoverVisible(false); setWriterHoverAnchor(null); }, 200);
+                      }}>
                       {getInitial(feed.WRITER || feed.writer)}
                     </Avatar>
                     <Box>
@@ -1273,8 +1556,20 @@ export default function PostDetail() {
                       </Typography>
                       <Typography sx={{ color: colors.textHint, fontSize: '0.75rem', mt: 0.2 }}>
                         {(feed.ROLE || feed.role || 'Developer')}
-                        {(feed.CREATED_AT || feed.createdAt) ? ` · ${formatDate(feed.CREATED_AT || feed.createdAt)}` : ''}
+                        {(feed.CREATED_AT || feed.createdAt) ? ` · ${formatRelativeTime(feed.CREATED_AT || feed.createdAt)}` : ''}
                       </Typography>
+
+                      {(feed.LOCATION || feed.location) && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, mt: 0.3 }}>
+                          <LocationOn sx={{ fontSize: 12, color: colors.textHint }} />
+                          <Typography
+                            onClick={e => { e.stopPropagation(); navigate(`/explore?location=${encodeURIComponent(feed.LOCATION || feed.location)}`); }}
+                            sx={{ fontSize: '0.75rem', color: colors.textHint, cursor: 'pointer', '&:hover': { color: colors.accent, textDecoration: 'underline' } }}
+                          >
+                            {feed.LOCATION || feed.location}
+                          </Typography>
+                        </Box>
+                      )}
                     </Box>
                   </Box>
                   {(feed.WRITER || feed.writer) === myNickname ? (
@@ -1306,7 +1601,15 @@ export default function PostDetail() {
                 </Typography>
                 {imageList.length > 0 && <ImageGallery images={imageList} colors={colors} />}
                 {videoUrl && <VideoPlayer src={videoUrl} colors={colors} />}
-                {renderContentWithCopy(feed.DESCRIPTION || feed.description || feed.CONTENT || feed.content, colors)}
+                {renderContentWithCopy(
+                  isReelPost
+                    ? (feed.DESCRIPTION || feed.description || feed.CONTENT || feed.content || '')
+                      .replace(/<video[^>]*>.*?<\/video>/gi, '')
+                      .replace(/<video[^>]*\/>/gi, '')
+                      .trim()
+                    : (feed.DESCRIPTION || feed.description || feed.CONTENT || feed.content),
+                  colors
+                )}
                 {(feed.CODE || feed.code) && <CodeBlock code={feed.CODE || feed.code} />}
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pt: 3, mt: 2, borderTop: `1px solid ${colors.border}` }}>
                   <Stack direction="row" spacing={1}>
@@ -1338,7 +1641,17 @@ export default function PostDetail() {
                 </Box>
               </Box>
 
-              {/* 댓글 섹션 */}
+              {isError && (
+                <Box sx={{ mb: 3, animation: 'fadeUp 0.4s ease 0.05s both' }}>
+                  <AIAnswerSection
+                    postId={postId}
+                    token={token}
+                    colors={colors}
+                    postUpdatedAt={feed.UPDATED_AT || feed.updatedAt}
+                    isMyPost={(feed.WRITER || feed.writer) === myNickname}
+                  />
+                </Box>
+              )}
               <Box id="comments" ref={commentSectionRef}
                 sx={{ animation: 'fadeUp 0.4s ease 0.1s both', '@keyframes fadeUp': { from: { opacity: 0, transform: 'translateY(16px)' }, to: { opacity: 1, transform: 'translateY(0)' } } }}>
                 <Box sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2.5 }}>
@@ -1408,7 +1721,6 @@ export default function PostDetail() {
               </Box>
             </Box>
 
-            {/* 오른쪽: AI 답변 사이드바 (데스크탑) — 게시글 컨테이너 밖, 절대위치 */}
             {isError && (
               <Box sx={{
                 display: { xs: 'none', xl: 'block' },
@@ -1417,15 +1729,6 @@ export default function PostDetail() {
                 left: 'calc(50% + 420px)',
                 width: 300,
               }}>
-                <Box sx={{ position: 'sticky', top: 72 }}>
-                  <AIAnswerSection
-                    postId={postId}
-                    token={token}
-                    colors={colors}
-                    postUpdatedAt={feed.UPDATED_AT || feed.updatedAt}
-                    isMyPost={(feed.WRITER || feed.writer) === myNickname}
-                  />
-                </Box>
               </Box>
             )}
 
@@ -1440,13 +1743,12 @@ export default function PostDetail() {
         onClose={() => setEditOpen(false)}
         onSaved={() => {
           setEditOpen(false);
-          // 게시글 다시 불러오기
+          setEditSuccessOpen(true);
           fetch(`${API}/feed/${postId}`, { headers: { Authorization: `Bearer ${token}` } })
             .then(r => r.json())
             .then(data => { if (data.success) setFeed(data.feed); });
         }}
       />
-      {/* ── 신고 모달 ── */}
       {reportOpen && (
         <ReportModal open={reportOpen} onClose={() => setReportOpen(false)}
           reportUrl={`${API}/feed/${postId}/report`} token={token}
@@ -1476,7 +1778,6 @@ export default function PostDetail() {
         </Fade>
       </Modal>
 
-      {/* ── 토스트 ── */}
       <Snackbar open={shareOpen} autoHideDuration={2500} onClose={() => setShareOpen(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         <Alert severity="success" icon={<Check fontSize="inherit" />} sx={{ fontWeight: 600, fontSize: '0.85rem', borderRadius: 2, backgroundColor: colors.paper, color: colors.textPrimary, border: `1px solid ${colors.border}` }}>
           링크가 클립보드에 복사되었습니다!
@@ -1488,21 +1789,37 @@ export default function PostDetail() {
       <Snackbar open={reportDuplicateOpen} autoHideDuration={2500} onClose={() => setReportDuplicateOpen(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         <Alert severity="warning" icon={<FlagOutlined fontSize="inherit" />} sx={{ fontWeight: 600, fontSize: '0.85rem', borderRadius: 2 }}>이미 신고한 게시글입니다.</Alert>
       </Snackbar>
-
-      {/* ── 맨 위로 ── */}
+      <Snackbar open={editSuccessOpen} autoHideDuration={2000} onClose={() => setEditSuccessOpen(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity="success" icon={<Check fontSize="inherit" />} sx={{ fontWeight: 600, fontSize: '0.85rem', borderRadius: 2, backgroundColor: colors.paper, color: colors.textPrimary, border: `1px solid ${colors.border}` }}>
+          게시글이 수정되었습니다.
+        </Alert>
+      </Snackbar>
+      <Snackbar open={deleteSuccessOpen} autoHideDuration={1500} onClose={() => setDeleteSuccessOpen(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity="success" icon={<Check fontSize="inherit" />} sx={{ fontWeight: 600, fontSize: '0.85rem', borderRadius: 2, backgroundColor: colors.paper, color: colors.textPrimary, border: `1px solid ${colors.border}` }}>
+          게시글이 삭제되었습니다.
+        </Alert>
+      </Snackbar>
       {showScrollTop && (
         <Box onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           sx={{ position: 'fixed', bottom: 32, right: 32, zIndex: 200, width: 44, height: 44, borderRadius: '50%', backgroundColor: colors.textPrimary, color: colors.paper, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 20px rgba(15,23,42,0.2)', animation: 'fadeUp 0.2s ease both', transition: 'all 0.2s', '&:hover': { backgroundColor: colors.accent, transform: 'translateY(-2px)' } }}>
           <ArrowUpward sx={{ fontSize: 20 }} />
         </Box>
       )}
+      {writerHoverVisible && (
+        <ProfileHoverCard
+          nickname={feed.WRITER || feed.writer}
+          token={token}
+          anchorEl={writerHoverAnchor}
+          colors={colors}
+          navigate={navigate}
+          onMouseEnter={() => clearTimeout(writerLeaveTimer.current)}
+          onMouseLeave={() => { writerLeaveTimer.current = setTimeout(() => { setWriterHoverVisible(false); setWriterHoverAnchor(null); }, 200); }}
+        />
+      )}
     </Box>
   );
 }
 
-// ──────────────────────────────────────────
-//  Tree 유틸
-// ──────────────────────────────────────────
 function addReplyToTree(comments, parentId, newReply) {
   return comments.map(c => {
     if ((c.COMMENT_ID || c.id) === parentId) return { ...c, replies: [...(c.replies || []), newReply] };

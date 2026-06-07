@@ -1740,7 +1740,12 @@ export default function Messages() {
                                       {room.LAST_IS_STICKER ? '이모티콘을 보냈습니다.'
                                         : room.LAST_HAS_IMAGE ? '사진을 보냈습니다.'
                                           : room.LAST_HAS_FILE ? '파일을 보냈습니다.'
-                                            : room.LAST_MESSAGE?.startsWith('__SHARE__') ? '게시글을 공유했습니다.' : room.LAST_MESSAGE || ''}                                    </Typography>
+                                            : room.LAST_MESSAGE?.startsWith('__SHARE__') ? (() => {
+                                              try {
+                                                const d = JSON.parse(room.LAST_MESSAGE.replace('__SHARE__', ''));
+                                                return d.isReel ? '릴스를 공유했습니다.' : '게시글을 공유했습니다.';
+                                              } catch { return '게시글을 공유했습니다.'; }
+                                            })() : room.LAST_MESSAGE || ''}                                    </Typography>
                                     <Typography sx={{ fontSize: '0.75rem', color: '#94A3B8', flexShrink: 0, ml: 0.5 }}>
                                       · {formatListTimeRelative(room.LAST_MESSAGE_AT)}
                                     </Typography>
@@ -2084,17 +2089,37 @@ export default function Messages() {
                                                 onClick={(e) => { e.stopPropagation(); navigate(`/post/${data.postId}`); }}
                                                 sx={{ cursor: 'pointer', borderRadius: 1.5, overflow: 'hidden', border: `1px solid ${isMe && bubbleStyle !== 'outlined' ? 'rgba(255,255,255,0.25)' : 'var(--border-color)'}`, minWidth: 350, maxWidth: 400, mt: 0.5 }}
                                               >
-                                                {thumb && (
+                                                {thumb && !data.isReel && (
                                                   <Box component="img" src={thumb}
                                                     sx={{ width: '100%', height: 260, objectFit: 'cover', display: 'block' }}
                                                   />
+                                                )}
+                                                {data.isReel && (
+                                                  <Box sx={{ width: '100%', height: 360, backgroundColor: '#000', position: 'relative', overflow: 'hidden' }}>                                                    <video
+                                                    src={(() => {
+                                                      const match = (data.description || '').match(/src="([^"]+)"/);
+                                                      const url = match ? match[1] : null;
+                                                      if (!url) return null;
+                                                      return url.startsWith('http') ? url : `http://localhost:3010${url}`;
+                                                    })()}
+                                                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                                                    muted
+                                                    playsInline
+                                                    preload="metadata"
+                                                  />
+                                                    <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.3)' }}>
+                                                      <Box sx={{ width: 40, height: 40, borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        <Box sx={{ width: 0, height: 0, borderTop: '8px solid transparent', borderBottom: '8px solid transparent', borderLeft: '14px solid #fff', ml: '3px' }} />
+                                                      </Box>
+                                                    </Box>
+                                                  </Box>
                                                 )}
                                                 <Box sx={{ p: 1.2, backgroundColor: isMe && bubbleStyle !== 'outlined' ? 'rgba(0,0,0,0.15)' : (mode === 'dark' ? '#1A1D27' : '#F8FAFC') }}>
                                                   <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: isMe && bubbleStyle !== 'outlined' ? '#fff' : 'var(--text-primary)', lineHeight: 1.4, mb: 0.3 }}>
                                                     {data.title}
                                                   </Typography>
                                                   <Typography sx={{ fontSize: '0.7rem', color: isMe && bubbleStyle !== 'outlined' ? 'rgba(255,255,255,0.6)' : '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                    게시글 보기 →
+                                                    {data.isReel ? '릴스 보기 →' : '게시글 보기 →'}
                                                   </Typography>
                                                   {data.text && (
                                                     <Typography sx={{ fontSize: '0.78rem', color: isMe && bubbleStyle !== 'outlined' ? 'rgba(255,255,255,0.85)' : 'var(--text-primary)', mt: 0.8, fontStyle: 'italic' }}>

@@ -437,12 +437,9 @@ router.post('/avatar', jwtAuthentication, upload.single('avatar'), async (req, r
     }
 });
 
-// =====================================================
-// user.js 의 router.get('/suggestions', ...) 를 아래로 교체
-// =====================================================
-
 router.get('/suggestions', jwtAuthentication, async (req, res) => {
     const userId = req.user?.userId ?? req.user?.id;
+    const limit = parseInt(req.query.limit) || 5;
     const conn = await db.getConnection();
     try {
         const result = await conn.execute(
@@ -451,14 +448,19 @@ router.get('/suggestions', jwtAuthentication, async (req, res) => {
                      WHERE user_id = u.user_id AND is_main = 'Y' AND rownum = 1) AS AVATAR,
                     (SELECT COUNT(*) FROM follows
                      WHERE follower_id = u.user_id AND following_id = :userId3
-                     AND status = 'ACCEPTED') AS FOLLOWS_ME
+                     AND status = 'ACCEPTED') AS FOLLOWS_ME,
+                    (SELECT STATUS FROM follows
+                     WHERE follower_id = :userId4 AND following_id = u.user_id) AS IS_FOLLOWING
              FROM users u
              WHERE u.user_id <> :userId
                AND u.user_id NOT IN (
-                   SELECT following_id FROM follows WHERE follower_id = :userId2
+                   SELECT following_id FROM follows
+                   WHERE follower_id = :userId2
+                   AND status IN ('ACCEPTED', 'PENDING')
                )
-               AND rownum <= 5`,
-            { userId, userId2: userId, userId3: userId },
+             ORDER BY DBMS_RANDOM.VALUE
+             FETCH FIRST :limit ROWS ONLY`,
+            { userId, userId2: userId, userId3: userId, userId4: userId, limit },
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
         res.json({ success: true, users: result.rows });
@@ -469,7 +471,6 @@ router.get('/suggestions', jwtAuthentication, async (req, res) => {
         await conn.close();
     }
 });
-
 router.post('/follow/:targetId', jwtAuthentication, async (req, res) => {
     const userId = req.user?.userId ?? req.user?.id;
     const { targetId } = req.params;

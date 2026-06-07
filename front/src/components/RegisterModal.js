@@ -977,7 +977,7 @@ export default function RegisterModal({ open, onClose }) {
     setReelContent('');
     setTaggedUsers([]);
     setTagUserQuery('');
-    
+
     setTimeout(() => {
       const quill = quillRef.current?.getEditor();
       if (quill) quill.root.innerHTML = savedContent;
@@ -1285,10 +1285,10 @@ export default function RegisterModal({ open, onClose }) {
         setMetadata({ category: 'ERROR', title: '', tags: [] });
         setIsDirty(false);
         setSubmitted(true);
-
+        window.dispatchEvent(new CustomEvent('postCreated', { detail: { postId: data.postId } }));
         const pid = data.postId;
-        onClose?.();
-        navigate(`/post/${pid}`);
+        onClose?.({ postId: pid, isReel });
+        navigate('/feed');
       } else {
         setErrorMsg(data.message || '게시물 등록에 실패했습니다.');
       }

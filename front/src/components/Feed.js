@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import ReactDOM from 'react-dom';
 import {
   Box, Avatar, Button, Chip, IconButton,
@@ -14,20 +14,18 @@ import {
   Close, LocalFireDepartment, PeopleAlt,
   ShareOutlined, Check, Edit, Delete, Flag,
   ViewList, FlagOutlined, AutoAwesome,
-  ChevronLeft, ChevronRight, LocationOn, Search, ContentCopy, KeyboardArrowUp
+  ChevronLeft, ChevronRight, LocationOn, Search, ContentCopy, KeyboardArrowUp, Videocam
 } from '@mui/icons-material';
-import { BugReport, HelpOutline } from '@mui/icons-material';
+import { BugReport, HelpOutline, VolumeOff, VolumeUp } from '@mui/icons-material';
 import { useColorMode } from '../App';
 import EditModal from './EditModal';
 
-// ─────────────────────────────────────────────
-//  상수
-// ─────────────────────────────────────────────
 const FIXED_CATEGORIES = [
   { label: '전체', value: null, icon: <ViewList sx={{ fontSize: 13 }} /> },
   { label: '트러블슈팅', value: 'ERROR', icon: <BugReport sx={{ fontSize: 13 }} /> },
   { label: '일반 질문', value: 'QUESTION', icon: <HelpOutline sx={{ fontSize: 13 }} /> },
   { label: '자유 게시판', value: 'FREE', icon: <ChatBubbleOutline sx={{ fontSize: 13 }} /> },
+  { label: '릴스', value: 'REEL', icon: <Videocam sx={{ fontSize: 13 }} /> },
 ];
 
 const REPORT_REASONS = [
@@ -109,9 +107,6 @@ const HeartOverlay = ({ trigger }) => {
   );
 };
 
-// ─────────────────────────────────────────────
-//  ImageGallery
-// ─────────────────────────────────────────────
 const ImageGallery = ({ imageList, colors }) => {
   const [cur, setCur] = useState(0);
   const [lightbox, setLightbox] = useState(false);
@@ -531,7 +526,8 @@ const ShareModal = ({ open, onClose, feed, token, colors }) => {
     if (!selected.length || sending) return;
     setSending(true);
     const newSent = new Set(sentIds);
-    const message = `__SHARE__${JSON.stringify({ postId: feed.id, title: feed.title, description: feed.description, image: feed.images?.split(',')[0] || null, url: shareUrl, text: shareText })}`;
+    const isReelPost = feed.tag === 'REEL' || feed.category === 'REEL';
+    const message = `__SHARE__${JSON.stringify({ postId: feed.id, title: feed.title, description: feed.description, image: isReelPost ? null : (feed.images?.split(',')[0] || null), isReel: isReelPost, url: shareUrl, text: shareText })}`;
 
     try {
       const roomKeys = selected.filter(id => typeof id === 'string' && id.startsWith('room_'));
@@ -609,11 +605,12 @@ const ShareModal = ({ open, onClose, feed, token, colors }) => {
       const roomData = await roomRes.json();
       const roomId = roomData.roomId ?? roomData.room_id;
       if (!roomId) throw new Error('그룹방 생성 실패');
+      const isReelPost2 = feed.tag === 'REEL' || feed.category === 'REEL';
 
       await fetch(`${API}/messages/${roomId}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ message: `__SHARE__${JSON.stringify({ postId: feed.id, title: feed.title, description: feed.description, image: feed.images?.split(',')[0] || null, url: shareUrl, text: shareText })}` }),
+        body: JSON.stringify({ message: `__SHARE__${JSON.stringify({ postId: feed.id, title: feed.title, description: feed.description, image: isReelPost2 ? null : (feed.images?.split(',')[0] || null), isReel: isReelPost2, url: shareUrl, text: shareText })}` }),
       });
       setSendSuccessOpen(true);
       onClose();
@@ -1032,17 +1029,66 @@ const NotificationModal = ({ open, onClose, token, navigate, colors }) => {
   );
 };
 
-// ─────────────────────────────────────────────
-//  PostCard
-// ─────────────────────────────────────────────
-// [FIX] onUpdate prop 추가
+const ReelPlayer = ({ src }) => {
+  const videoRef = useRef(null);
+  const containerRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(true);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!videoRef.current) return;
+        if (entry.isIntersecting) {
+          videoRef.current.play().then(() => setPlaying(true)).catch(() => { });
+        } else {
+          videoRef.current.pause();
+          setPlaying(false);
+        }
+      },
+      { threshold: 0.5 }
+    );
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const toggle = () => {
+    if (!videoRef.current) return;
+    if (videoRef.current.paused) { videoRef.current.play(); setPlaying(true); }
+    else { videoRef.current.pause(); setPlaying(false); }
+  };
+
+  return (
+    <Box ref={containerRef} sx={{ position: 'relative', width: '100%', height: '100%' }}>
+      <video
+        ref={videoRef}
+        src={src}
+        muted={muted}
+        playsInline
+        loop
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        onClick={toggle}
+      />
+      {!playing && (
+        <Box onClick={toggle} sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: '50%', width: 52, height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <Box sx={{ width: 0, height: 0, borderTop: '10px solid transparent', borderBottom: '10px solid transparent', borderLeft: '18px solid #fff', ml: '3px' }} />
+        </Box>
+      )}
+      <Box
+        onClick={e => { e.stopPropagation(); setMuted(m => { videoRef.current.muted = !m; return !m; }); }}
+        sx={{ position: 'absolute', bottom: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+      >
+        {muted ? <VolumeOff sx={{ fontSize: 16, color: '#fff' }} /> : <VolumeUp sx={{ fontSize: 16, color: '#fff' }} />}
+      </Box>
+    </Box>
+  );
+};
+
 const PostCard = ({ feed: initialFeed, token, myNickname, onDelete, onUpdate, onTagClick, colors }) => {
   const navigate = useNavigate();
 
-  // [FIX] 로컬 feed 상태 관리 → 수정 시 즉시 반영
   const [feed, setFeed] = useState(initialFeed);
 
-  // initialFeed가 외부에서 바뀌면 동기화
   useEffect(() => {
     setFeed(initialFeed);
   }, [initialFeed]);
@@ -1067,13 +1113,16 @@ const PostCard = ({ feed: initialFeed, token, myNickname, onDelete, onUpdate, on
   const lastTapRef = useRef(0);
   const clickTimerRef = useRef(null);
 
-  // [FIX] feed 상태에서 이미지 목록 파생
   const imageList = feed.images ? feed.images.split(',').filter(Boolean) : [];
+
+  const isReel = feed.tag === 'REEL' || feed.category === 'REEL';
+  const videoList = isReel ? feed.images?.split(',').filter(Boolean) ?? [] : [];
+  const displayImageList = isReel ? [] : imageList;
+
   const isMyPost = myNickname && (feed.writer === myNickname || feed.WRITER === myNickname);
   const tag = feed.tag || feed.category || 'General';
-  const location = feed.LOCATION || feed.location || null;
+  const postLocation = feed.LOCATION || feed.location || null;
 
-  // [FIX] 한줄 소개(bioShort)를 별도 줄로 분리
   const bioShort = feed.bioShort || feed.BIO_SHORT || '';
 
   const handleCardDoubleClick = () => {
@@ -1242,15 +1291,17 @@ const PostCard = ({ feed: initialFeed, token, myNickname, onDelete, onUpdate, on
                 <Typography sx={{ color: colors.textHint, fontSize: '0.72rem' }}>
                   {formatRelativeTime(feed.createdAt)}
                 </Typography>
-                {location && (
+                {postLocation && (
                   <>
                     <Typography sx={{ color: colors.textHint, fontSize: '0.72rem' }}>·</Typography>
                     <LocationOn sx={{ fontSize: 11, color: colors.textHint }} />
                     <Typography
-                      onClick={(e) => { e.stopPropagation(); navigate(`/explore?location=${encodeURIComponent(location)}`); }}
+                      onClick={(e) => {
+                        e.stopPropagation(); navigate(`/explore?location=${encodeURIComponent(postLocation)}`);
+                      }}
                       sx={{ color: colors.textHint, fontSize: '0.72rem', cursor: 'pointer', '&:hover': { color: '#2563EB', textDecoration: 'underline' }, transition: 'color 0.15s' }}
                     >
-                      {location}
+                      {postLocation}
                     </Typography>
                   </>
                 )}
@@ -1299,32 +1350,34 @@ const PostCard = ({ feed: initialFeed, token, myNickname, onDelete, onUpdate, on
           {feed.title}
         </Typography>
 
-        <Typography
-          component="div"
-          sx={{
-            color: colors.textMuted, fontSize: '0.85rem', lineHeight: 1.75,
-            display: '-webkit-box', WebkitLineClamp: imageList.length > 0 ? 2 : 4,
-            WebkitBoxOrient: 'vertical', overflow: 'hidden',
-            maxHeight: imageList.length > 0 ? '3.5em' : '7em',
-            '& pre': {
-              backgroundColor: colors.mode === 'dark' ? '#0D1117' : '#F1F5F9',
-              border: `1px solid ${colors.border}`, borderRadius: '6px',
-              padding: '6px 10px',
-              fontFamily: '"Fira Code", "Consolas", monospace',
-              fontSize: '0.78rem', color: colors.mode === 'dark' ? '#E2E8F0' : '#1E293B',
-              display: 'block', overflowX: 'auto', my: 0.5, maxWidth: '100%',
-              whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: '4.5em', overflow: 'hidden',
-            },
-            '& code': {
-              backgroundColor: colors.mode === 'dark' ? '#0D1117' : '#F1F5F9',
-              border: `1px solid ${colors.border}`, borderRadius: '4px', padding: '1px 5px',
-              fontFamily: '"Fira Code", "Consolas", monospace',
-              fontSize: '0.78rem', color: colors.mode === 'dark' ? '#E2E8F0' : '#1E293B',
-            },
-            '& img': { display: 'none' },
-          }}
-          dangerouslySetInnerHTML={{ __html: resolveImageSrc(feed.description || '') }}
-        />
+        {!isReel && (
+          <Typography
+            component="div"
+            sx={{
+              color: colors.textMuted, fontSize: '0.85rem', lineHeight: 1.75,
+              display: '-webkit-box', WebkitLineClamp: displayImageList.length > 0 ? 2 : 4,
+              WebkitBoxOrient: 'vertical', overflow: 'hidden',
+              maxHeight: displayImageList.length > 0 ? '3.5em' : '7em',
+              '& pre': {
+                backgroundColor: colors.mode === 'dark' ? '#0D1117' : '#F1F5F9',
+                border: `1px solid ${colors.border}`, borderRadius: '6px',
+                padding: '6px 10px',
+                fontFamily: '"Fira Code", "Consolas", monospace',
+                fontSize: '0.78rem', color: colors.mode === 'dark' ? '#E2E8F0' : '#1E293B',
+                display: 'block', overflowX: 'auto', my: 0.5, maxWidth: '100%',
+                whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: '4.5em', overflow: 'hidden',
+              },
+              '& code': {
+                backgroundColor: colors.mode === 'dark' ? '#0D1117' : '#F1F5F9',
+                border: `1px solid ${colors.border}`, borderRadius: '4px', padding: '1px 5px',
+                fontFamily: '"Fira Code", "Consolas", monospace',
+                fontSize: '0.78rem', color: colors.mode === 'dark' ? '#E2E8F0' : '#1E293B',
+              },
+              '& img': { display: 'none' },
+            }}
+            dangerouslySetInnerHTML={{ __html: resolveImageSrc(feed.description || '') }}
+          />
+        )}
 
         {/* ── 해시태그 ── */}
         {Array.isArray(feed.tags) && feed.tags.filter(Boolean).length > 0 && (
@@ -1338,10 +1391,16 @@ const PostCard = ({ feed: initialFeed, token, myNickname, onDelete, onUpdate, on
           </Stack>
         )}
 
-        {/* ── 이미지 갤러리 ── */}
-        <ImageGallery imageList={imageList} colors={colors} />
+        {isReel && videoList.length > 0 && (
+          <Box
+            onClick={e => e.stopPropagation()}
+            sx={{ mt: 2, borderRadius: 1.5, overflow: 'hidden', position: 'relative', aspectRatio: '9/16', backgroundColor: '#000', cursor: 'pointer' }}
+          >
+            <ReelPlayer src={resolveFileSrc(videoList[0])} />
+          </Box>
+        )}
+        {!isReel && <ImageGallery imageList={imageList} colors={colors} />}
 
-        {/* ── 액션 바 ── */}
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2.5, pt: 2, borderTop: `1px solid ${colors.border}` }}>
           <Stack direction="row" spacing={0.5}>
             <Button size="small"
@@ -1551,9 +1610,10 @@ const Sidebar = ({ trending, suggestions, loadingTrending, loadingSuggestions, t
 
 export default function Feed() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { mode } = useColorMode();
   const token = localStorage.getItem('accessToken');
-  const [deleteSuccessOpen, setDeleteSuccessOpen] = useState(false);
+  const [deleteSuccessOpen, setDeleteSuccessOpen] = useState(!!location.state?.deletedPost);
   const [sendSuccessOpen, setSendSuccessOpen] = useState(false);
   const colors = {
     mode,
@@ -1680,6 +1740,15 @@ export default function Feed() {
     loadNotifications();
   }, [token, navigate, loadFeeds, loadSidebar, loadNotifications]);
 
+  useEffect(() => {
+    const handler = async () => {
+      await loadFeeds();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+    window.addEventListener('postCreated', handler);
+    return () => window.removeEventListener('postCreated', handler);
+  }, [loadFeeds]);
+
   const bottomRef = useRef(null);
   useEffect(() => {
     if (showRecommended || feeds.length === 0) return;
@@ -1707,7 +1776,12 @@ export default function Feed() {
   }, [loadTrending, activeFilter]);
 
   const handleTagClick = useCallback((tagName) => {
-    navigate(`/explore?tag=${encodeURIComponent(tagName)}`);
+    const CATEGORIES = ['REEL', 'ERROR', 'QUESTION', 'FREE', 'General', '트러블슈팅 / 에러 해결'];
+    if (CATEGORIES.includes(tagName)) {
+      navigate(`/explore?category=${encodeURIComponent(tagName)}`);
+    } else {
+      navigate(`/explore?tag=${encodeURIComponent(tagName)}`);
+    }
   }, [navigate]);
 
   const handleFilterChange = (label) => {
@@ -1716,7 +1790,7 @@ export default function Feed() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const dynamicTagLabels = trending.map(t => t.TAG_NAME || t.tag).filter(Boolean);
+  const dynamicTagLabels = activeFilter === '릴스' ? [] : trending.map(t => t.TAG_NAME || t.tag).filter(Boolean);
 
   const filterFeeds = (list) => {
     if (activeFilter === '전체') return list;

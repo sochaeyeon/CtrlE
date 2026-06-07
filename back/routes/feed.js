@@ -533,67 +533,11 @@ router.get('/:postId', jwtAuthentication, async (req, res) => {
         await conn.close();
     }
 });
-// ──────────────────────────────────────────────────────────
-//  GET /feed/:postId/comments — 댓글 조회
-// ──────────────────────────────────────────────────────────
-router.get('/:postId/comments', jwtAuthentication, async (req, res) => {
-    // 💡 해결: 넘어온 파라미터를 무조건 숫자로 변환
-    const postId = Number(req.params.postId);
 
-    if (isNaN(postId)) {
-        return res.status(400).json({ success: false, message: '유효하지 않은 게시글 번호입니다.' });
-    }
-
-    const conn = await db.getConnection();
-    try {
-        const result = await conn.execute(
-            `SELECT c.COMMENT_ID, c.POST_ID, c.PARENT_ID,
-                    c.CONTENT, c.CODE_CONTENT, c.LANGUAGE,
-                    c.CREATED_AT,
-                    u.NICKNAME  AS WRITER,
-                    (SELECT IMAGE_URL FROM PROFILE_IMAGES
-                     WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR
-             FROM COMMENTS c
-             JOIN USERS u ON u.USER_ID = c.USER_ID
-             WHERE c.POST_ID = :postId AND c.STATUS = 'ACTIVE'
-             ORDER BY c.CREATED_AT ASC`,
-            { postId }, // 숫자로 변환된 postId가 들어감
-            { outFormat: oracledb.OUT_FORMAT_OBJECT }
-        );
-
-        const map = {};
-        const tree = [];
-        result.rows.forEach(row => { map[row.COMMENT_ID] = { ...row, replies: [] }; });
-        result.rows.forEach(row => {
-            if (row.PARENT_ID && map[row.PARENT_ID]) {
-                map[row.PARENT_ID].replies.push(map[row.COMMENT_ID]);
-            } else {
-                tree.push(map[row.COMMENT_ID]);
-            }
-        });
-
-        const resolveClob = async (node) => {
-            if (node.CONTENT && typeof node.CONTENT.getData === 'function') {
-                node.CONTENT = await node.CONTENT.getData();
-            }
-            if (node.CODE_CONTENT && typeof node.CODE_CONTENT.getData === 'function') {
-                node.CODE_CONTENT = await node.CODE_CONTENT.getData();
-            }
-            for (const reply of node.replies ?? []) await resolveClob(reply);
-        };
-        for (const node of tree) await resolveClob(node);
-
-        return res.json({ success: true, comments: tree });
-    } catch (err) {
-        console.error('[GET /feed/:postId/comments]', err);
-        return res.status(500).json({ success: false, message: '서버 오류' });
-    } finally {
-        await conn.close();
-    }
-});
 
 router.get('/:postId/comments', jwtAuthentication, async (req, res) => {
     const { postId } = req.params;
+    const userId = getUserId(req); 
     const conn = await db.getConnection();
 
     try {
@@ -603,12 +547,14 @@ router.get('/:postId/comments', jwtAuthentication, async (req, res) => {
                     c.CREATED_AT,
                     u.NICKNAME  AS WRITER,
                     (SELECT IMAGE_URL FROM PROFILE_IMAGES
-                     WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR
+                     WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR,
+                     (SELECT COUNT(*) FROM COMMENT_LIKES WHERE COMMENT_ID = c.COMMENT_ID) AS LIKE_COUNT,
+(SELECT COUNT(*) FROM COMMENT_LIKES WHERE COMMENT_ID = c.COMMENT_ID AND USER_ID = :myUserId) AS MY_LIKE
              FROM COMMENTS c
              JOIN USERS u ON u.USER_ID = c.USER_ID
              WHERE c.POST_ID = :postId AND c.STATUS = 'ACTIVE'
              ORDER BY c.CREATED_AT ASC`,
-            { postId },
+            { postId, myUserId: userId },
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
 
@@ -1009,6 +955,34 @@ router.post('/:postId/comment/:commentId/report', jwtAuthentication, async (req,
         return res.json({ success: true });
     } catch (err) {
         return res.status(500).json({ success: false, message: err.message });
+    } finally {
+        await conn.close();
+    }
+});
+
+// 댓글 좋아요 토글
+router.post('/:postId/comment/:commentId/like', jwtAuthentication, async (req, res) => {
+    const { commentId } = req.params;
+    const userId = getUserId(req);
+    const conn = await db.getConnection();
+    try {
+        const exists = await conn.execute(
+            `SELECT COUNT(*) AS CNT FROM COMMENT_LIKES WHERE COMMENT_ID=:commentId AND USER_ID=:userId`,
+            { commentId, userId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        if (exists.rows[0].CNT > 0) {
+            await conn.execute(`DELETE FROM COMMENT_LIKES WHERE COMMENT_ID=:commentId AND USER_ID=:userId`, { commentId, userId });
+        } else {
+            await conn.execute(`INSERT INTO COMMENT_LIKES (COMMENT_ID, USER_ID) VALUES (:commentId, :userId)`, { commentId, userId });
+        }
+        await conn.commit();
+        const countRes = await conn.execute(
+            `SELECT COUNT(*) AS CNT FROM COMMENT_LIKES WHERE COMMENT_ID=:commentId`,
+            { commentId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        return res.json({ success: true, liked: exists.rows[0].CNT === 0, count: countRes.rows[0].CNT });
+    } catch (err) {
+        return res.status(500).json({ success: false });
     } finally {
         await conn.close();
     }

@@ -10,7 +10,7 @@ import {
   Favorite, FavoriteBorder, ChatBubbleOutline, BookmarkBorderOutlined,
   Bookmark, PersonAdd, PersonRemove, ArrowBack, Tag, People, Article,
   History, NorthEast, LocalFireDepartment, GroupAdd, AutoAwesome,
-  WorkspacePremium, EmojiEvents, Visibility, LocationOn
+  WorkspacePremium, EmojiEvents, Visibility, LocationOn, Videocam, KeyboardArrowUp
 } from '@mui/icons-material';
 import { useColorMode } from '../App';
 
@@ -247,7 +247,17 @@ const PostCard = ({ post, idx, colors }) => {
   const likeCount = Number(post.likes) || 0;
   const commentCount = Number(post.commentCount) || 0;
   const viewCount = Number(post.views || post.viewCount) || 0;
-  const imgSrc = resolvePostImage(post.firstImage) || 'https://via.placeholder.com/300?text=No+Image';
+
+  const isReel = post.tag === 'REEL' || post.category === 'REEL'
+    || (post.firstImage && /\.(mp4|webm|mov)$/i.test(post.firstImage));
+
+  const videoSrc = isReel && post.firstImage
+    ? (post.firstImage.startsWith('http') ? post.firstImage : `${API}${post.firstImage}`)
+    : null;
+
+  const imgSrc = !isReel
+    ? (resolvePostImage(post.firstImage) || 'https://via.placeholder.com/300?text=No+Image')
+    : null;
 
   return (
     <Box
@@ -263,9 +273,25 @@ const PostCard = ({ post, idx, colors }) => {
         '&:hover .hover-overlay': { opacity: 1 },
       }}
     >
-      <Box component="img" src={imgSrc} alt="post" sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      {isReel && videoSrc ? (
+        <Box
+          component="video"
+          src={videoSrc}
+          muted
+          playsInline
+          loop
+          sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }}
+        />
+      ) : (
+        <Box component="img" src={imgSrc} alt="post" sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      )}
 
       <Box sx={{ position: 'absolute', bottom: 8, left: 8, display: 'flex', flexDirection: 'column', gap: 0.4 }}>
+        {isReel && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+            <Videocam sx={{ fontSize: 14 }} />
+          </Box>
+        )}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
           <Visibility sx={{ fontSize: 16 }} />
           <Typography sx={{ fontSize: '0.8rem', fontWeight: 700 }}>{formatCount(viewCount)}</Typography>
@@ -298,73 +324,207 @@ const PostCard = ({ post, idx, colors }) => {
   );
 };
 
-const UserCard = ({ user, idx, token, colors }) => {
+const UserCard = ({ user, idx, token, colors, navigate: navProp }) => {
+  const navigateHook = useNavigate();
+  const navigate = navProp ?? navigateHook;
   const userId = user.USER_ID || user.id || user.userId;
   const nickname = user.NICKNAME || user.nickname || user.name;
   const avatar = user.AVATAR || user.avatar;
-  const bio = user.BIO || user.bio || '소개가 없습니다.';
+  const bio = user.BIO_SHORT || user.BIO || user.bio || '';
   const isFollowingRaw = user.IS_FOLLOWING !== undefined ? user.IS_FOLLOWING : user.isFollowing;
   const initialFollowing = isFollowingRaw === 'Y' || isFollowingRaw === 'ACCEPTED' || isFollowingRaw === true;
-  const followerCountVal = Number(user.FOLLOWER_COUNT || user.followerCount || 0);
+  const followerCountVal = Number(user.FOLLOWER_COUNT || user.FOLLOWER_CNT || user.followerCount || 0);
 
   const [following, setFollowing] = useState(initialFollowing);
   const [followerCount, setFollowerCount] = useState(followerCountVal);
   const [loading, setLoading] = useState(false);
 
-  const toggleFollow = async () => {
+  const toggleFollow = async (e) => {
+    e.stopPropagation();
+    if (!token) return;
     const willFollow = !following;
     setFollowing(willFollow);
-    setFollowerCount(c => c + (willFollow ? 1 : -1));
     setLoading(true);
     try {
-      const res = await fetch(`${API}/user/follow/${userId}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${API}/user/follow/${userId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
       const data = await res.json();
       if (!data.success) {
         setFollowing(!willFollow);
-        setFollowerCount(c => c + (willFollow ? -1 : 1));
       }
-    } catch {
+    } catch (err) {
+      console.error('[toggleFollow]', err);
       setFollowing(!willFollow);
-      setFollowerCount(c => c + (willFollow ? -1 : 1));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Box sx={{
-      backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2,
-      p: 2.5, display: 'flex', alignItems: 'center', gap: 2,
-      animation: `fadeUp 0.35s ease ${idx * 0.05}s both`,
-      transition: 'all 0.2s',
-      '&:hover': { borderColor: colors.borderFocus, boxShadow: '0 4px 16px rgba(15,23,42,0.06)' },
-    }}>
-      <Avatar src={resolveAvatarSrc(avatar)} sx={{ width: 48, height: 48, fontSize: '1rem', fontWeight: 800, backgroundColor: colors.textPrimary }}>
+    <Box
+      onClick={() => navigate(`/user/${nickname}`)}
+      sx={{
+        backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2,
+        p: 2.5, display: 'flex', alignItems: 'center', gap: 2,
+        animation: `fadeUp 0.35s ease ${idx * 0.05}s both`,
+        transition: 'all 0.2s', cursor: 'pointer',
+        '&:hover': { borderColor: colors.borderFocus, boxShadow: '0 4px 16px rgba(15,23,42,0.06)' },
+      }}
+    >
+      <Avatar src={resolveAvatarSrc(avatar)} sx={{ width: 48, height: 48, fontSize: '1rem', fontWeight: 800, backgroundColor: colors.textPrimary, flexShrink: 0 }}>
         {getInitial(nickname)}
       </Avatar>
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography sx={{ fontWeight: 800, fontSize: '0.9rem', color: colors.textPrimary, lineHeight: 1.2 }}>{nickname}</Typography>
-        <Typography sx={{ fontSize: '0.75rem', color: colors.textMuted, fontWeight: 500, mt: 0.3 }}>{bio}</Typography>
+        {bio && <Typography sx={{ fontSize: '0.75rem', color: colors.textMuted, fontWeight: 500, mt: 0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bio}</Typography>}
+        <Typography sx={{ fontSize: '0.72rem', color: colors.textHint, mt: 0.3 }}>팔로워 {followerCount.toLocaleString()}</Typography>
       </Box>
-      <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
-        <Typography sx={{ fontSize: '0.72rem', color: colors.textHint, mb: 0.8 }}>팔로워 {followerCount.toLocaleString()}</Typography>
-        <Button
-          size="small" disabled={loading}
-          startIcon={loading ? <CircularProgress size={11} /> : following ? <PersonRemove sx={{ fontSize: 13 }} /> : <PersonAdd sx={{ fontSize: 13 }} />}
-          onClick={toggleFollow}
-          sx={{
-            fontSize: '0.75rem', fontWeight: 700, px: 1.8, py: 0.5,
-            borderRadius: 1.2, minWidth: 0, boxShadow: 'none',
-            ...(following
-              ? { border: `1px solid ${colors.border}`, color: colors.textMuted, backgroundColor: 'transparent', '&:hover': { borderColor: '#EF4444', color: '#EF4444', backgroundColor: '#FEF2F2' } }
-              : { backgroundColor: colors.textPrimary, color: colors.paper, '&:hover': { backgroundColor: '#2563EB' } }
-            ),
-            transition: 'all 0.18s',
-          }}
-        >
-          {following ? '팔로잉' : '팔로우'}
-        </Button>
+      <Button
+        size="small"
+        disabled={loading}
+        onClick={toggleFollow}
+        sx={{
+          fontSize: '0.75rem', fontWeight: 700, px: 1.8, py: 0.6,
+          borderRadius: 1.5, minWidth: 72, boxShadow: 'none', flexShrink: 0,
+          textTransform: 'none',
+          ...(following
+            ? {
+              border: `1px solid ${colors.border}`,
+              color: colors.textMuted,
+              backgroundColor: 'transparent',
+              '&:hover': { borderColor: '#EF4444', color: '#EF4444', backgroundColor: colors.mode === 'dark' ? '#2D1515' : '#FEF2F2' },
+            }
+            : {
+              backgroundColor: '#2563EB',
+              color: '#fff',
+              border: `1px solid transparent`,
+              '&:hover': { backgroundColor: '#1D4ED8' },
+            }
+          ),
+          transition: 'all 0.18s',
+          borderRadius: 2,
+        }}
+      >
+        {loading ? <CircularProgress size={13} sx={{ color: 'inherit' }} /> : following ? '팔로잉' : '팔로우'}
+      </Button>
+    </Box>
+  );
+};
+
+const UserGridCard = ({ user, idx, token, colors, navigate: navProp }) => {
+  const navigateHook = useNavigate();
+  const navigate = navProp ?? navigateHook;
+  const userId = user.USER_ID || user.id || user.userId;
+  const nickname = user.NICKNAME || user.nickname || user.name;
+  const avatar = user.AVATAR || user.avatar;
+  const bio = user.BIO_SHORT || user.BIO || user.bio || '';
+  const followsMe = Number(user.FOLLOWS_ME) > 0;
+  const isFollowingRaw = user.IS_FOLLOWING ?? user.isFollowing;
+  const initialFollowing = isFollowingRaw === 'ACCEPTED' || isFollowingRaw === 'PENDING'
+    || isFollowingRaw === 'Y' || isFollowingRaw === true;
+
+  const [following, setFollowing] = useState(initialFollowing);
+  const [loading, setLoading] = useState(false);
+
+  const showFollowsMe = followsMe && !following;
+
+  const toggleFollow = async (e) => {
+    e.stopPropagation();
+    const willFollow = !following;
+    setFollowing(willFollow);
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/user/follow/${userId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!data.success) setFollowing(!willFollow);
+    } catch {
+      setFollowing(!willFollow);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Box
+      onClick={() => navigate(`/user/${nickname}`)}
+      sx={{
+        backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2,
+        p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between',
+        gap: 0.8, cursor: 'pointer', transition: 'all 0.2s',
+        height: '100%',
+        animation: `fadeUp 0.35s ease ${idx * 0.05}s both`,
+        '&:hover': { borderColor: colors.borderFocus, boxShadow: '0 4px 16px rgba(15,23,42,0.06)', transform: 'translateY(-2px)' },
+      }}
+    >
+      <Avatar
+        src={resolveAvatarSrc(avatar)}
+        sx={{ width: 52, height: 52, fontSize: '1.1rem', fontWeight: 800, backgroundColor: colors.textPrimary }}
+      >
+        {getInitial(nickname)}
+      </Avatar>
+
+      <Box sx={{ width: '100%', textAlign: 'center' }}>
+        <Typography sx={{
+          fontWeight: 700, fontSize: '0.78rem', color: colors.textPrimary,
+          lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {nickname}
+        </Typography>
+        {bio && (
+          <Typography sx={{
+            fontSize: '0.68rem', color: colors.textHint, mt: 0.3,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {bio}
+          </Typography>
+        )}
+        {showFollowsMe && (
+          <Typography sx={{
+            fontSize: '0.65rem', color: '#2563EB', fontWeight: 600, mt: 0.3,
+          }}>
+            나를 팔로우하고 있습니다
+          </Typography>
+        )}
       </Box>
+
+      <Button
+        size="small"
+        disabled={loading}
+        onClick={toggleFollow}
+        fullWidth
+        sx={{
+          fontSize: '0.72rem', fontWeight: 700, py: 0.5,
+          borderRadius: 2, boxShadow: 'none', textTransform: 'none',
+          ...(following
+            ? {
+              border: `1px solid ${colors.border}`,
+              color: colors.textMuted,
+              backgroundColor: 'transparent',
+              '&:hover': { borderColor: '#EF4444', color: '#EF4444', backgroundColor: colors.mode === 'dark' ? '#2D1515' : '#FEF2F2' },
+            }
+            : {
+              backgroundColor: '#2563EB',
+              color: '#fff',
+              border: `1px solid transparent`,
+              '&:hover': { backgroundColor: '#1D4ED8' },
+            }
+          ),
+          transition: 'all 0.18s',
+        }}
+      >
+        {loading
+          ? <CircularProgress size={11} sx={{ color: 'inherit' }} />
+          : following ? '팔로잉' : (showFollowsMe ? '맞팔로우' : '팔로우')
+        }
+      </Button>
     </Box>
   );
 };
@@ -408,7 +568,7 @@ const UserSkeleton = ({ colors }) => (
   </Box>
 );
 
-const FollowersModal = ({ open, onClose, users, token, colors }) => (
+const FollowersModal = ({ open, onClose, users, token, colors, navigate }) => (
   <Modal open={open} onClose={onClose} closeAfterTransition slots={{ backdrop: Backdrop }} slotProps={{ backdrop: { timeout: 200, sx: { backgroundColor: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(4px)' } } }}>
     <Fade in={open}>
       <Box sx={{
@@ -421,15 +581,22 @@ const FollowersModal = ({ open, onClose, users, token, colors }) => (
           <IconButton size="small" onClick={onClose} sx={{ color: colors.textHint }}><Close sx={{ fontSize: 18 }} /></IconButton>
         </Box>
         <Box sx={{ p: 2.5, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {users.map((u, i) => <UserCard key={u.USER_ID || u.id || u.userId} user={u} idx={i} token={token} colors={colors} />)}
+          {users.map((u, i) => <UserCard key={u.USER_ID || u.id || u.userId} user={u} idx={i} token={token} colors={colors} navigate={navigate} />)}
         </Box>
       </Box>
     </Fade>
   </Modal>
 );
 
-const DefaultView = ({ trendingTags, recommendedUsers, explorePosts, loadingDefault, onTagClick, token, colors }) => {
+const DefaultView = ({ trendingTags, recommendedUsers, explorePosts, loadingDefault, onTagClick, token, colors, navigate }) => {
   const [modalOpen, setModalOpen] = useState(false);
+  const [showTopBtn, setShowTopBtn] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setShowTopBtn(window.scrollY > 400);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   if (loadingDefault) {
     return (
@@ -439,16 +606,17 @@ const DefaultView = ({ trendingTags, recommendedUsers, explorePosts, loadingDefa
     );
   }
 
-  const displayedUsers = recommendedUsers.slice(0, 5);
+  const displayedTags = trendingTags.slice(0, 5);         // 태그 5개만
+  const displayedUsers = recommendedUsers.slice(0, 5);    // 유저 5명만
 
   return (
-    <Box sx={{ animation: 'fadeUp 0.3s ease both' }}>
+    <Box sx={{ animation: 'fadeUp 0.3s ease both', position: 'relative' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
         <LocalFireDepartment sx={{ color: '#F87171', fontSize: 18, opacity: 0.75 }} />
         <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: colors.textPrimary, letterSpacing: '-0.01em' }}>지금 뜨는 태그</Typography>
       </Box>
-      <Stack spacing={1.5} sx={{ mb: 4 }}>
-        {trendingTags.map((t, i) => {
+      <Stack spacing={1.5} sx={{ mb: 3 }}>
+        {displayedTags.map((t, i) => {
           const m = getTagColor(t.TAG_NAME);
           return (
             <Box key={t.TAG_NAME} onClick={() => onTagClick(t.TAG_NAME)} sx={{
@@ -469,6 +637,8 @@ const DefaultView = ({ trendingTags, recommendedUsers, explorePosts, loadingDefa
         })}
       </Stack>
 
+      <Divider sx={{ borderColor: colors.border, mb: 3 }} />
+
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <GroupAdd sx={{ color: '#93B4E0', fontSize: 18, opacity: 0.85 }} />
@@ -476,14 +646,27 @@ const DefaultView = ({ trendingTags, recommendedUsers, explorePosts, loadingDefa
         </Box>
         {recommendedUsers.length > 5 && (
           <Typography onClick={() => setModalOpen(true)} sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#2563EB', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
-            더보기
+            모두보기
           </Typography>
         )}
       </Box>
-      <Stack spacing={1.5} sx={{ mb: 4 }}>
-        {displayedUsers.map((u, i) => <UserCard key={u.USER_ID || u.id || u.userId} user={u} idx={i} token={token} colors={colors} />)}
-      </Stack>
-      <FollowersModal open={modalOpen} onClose={() => setModalOpen(false)} users={recommendedUsers} token={token} colors={colors} />
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 1.5, mb: 3 }}>
+        {displayedUsers.map((u, i) => (
+          <Box key={u.USER_ID || u.id || u.userId} sx={{ aspectRatio: '1 / 1' }}>
+            <UserGridCard
+              key={u.USER_ID || u.id || u.userId}
+              user={u}
+              idx={i}
+              token={token}
+              colors={colors}
+              navigate={navigate}
+            />
+          </Box>
+        ))}
+      </Box>
+      <FollowersModal open={modalOpen} onClose={() => setModalOpen(false)} users={recommendedUsers} token={token} colors={colors} navigate={navigate} />
+
+      {explorePosts.length > 0 && <Divider sx={{ borderColor: colors.border, mb: 3 }} />}
 
       {explorePosts.length > 0 && (
         <>
@@ -496,6 +679,24 @@ const DefaultView = ({ trendingTags, recommendedUsers, explorePosts, loadingDefa
           </Box>
         </>
       )}
+
+      {/* 맨위로 버튼 */}
+      <Fade in={showTopBtn}>
+        <Box
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          sx={{
+            position: 'fixed', bottom: 32, right: 32, zIndex: 999,
+            width: 44, height: 44, borderRadius: '50%',
+            backgroundColor: colors.paper, border: `1px solid ${colors.border}`,
+            boxShadow: colors.mode === 'dark' ? '0 4px 20px rgba(0,0,0,0.5)' : '0 4px 16px rgba(15,23,42,0.12)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', transition: 'all 0.2s',
+            '&:hover': { backgroundColor: colors.hover, borderColor: colors.borderFocus, transform: 'translateY(-2px)' },
+          }}
+        >
+          <KeyboardArrowUp sx={{ fontSize: 22, color: colors.textPrimary }} />
+        </Box>
+      </Fade>
     </Box>
   );
 };
@@ -549,6 +750,25 @@ export default function Explore() {
 
   const inputRef = useRef(null);
 
+  const [activeCategoryFilter, setActiveCategoryFilter] = useState(null);
+  const [categoryPosts, setCategoryPosts] = useState([]);
+  const [loadingCategory, setLoadingCategory] = useState(false);
+
+  const doSearchByCategory = useCallback(async (category) => {
+    setLoadingCategory(true);
+    try {
+      const res = await fetch(`${API}/explore/search?q=&category=${encodeURIComponent(category)}&type=posts&limit=60`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) setCategoryPosts(data.posts || []);
+    } catch {
+      setCategoryPosts([]);
+    } finally {
+      setLoadingCategory(false);
+    }
+  }, [token]);
+
   const loadDefault = useCallback(async () => {
     setLoadingDefault(true);
     try {
@@ -568,11 +788,14 @@ export default function Explore() {
     }
   }, [token]);
 
-  const doSearch = useCallback(async (q) => {
+  const doSearch = useCallback(async (q, searchType = 'all') => {
     if (!q?.trim()) return;
     setLoadingSearch(true);
     try {
-      const res = await fetch(`${API}/explore/search?q=${encodeURIComponent(q)}&type=all&limit=30`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(
+        `${API}/explore/search?q=${encodeURIComponent(q)}&type=${searchType}&limit=30`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       const data = await res.json();
       if (data.success) {
         setPosts(data.posts || []);
@@ -588,23 +811,45 @@ export default function Explore() {
     }
   }, [token]);
 
+  const [searchContext, setSearchContext] = useState(null);
+
   useEffect(() => {
     if (!token) { navigate('/'); return; }
 
     const params = new URLSearchParams(location.search);
     const tagParam = params.get('tag');
     const locationParam = params.get('location');
-    const searchParam = tagParam || locationParam;
+    const categoryParam = params.get('category');
 
-    if (searchParam) {
-      setInputValue(searchParam);
-      setQuery(searchParam);
+    if (locationParam) {
+      setInputValue(locationParam);
+      setQuery(locationParam);
       setActiveResultTab('posts');
       setActiveTagFilter('all');
-      doSearch(searchParam);
+      setActiveCategoryFilter(null);
+      setSearchContext('location');
+      doSearch(locationParam, 'posts');
+    } else if (categoryParam) {
+      setInputValue(categoryParam);
+      setQuery(categoryParam);
+      setActiveResultTab('posts');
+      setActiveTagFilter('all');
+      setActiveCategoryFilter(null);
+      setSearchContext('category');
+      doSearch(categoryParam, 'posts');
+    } else if (tagParam) {
+      setInputValue(tagParam);
+      setQuery(tagParam);
+      setActiveResultTab('posts');
+      setActiveTagFilter('all');
+      setActiveCategoryFilter(null);
+      setSearchContext('tag');
+      doSearch(tagParam, 'all');
     } else {
       setQuery('');
       setInputValue('');
+      setActiveCategoryFilter(null);
+      setSearchContext(null);
       loadDefault();
     }
   }, [location.search, token, navigate, doSearch, loadDefault]);
@@ -687,21 +932,62 @@ export default function Explore() {
       </Box>
 
       <Box sx={{ maxWidth: 1000, mx: 'auto', px: { xs: 2, md: 4 }, py: 4 }}>
-        {!query ? (
+        {activeCategoryFilter ? (
+          <Box sx={{ animation: 'fadeIn 0.25s ease both' }}>
+            <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <IconButton size="small" onClick={() => { setActiveCategoryFilter(null); navigate('/explore', { replace: true }); }} sx={{ color: colors.textMuted }}>
+                <ArrowBack sx={{ fontSize: 18 }} />
+              </IconButton>
+              <Typography sx={{ fontWeight: 800, fontSize: '1.1rem', color: colors.textPrimary, letterSpacing: '-0.02em' }}>
+                <Box component="span" sx={{ color: '#2563EB' }}>{activeCategoryFilter}</Box> 게시물
+              </Typography>
+              {!loadingCategory && (
+                <Typography sx={{ color: colors.textHint, fontSize: '0.82rem' }}>{categoryPosts.length}개</Typography>
+              )}
+            </Box>
+            {loadingCategory ? (
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: { xs: 0.5, md: 1 } }}>
+                {[...Array(9)].map((_, i) => <PostSkeleton key={i} colors={colors} />)}
+              </Box>
+            ) : categoryPosts.length === 0 ? (
+              <Box sx={{ textAlign: 'center', py: 8 }}>
+                <Typography sx={{ color: colors.textHint, fontSize: '0.88rem' }}>게시물이 없습니다.</Typography>
+              </Box>
+            ) : (
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: { xs: 0.5, md: 1 } }}>
+                {categoryPosts.map((p, i) => <PostCard key={p.id} post={p} idx={i} colors={colors} />)}
+              </Box>
+            )}
+          </Box>
+        ) : !query ? (
           <DefaultView
-            trendingTags={trendingTags} recommendedUsers={recommendedUsers} explorePosts={explorePosts}
-            loadingDefault={loadingDefault} onTagClick={(tag) => handleSearch(tag)}
-            token={token} colors={colors}
+            trendingTags={trendingTags}
+            recommendedUsers={recommendedUsers}
+            explorePosts={explorePosts}
+            loadingDefault={loadingDefault}
+            onTagClick={(tag) => handleSearch(tag)}
+            token={token}
+            colors={colors}
+            navigate={navigate}
           />
         ) : (
           <Box sx={{ animation: 'fadeIn 0.25s ease both' }}>
             <Box sx={{ mb: 3 }}>
-              <Typography sx={{ fontWeight: 800, fontSize: '1.1rem', color: colors.textPrimary, letterSpacing: '-0.02em' }}>
-                <Box component="span" sx={{ color: '#2563EB' }}>"{query}"</Box> 검색 결과
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                {searchContext === 'location' && <LocationOn sx={{ fontSize: 20, color: '#2563EB' }} />}
+                <Typography sx={{ fontWeight: 800, fontSize: '1.1rem', color: colors.textPrimary, letterSpacing: '-0.02em' }}>
+                  <Box component="span" sx={{ color: '#2563EB' }}>
+                    {searchContext === 'location' ? query : searchContext === 'category' ? query : `"${query}"`}
+                  </Box>
+                  {searchContext === 'location' ? ' 위치 게시물' : searchContext === 'category' ? ' 카테고리 게시물' : ' 검색 결과'}
+                </Typography>
+              </Box>
               {!loadingSearch && (
                 <Typography sx={{ color: colors.textHint, fontSize: '0.82rem', mt: 0.3 }}>
-                  게시물 {posts.length}개 · 개발자 {users.length}명 · 태그 {tags.length}개
+                  {searchContext === 'location' || searchContext === 'category'
+                    ? `게시물 ${posts.length}개`
+                    : `게시물 ${posts.length}개 · 개발자 ${users.length}명 · 태그 ${tags.length}개`
+                  }
                 </Typography>
               )}
             </Box>
@@ -709,8 +995,12 @@ export default function Explore() {
             <Box sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2, overflow: 'hidden', mb: 2.5 }}>
               <Box sx={{ display: 'flex', borderBottom: `1px solid ${colors.border}`, px: 1 }}>
                 <ResultTabBtn icon={<Article sx={{ fontSize: 15 }} />} label="게시물" active={activeResultTab === 'posts'} onClick={() => setActiveResultTab('posts')} count={posts.length} colors={colors} />
-                <ResultTabBtn icon={<People sx={{ fontSize: 15 }} />} label="개발자" active={activeResultTab === 'users'} onClick={() => setActiveResultTab('users')} count={users.length} colors={colors} />
-                <ResultTabBtn icon={<Tag sx={{ fontSize: 15 }} />} label="태그" active={activeResultTab === 'tags'} onClick={() => setActiveResultTab('tags')} count={tags.length} colors={colors} />
+                {searchContext !== 'location' && searchContext !== 'category' && (
+                  <>
+                    <ResultTabBtn icon={<People sx={{ fontSize: 15 }} />} label="개발자" active={activeResultTab === 'users'} onClick={() => setActiveResultTab('users')} count={users.length} colors={colors} />
+                    <ResultTabBtn icon={<Tag sx={{ fontSize: 15 }} />} label="태그" active={activeResultTab === 'tags'} onClick={() => setActiveResultTab('tags')} count={tags.length} colors={colors} />
+                  </>
+                )}
               </Box>
 
               {activeResultTab === 'posts' && availableTags.length > 0 && (
