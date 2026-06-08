@@ -4,13 +4,11 @@ const db = require('../db');
 const oracledb = require('oracledb');
 const jwtAuthentication = require('../middlewares/auth');
 
-// ── [GET] 릴스 목록 불러오기 API ──
 router.get('/', jwtAuthentication, async (req, res) => {
     let connection;
     try {
         connection = await db.getConnection();
 
-        // 동영상 파일이 첨부된 활성 상태의 게시글만 조회
         const sql = `
             SELECT 
                 p.POST_ID AS "id",
@@ -18,6 +16,8 @@ router.get('/', jwtAuthentication, async (req, res) => {
                 p.CONTENT AS "caption",
                 p.SHARE_COUNT AS "shares",
                 u.NICKNAME AS "username",
+                u.USER_ID AS "userId",
+(SELECT STATUS FROM FOLLOWS WHERE FOLLOWER_ID = :myUserId AND FOLLOWING_ID = u.USER_ID AND ROWNUM = 1) AS "followStatus",
                 (SELECT IMAGE_URL FROM PROFILE_IMAGES WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS "avatar",
                 (SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID) AS "likes",
                 (SELECT COUNT(*) FROM COMMENTS WHERE POST_ID = p.POST_ID AND STATUS = 'ACTIVE') AS "comments",
@@ -40,7 +40,8 @@ router.get('/', jwtAuthentication, async (req, res) => {
             FETCH FIRST 20 ROWS ONLY
         `;
 
-        const result = await connection.execute(sql, {}, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+        const myUserId = req.user?.userId ?? req.user?.id;
+        const result = await connection.execute(sql, { myUserId }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
 
         const API_URL = 'http://localhost:3010';
 
@@ -52,8 +53,8 @@ router.get('/', jwtAuthentication, async (req, res) => {
             }
             if (captionText) {
                 captionText = captionText
-                    .replace(/<video[\s\S]*?<\/video>/gi, '')  // <video ...></video>
-                    .replace(/<[^>]+>/g, '')                   // 나머지 HTML 태그
+                    .replace(/<video[\s\S]*?<\/video>/gi, '')
+                    .replace(/<[^>]+>/g, '')
                     .replace(/&nbsp;/g, ' ')
                     .replace(/&amp;/g, '&')
                     .replace(/&lt;/g, '<')
@@ -67,11 +68,12 @@ router.get('/', jwtAuthentication, async (req, res) => {
                 overlayText: row.overlayText,
                 caption: captionText,
                 username: row.username,
+                userId: row.userId,         
+                followStatus: row.followStatus ?? 'NONE', 
                 tags: row.tags ? row.tags.split(',') : [],
                 likes: row.likes || 0,
                 comments: row.comments || 0,
                 shares: row.shares || 0,
-                // 파일 경로가 상대 경로(/uploads/...)로 저장되어 있다면 절대 경로로 변환
                 videoSrc: row.videoSrc ? (row.videoSrc.startsWith('http') ? row.videoSrc : `${API_URL}${row.videoSrc}`) : null,
                 avatar: row.avatar ? (row.avatar.startsWith('http') ? row.avatar : `${API_URL}${row.avatar}`) : null,
             };

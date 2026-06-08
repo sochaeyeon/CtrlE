@@ -1688,7 +1688,7 @@ export default function Feed() {
   }, []);
 
   const loadTrending = useCallback(async (filter) => {
-    setLoadingTrending(true);
+    // setLoadingTrending(true);
     try {
       const found = FIXED_CATEGORIES.find(c => c.label === filter);
       const categoryParam = found?.value ? `?category=${found.value}` : '';
@@ -1822,9 +1822,10 @@ export default function Feed() {
   const handleFilterChange = (label) => {
     setActiveFilter(label);
     loadTrending(label);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const dynamicTagLabels = activeFilter === '릴스' ? [] : trending.map(t => t.TAG_NAME || t.tag).filter(Boolean);
+  const dynamicTagLabels = trending.map(t => t.TAG_NAME || t.tag).filter(Boolean);
 
   const filterFeeds = (list) => {
     if (activeFilter === '전체') return list;

@@ -16,6 +16,7 @@ const exploreRouter = require('./routes/explore');
 const messagesRouter = require('./routes/messages');
 const activityRouter = require('./routes/activity');
 const reelsRouter = require('./routes/reels');
+const adminRouter = require('./routes/admin');
 
 const db = require("./db");
 
@@ -37,6 +38,7 @@ app.use('/explore', exploreRouter);
 app.use('/messages', messagesRouter);
 app.use('/activity', activityRouter);
 app.use('/reels', reelsRouter);
+app.use('/admin', adminRouter);
 
 
 async function startServer() {

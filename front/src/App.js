@@ -127,7 +127,7 @@ function AppContent() {
   const location = useLocation();
   const { mode } = useColorMode();
   const isAuthPage = location.pathname === '/' || location.pathname === '/join';
-
+  const isAdminPage = location.pathname.startsWith('/admin');
   const [notifications, setNotifications] = useState([]);
   const lastMessageState = useRef({});
 
@@ -251,7 +251,7 @@ function AppContent() {
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: mode === 'dark' ? '#0F1117' : '#F8FAFC' }}>
       <CssBaseline />
-      {!isAuthPage && <Menu />}
+      {!isAuthPage && !isAdminPage && <Menu />}
       <Box sx={{ flexGrow: 1, p: 0, backgroundColor: mode === 'dark' ? '#0F1117' : '#F8FAFC', minHeight: '100vh' }}>
         <Routes>
           <Route path="/" element={<Login />} />

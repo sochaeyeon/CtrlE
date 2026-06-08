@@ -17,6 +17,21 @@ import { ShareModal } from './Feed';
 
 const API = 'http://localhost:3010';
 
+const REPORT_REASONS = [
+    { value: 'SPAM', label: '스팸 / 광고성 게시물' },
+    { value: 'HATE', label: '혐오 발언 / 차별' },
+    { value: 'ADULT', label: '성인 / 음란물' },
+    { value: 'FALSE', label: '허위 정보' },
+    { value: 'OTHER', label: '기타' },
+];
+const COMMENT_REPORT_REASONS = [
+    { value: 'SPAM', label: '스팸 / 광고성 댓글' },
+    { value: 'HATE', label: '혐오 발언 / 차별' },
+    { value: 'ADULT', label: '성인 / 음란물' },
+    { value: 'FALSE', label: '허위 정보' },
+    { value: 'OTHER', label: '기타' },
+];
+
 const resolveAvatarSrc = (src) => {
     if (!src) return undefined;
     if (src.startsWith('http')) return src;
@@ -93,9 +108,14 @@ const ConfirmModal = ({ open, title, message, confirmLabel = '확인', confirmCo
     </Modal>
 );
 
-const ReportModal = ({ open, onClose, postId, commentId, token, colors }) => {
-    const [reason, setReason] = useState('SPAM');
+const ReportModal = ({ open, onClose, postId, commentId, token, colors, title = '신고하기', reasons = REPORT_REASONS }) => {
+    const [reason, setReason] = useState('');
+    const [detail, setDetail] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+
     const handleSubmit = async () => {
+        if (!reason || submitting) return;
+        setSubmitting(true);
         try {
             const url = commentId
                 ? `${API}/feed/${postId}/comment/${commentId}/report`
@@ -103,26 +123,73 @@ const ReportModal = ({ open, onClose, postId, commentId, token, colors }) => {
             await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ reason }),
+                body: JSON.stringify({ reason, detail }),
             });
+            setReason(''); setDetail('');
         } catch (e) { console.error(e); }
-        finally { onClose(); }
+        finally { setSubmitting(false); onClose(); }
     };
+
     return (
-        <Modal open={open} onClose={onClose} closeAfterTransition>
+        <Modal open={open} onClose={onClose} closeAfterTransition slots={{ backdrop: Backdrop }}
+            slotProps={{ backdrop: { timeout: 200, sx: { backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)' } } }}>
             <Fade in={open}>
-                <Box sx={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 340, backgroundColor: colors.paper, borderRadius: 3, p: 3, outline: 'none' }}>
-                    <Typography sx={{ fontWeight: 800, mb: 2, color: colors.textPrimary }}>댓글 신고</Typography>
-                    <RadioGroup value={reason} onChange={e => setReason(e.target.value)}>
-                        <FormControlLabel value="SPAM" control={<Radio size="small" />} label="스팸 / 광고성" />
-                        <FormControlLabel value="HATE" control={<Radio size="small" />} label="혐오 발언 / 욕설" />
-                    </RadioGroup>
-                    <Button fullWidth onClick={handleSubmit} sx={{ mt: 2, backgroundColor: '#DC2626', color: '#fff' }}>신고 제출</Button>
+                <Box sx={{
+                    position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+                    width: { xs: '90vw', sm: 440 }, backgroundColor: colors.paper, borderRadius: 3,
+                    border: `1px solid ${colors.border}`, boxShadow: '0 20px 60px rgba(15,23,42,0.25)',
+                    overflow: 'hidden', outline: 'none',
+                }}>
+                    <Box sx={{ px: 3, py: 2.5, borderBottom: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+                            <Box sx={{ width: 32, height: 32, borderRadius: 1.5, backgroundColor: colors.mode === 'dark' ? '#2D1515' : '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <FlagOutlined sx={{ fontSize: 17, color: '#DC2626' }} />
+                            </Box>
+                            <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: colors.textPrimary }}>{title}</Typography>
+                        </Box>
+                        <IconButton size="small" onClick={onClose} sx={{ color: colors.textHint }}>
+                            <Close sx={{ fontSize: 18 }} />
+                        </IconButton>
+                    </Box>
+                    <Box sx={{ px: 3, py: 3 }}>
+                        <Typography sx={{ fontSize: '0.82rem', color: colors.textMuted, mb: 2 }}>신고 사유를 선택해주세요.</Typography>
+                        <RadioGroup value={reason} onChange={e => setReason(e.target.value)}>
+                            {reasons.map(r => (
+                                <FormControlLabel key={r.value} value={r.value} label={r.label}
+                                    control={<Radio size="small" sx={{ color: colors.border, '&.Mui-checked': { color: '#2563EB' } }} />}
+                                    sx={{
+                                        mx: 0, px: 1.5, py: 0.8, borderRadius: 1.5, mb: 0.5,
+                                        border: reason === r.value ? '1px solid #2563EB' : '1px solid transparent',
+                                        backgroundColor: reason === r.value
+                                            ? (colors.mode === 'dark' ? '#172033' : '#EFF6FF')
+                                            : 'transparent',
+                                        transition: 'all 0.15s',
+                                        '& .MuiFormControlLabel-label': {
+                                            fontSize: '0.88rem',
+                                            fontWeight: reason === r.value ? 600 : 400,
+                                            color: colors.textPrimary,
+                                        },
+                                    }}
+                                />
+                            ))}
+                        </RadioGroup>
+                        {reason === 'OTHER' && (
+                            <TextField multiline rows={2} fullWidth placeholder="기타 사유를 입력해주세요"
+                                value={detail} onChange={e => setDetail(e.target.value)}
+                                sx={{ mt: 1.5, '& .MuiOutlinedInput-root': { fontSize: '0.85rem', borderRadius: 1.5, backgroundColor: colors.paper, color: colors.textPrimary, '& fieldset': { borderColor: colors.border }, '&.Mui-focused fieldset': { borderColor: '#2563EB' } } }}
+                            />
+                        )}
+                        <Button fullWidth variant="contained" disabled={!reason || submitting} onClick={handleSubmit}
+                            sx={{ mt: 2.5, py: 1.1, borderRadius: 1.5, textTransform: 'none', fontWeight: 700, fontSize: '0.88rem', backgroundColor: '#DC2626', boxShadow: 'none', '&:hover': { backgroundColor: '#B91C1C' }, '&.Mui-disabled': { backgroundColor: colors.hover, color: colors.textHint } }}>
+                            {submitting ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : '신고 제출'}
+                        </Button>
+                    </Box>
                 </Box>
             </Fade>
         </Modal>
     );
 };
+
 const addReplyToTree = (comments, parentId, newReply) =>
     comments.map(c => {
         if ((c.COMMENT_ID || c.id) === parentId) return { ...c, replies: [...(c.replies || []), newReply] };
@@ -449,9 +516,11 @@ const ReelCommentItem = ({ comment, index, depth = 0, onReply, onDelete, myNickn
                 open={reportOpen}
                 onClose={() => setReportOpen(false)}
                 postId={postId}
-                commentId={comment.COMMENT_ID}   // ← 추가
+                commentId={comment.COMMENT_ID}
                 token={token}
                 colors={colors}
+                title="댓글 신고"
+                reasons={COMMENT_REPORT_REASONS}
             />
 
             {/* 호버 프로필 카드 */}
@@ -488,7 +557,7 @@ const ReelCard = ({ reel, token, myNickname, colors, onUpdate, onDelete }) => {
     const [muted, setMuted] = useState(true);
     const [liked, setLiked] = useState(reel.likes > 0);
     const [likeCount, setLikeCount] = useState(reel.likes || 0);
-    const [followStatus, setFollowStatus] = useState('NONE');
+    const [followStatus, setFollowStatus] = useState(reel.followStatus || 'NONE');
     const [heartTrigger, setHeartTrigger] = useState(0);
     const [myAvatar, setMyAvatar] = useState(null);
 
@@ -695,6 +764,24 @@ const ReelCard = ({ reel, token, myNickname, colors, onUpdate, onDelete }) => {
         if (updatedFeed) onUpdate?.({ ...reel, ...updatedFeed });
     };
 
+    const followBtnStyle = (() => {
+        if (followStatus === 'ACCEPTED') return {
+            backgroundColor: 'transparent',
+            color: colors.textPrimary,
+            border: `1px solid ${colors.border}`,
+        };
+        if (followStatus === 'PENDING' || followStatus === 'OPTIMISTIC') return {
+            backgroundColor: 'transparent',
+            color: colors.textMuted,
+            border: `1px solid ${colors.border}`,
+        };
+        return {
+            backgroundColor: '#2563EB',
+            color: '#fff',
+            border: '1px solid #2563EB',
+        };
+    })();
+
     const followBtnLabel = followStatus === 'ACCEPTED' ? '팔로잉' : (followStatus === 'PENDING' || followStatus === 'OPTIMISTIC') ? '요청됨' : '팔로우';
     return (
         <Box sx={{
@@ -735,9 +822,11 @@ const ReelCard = ({ reel, token, myNickname, colors, onUpdate, onDelete }) => {
                                 size="small"
                                 sx={{
                                     fontSize: '0.72rem', px: 1.2, py: 0.3, borderRadius: 5,
-                                    border: `1px solid ${colors.border}`,
-                                    color: colors.textPrimary, minWidth: 0, flexShrink: 0,
-                                    '&:hover': { backgroundColor: colors.border },
+                                    minWidth: 0, flexShrink: 0,
+                                    textTransform: 'none', fontWeight: 700,
+                                    transition: 'all 0.15s',
+                                    ...followBtnStyle,
+                                    '&:hover': { opacity: 0.85 },
                                 }}
                             >
                                 {followBtnLabel}
@@ -885,7 +974,15 @@ const ReelCard = ({ reel, token, myNickname, colors, onUpdate, onDelete }) => {
 
                 <EditModal open={editOpen} postId={reel.id} onClose={() => setEditOpen(false)} onSaved={handleEditSaved} />
                 <ConfirmModal open={deleteOpen} title="릴스 삭제" message="이 릴스를 삭제하시겠습니까?" onConfirm={handleDeleteConfirm} onClose={() => setDeleteOpen(false)} colors={colors} />
-                <ReportModal open={reportOpen} onClose={() => setReportOpen(false)} postId={reel.id} token={token} colors={colors} />
+                <ReportModal
+                    open={reportOpen}
+                    onClose={() => setReportOpen(false)}
+                    postId={reel.id}
+                    token={token}
+                    colors={colors}
+                    title="릴스 신고"
+                    reasons={REPORT_REASONS}
+                />
                 <ShareModal
                     open={shareOpen}
                     onClose={() => setShareOpen(false)}

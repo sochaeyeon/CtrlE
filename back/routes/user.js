@@ -474,10 +474,9 @@ router.get('/suggestions', jwtAuthentication, async (req, res) => {
 });
 router.post('/follow/:targetId', jwtAuthentication, async (req, res) => {
     const userId = req.user?.userId ?? req.user?.id;
-    const { targetId } = req.params;
+    const targetId = Number(req.params.targetId);  
     const conn = await db.getConnection();
     try {
-        // 대상 유저 비밀계정 여부 확인
         const targetUser = await conn.execute(
             `SELECT IS_PRIVATE FROM USERS WHERE USER_ID = :targetId`,
             { targetId },
