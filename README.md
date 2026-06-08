@@ -169,35 +169,6 @@
 - 유저 / 게시물 검색
 - 카테고리별 탐색
 
-### 🛡 관리자
-- 관리자 대시보드
-- 신고 처리
-
-<br/>
-
-## ⚙️ 환경변수 설정
-
-`back/` 폴더에 `.env` 파일을 **직접 생성**해야 합니다.  
-`.env` 파일은 보안상 GitHub에 올리지 않으며, `.gitignore`에 반드시 포함되어야 합니다.
-
-| 키 | 설명 |
-|----|------|
-| `DB_USER` | Oracle DB 사용자명 |
-| `DB_PASSWORD` | Oracle DB 비밀번호 |
-| `DB_CONNECT_STRING` | Oracle DB 연결 문자열 |
-| `JWT_SECRET` | JWT 서명 비밀키 |
-| `GOOGLE_CLIENT_ID` | Google OAuth 클라이언트 ID |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth 시크릿 |
-| `GOOGLE_CALLBACK_URL` | Google OAuth 콜백 URL |
-| `GITHUB_CLIENT_ID` | GitHub OAuth 클라이언트 ID |
-| `GITHUB_CLIENT_SECRET` | GitHub OAuth 시크릿 |
-| `GITHUB_CALLBACK_URL` | GitHub OAuth 콜백 URL |
-| `MAIL_USER` | 메일 발송 계정 |
-| `MAIL_PASS` | 메일 발송 비밀번호 |
-| `GEMINI_API_KEY` | Google Gemini AI API 키 |
-
-> 각 키 발급: [Google Cloud Console](https://console.cloud.google.com) / [GitHub Developer Settings](https://github.com/settings/developers) / [Google AI Studio](https://aistudio.google.com)
-
 <br/>
 
 ## 🚀 실행 방법
@@ -264,8 +235,3 @@ Oracle DB를 사용합니다. 주요 테이블 목록:
 
 <br/>
 
----
-
-<p align="center">
-  <b>CtrlE</b> — Built with ❤️ for developers
-</p>
