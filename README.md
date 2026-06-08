@@ -137,38 +137,6 @@
 
 <br/>
 
-## ⚙️ 환경변수 설정
-
-`back/.env` 파일을 생성하고 아래 값을 설정하세요.
-
-```env
-# Oracle DB
-DB_USER=
-DB_PASSWORD=
-DB_CONNECT_STRING=
-
-# JWT
-JWT_SECRET=
-
-# Google OAuth
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_CALLBACK_URL=
-
-# GitHub OAuth
-GITHUB_CLIENT_ID=
-GITHUB_CLIENT_SECRET=
-GITHUB_CALLBACK_URL=
-
-# Nodemailer
-MAIL_USER=
-MAIL_PASS=
-
-# Google Gemini AI
-GEMINI_API_KEY=
-```
-
-<br/>
 
 ## 🚀 실행 방법
 
@@ -234,15 +202,3 @@ Oracle DB를 사용합니다. 주요 테이블 목록:
 
 <br/>
 
-## 👥 팀 / 기여
-
-이 프로젝트는 개인 또는 팀 프로젝트로 개발되었습니다.  
-기여를 원하신다면 Pull Request 또는 Issue를 남겨주세요.
-
-<br/>
-
----
-
-<p align="center">
-  <b>CtrlE</b> — Built with ❤️ for developers
-</p>
