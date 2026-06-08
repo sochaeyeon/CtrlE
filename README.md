@@ -1,4 +1,4 @@
-[# CtrlE — 개발자 중심 SNS 플랫폼
+[[# CtrlE — 개발자 중심 SNS 플랫폼
 
 > 코드 공유, 소통, 협업을 위한 개발자 전용 소셜 네트워크 서비스
 
@@ -202,4 +202,5 @@ Oracle DB를 사용합니다. 주요 테이블 목록:
 
 <br/>
 
+](https://youtu.be/du_X_FnkvBA)
 ](https://youtu.be/du_X_FnkvBA)
