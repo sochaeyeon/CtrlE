@@ -814,11 +814,53 @@ function LocationAutocomplete({ value, onChange, tk }) {
   );
 }
 
+const dataURLtoFile = (dataurl, filename) => {
+  const arr = dataurl.split(',');
+  const mime = arr[0].match(/:(.*?);/)[1];
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) u8arr[n] = bstr.charCodeAt(n);
+  return new File([u8arr], filename, { type: mime });
+};
+
 export default function RegisterModal({ open, onClose }) {
   const navigate = useNavigate();
   const quillRef = useRef(null);
   const { mode } = useContext(ColorModeContext);
   const isDirtyRef = useRef(false);
+  const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [imageFiles, setImageFiles] = useState([]);
+  const [dbTags, setDbTags] = useState(TECH_STACK_OPTIONS);
+  const [isDirty, setIsDirty] = useState(false);
+  const [leaveConfirm, setLeaveConfirm] = useState(false);
+  const [badWordModal, setBadWordModal] = useState(false);
+  const [detectedWords, setDetectedWords] = useState([]);
+  const [replaceMap, setReplaceMap] = useState({});
+  const [activeTab, setActiveTab] = useState('settings');
+  const [hideLikes, setHideLikes] = useState(false);
+  const [disableComments, setDisableComments] = useState(false);
+  const [location, setLocation] = useState('');
+  const [photoEditOpen, setPhotoEditOpen] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState([]);
+  const [editingImageIdx, setEditingImageIdx] = useState(null);
+  const [reelContent, setReelContent] = useState('');
+  const reelInputRef = useRef(null);
+  const [reelMentionOpen, setReelMentionOpen] = useState(false);
+  const [reelMentionSuggestions, setReelMentionSuggestions] = useState([]);
+  const [reelMentionActiveIdx, setReelMentionActiveIdx] = useState(0);
+  const [reelMentionStart, setReelMentionStart] = useState(-1);
+  const [reelMentionAnchor, setReelMentionAnchor] = useState({ top: 0, left: 0 });
+  const reelDebounceRef = useRef(null);
+  const [taggedUsers, setTaggedUsers] = useState([]);
+  const [tagUserQuery, setTagUserQuery] = useState('');
+  const [tagUserSuggestions, setTagUserSuggestions] = useState([]);
+  const [tagUserOpen, setTagUserOpen] = useState(false);
+  const tagDebounceRef = useRef(null);
+  const tagInputRef = useRef(null);
+  const [metadata, setMetadata] = useState({ category: 'ERROR', title: '', tags: [] });
 
   const tk = TOKEN[mode] || TOKEN.light;
 
@@ -853,37 +895,6 @@ export default function RegisterModal({ open, onClose }) {
     },
   }), [mode, tk]);
 
-  const [loading, setLoading] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [imageFiles, setImageFiles] = useState([]);
-  const [dbTags, setDbTags] = useState(TECH_STACK_OPTIONS);
-  const [isDirty, setIsDirty] = useState(false);
-  const [leaveConfirm, setLeaveConfirm] = useState(false);
-  const [badWordModal, setBadWordModal] = useState(false);
-  const [detectedWords, setDetectedWords] = useState([]);
-  const [replaceMap, setReplaceMap] = useState({});
-  const [activeTab, setActiveTab] = useState('settings');
-  const [hideLikes, setHideLikes] = useState(false);
-  const [disableComments, setDisableComments] = useState(false);
-  const [location, setLocation] = useState('');
-  const [photoEditOpen, setPhotoEditOpen] = useState(false);
-  const [pendingFiles, setPendingFiles] = useState([]);
-  const [editingImageIdx, setEditingImageIdx] = useState(null);
-  const [reelContent, setReelContent] = useState('');
-  const reelInputRef = useRef(null);
-  const [reelMentionOpen, setReelMentionOpen] = useState(false);
-  const [reelMentionSuggestions, setReelMentionSuggestions] = useState([]);
-  const [reelMentionActiveIdx, setReelMentionActiveIdx] = useState(0);
-  const [reelMentionStart, setReelMentionStart] = useState(-1);
-  const [reelMentionAnchor, setReelMentionAnchor] = useState({ top: 0, left: 0 });
-  const reelDebounceRef = useRef(null);
-  const [taggedUsers, setTaggedUsers] = useState([]);
-  const [tagUserQuery, setTagUserQuery] = useState('');
-  const [tagUserSuggestions, setTagUserSuggestions] = useState([]);
-  const [tagUserOpen, setTagUserOpen] = useState(false);
-  const tagDebounceRef = useRef(null);
-  const tagInputRef = useRef(null);
 
 
   const fetchReelMentionUsers = useCallback(async (q) => {
@@ -902,7 +913,11 @@ export default function RegisterModal({ open, onClose }) {
   const handleReelContentChange = (e) => {
     const val = e.target.value;
     setReelContent(val);
-    contentRef.current = `<p>${val}</p>`;
+    const html = val
+      .split('\n')
+      .map(line => `<p>${line || '<br>'}</p>`)
+      .join('');
+    contentRef.current = html;
     markDirty();
 
     const cursor = e.target.selectionStart;
@@ -944,6 +959,11 @@ export default function RegisterModal({ open, onClose }) {
   };
 
   useEffect(() => {
+    setImageFiles([]);
+    setPendingFiles([]);
+  }, [metadata.category]);
+
+  useEffect(() => {
     fetch(`${API}/feed/tags`, { headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` } })
       .then(r => r.json())
       .then(data => { if (data.success && Array.isArray(data.tags)) setDbTags(Array.from(new Set([...TECH_STACK_OPTIONS, ...data.tags]))); })
@@ -952,7 +972,6 @@ export default function RegisterModal({ open, onClose }) {
 
   const contentRef = useRef('');
 
-  const [metadata, setMetadata] = useState({ category: 'ERROR', title: '', tags: [] });
 
   useEffect(() => {
     if (!open) return;
@@ -993,35 +1012,42 @@ export default function RegisterModal({ open, onClose }) {
     contentRef,
     markDirty,
   });
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const quill = quillRef.current?.getEditor();
-      if (!quill) return;
 
-      let debounceTimer;
-      const observer = new MutationObserver(() => {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-          const editorSrcs = new Set(
-            Array.from(quill.root.querySelectorAll('img')).map(img => img.getAttribute('src'))
-          );
-          setImageFiles(prev => {
-            const next = prev.filter(imgFile =>
-              editorSrcs.has(imgFile.editorSrc) || editorSrcs.has(imgFile.previewUrl)
-            );
-            return next.length === prev.length ? prev : next;
-          });
-        }, 150);
+  useEffect(() => {
+    const quill = quillRef.current?.getEditor();
+    if (!quill) return;
+
+    const observer = new MutationObserver(() => {
+      const editorImages = Array.from(quill.root.querySelectorAll('img'));
+      const editorSrcs = new Set(editorImages.map(img => img.getAttribute('src')));
+
+      // 1. 에디터에서 삭제된 이미지 감지하여 목록에서 제거
+      setImageFiles(prev => {
+        const next = prev.filter(f =>
+          editorSrcs.has(f.editorSrc) || editorSrcs.has(f.previewUrl)
+        );
+        return next.length === prev.length ? prev : next;
       });
 
-      observer.observe(quill.root, { childList: true, subtree: true });
-      return () => {
-        clearTimeout(debounceTimer);
-        observer.disconnect();
-      };
-    }, 300);
-    return () => clearTimeout(timer);
-  }, []);
+      // 2. 에디터에 새로 추가된 Base64 이미지(복붙 등) 감지하여 목록에 추가
+      editorImages.forEach(img => {
+        const src = img.getAttribute('src');
+        if (src && src.startsWith('data:image') && !imageFilesRef.current.some(f => f.editorSrc === src)) {
+          const file = dataURLtoFile(src, `pasted-${Date.now()}.png`);
+          setImageFiles(prev => [...prev, {
+            file,
+            previewUrl: src,
+            editorSrc: src,
+            originalUrl: src
+          }]);
+          markDirty();
+        }
+      });
+    });
+
+    observer.observe(quill.root, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [markDirty]);
 
   const removeImageFromEditor = useCallback((imgFile) => {
     const quill = quillRef.current?.getEditor();
@@ -1078,16 +1104,21 @@ export default function RegisterModal({ open, onClose }) {
       quill.insertEmbed(index, 'image', reader.result, 'user');
       quill.setSelection(index + 1, 0, 'silent');
       contentRef.current = quill.root.innerHTML;
+      const newImageFile = {
+        file,
+        previewUrl: previewUrl || reader.result,
+        editorSrc: reader.result,
+        originalUrl: previewUrl || reader.result,
+        _id: Date.now(), // 고유 식별자
+      };
 
-      setImageFiles(prev => [
-        ...prev,
-        {
-          file,
-          previewUrl: previewUrl || reader.result,
-          editorSrc: reader.result,
-          originalUrl: previewUrl || reader.result,
-        },
-      ]);
+      setImageFiles(prev => [...prev, { ...newImageFile, _pending: true }]);
+
+      setTimeout(() => {
+        setImageFiles(prev =>
+          prev.map(f => f._id === newImageFile._id ? { ...f, _pending: false } : f)
+        );
+      }, 800);
       markDirty();
 
       requestAnimationFrame(() => {
@@ -1190,6 +1221,7 @@ export default function RegisterModal({ open, onClose }) {
             previewUrl,
             editorSrc: reader.result,
             originalUrl: currentImg.originalUrl || currentImg.previewUrl,
+            _id: currentImg._id,
           };
           return next;
         });
@@ -1601,22 +1633,23 @@ export default function RegisterModal({ open, onClose }) {
                         </Box>
                       )
                     ) : (
-                      /* ── 일반: 기존 이미지 업로드 ── */
                       imageFiles.length > 0 ? (
                         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                           {imageFiles.map((img, i) => (
-                            <Tooltip key={i} title="클릭하여 재편집" placement="top">
-                              <Box onClick={() => handleReEditImage(i)} sx={{ position: 'relative', width: 70, height: 70, borderRadius: 1.5, overflow: 'hidden', border: `1px solid ${tk.border}`, cursor: 'pointer', '&:hover .edit-overlay': { opacity: 1 }, transition: 'box-shadow 0.15s', '&:hover': { boxShadow: `0 0 0 2px ${tk.accent}` } }}>
-                                <img src={img.previewUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                <Box className="edit-overlay" sx={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.15s' }}>
-                                  <Typography sx={{ color: '#fff', fontSize: '0.65rem', fontWeight: 800 }}>편집</Typography>
-                                </Box>
-                                <IconButton size="small" onClick={e => { e.stopPropagation(); removeImageFromEditor(img); setImageFiles(p => { const n = [...p]; n.splice(i, 1); return n; }); }}
-                                  sx={{ position: 'absolute', top: 2, right: 2, p: 0.3, backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 0.5, '&:hover': { backgroundColor: 'rgba(239,68,68,0.85)' } }}>
-                                  <Close sx={{ fontSize: 10 }} />
-                                </IconButton>
+                            <Box key={i} sx={{ position: 'relative', width: 70, height: 70, borderRadius: 1.5, overflow: 'hidden', border: `1px solid ${tk.border}`, cursor: 'pointer', '&:hover .edit-overlay': { opacity: 1 }, transition: 'box-shadow 0.15s', '&:hover': { boxShadow: `0 0 0 2px ${tk.accent}` } }}>
+                              <img src={img.previewUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />                              <Box className="edit-overlay" sx={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.15s' }}>
+                                <Typography sx={{ color: '#fff', fontSize: '0.65rem', fontWeight: 800 }}>편집</Typography>
                               </Box>
-                            </Tooltip>
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeImageFromEditor(img); 
+                                }}
+                                sx={{ position: 'absolute', top: 2, right: 2, p: 0.3, backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 0.5, '&:hover': { backgroundColor: 'rgba(239,68,68,0.85)' } }}>
+                                <Close sx={{ fontSize: 10 }} />
+                              </IconButton>
+                            </Box>
                           ))}
                           <Box component="label" sx={{ width: 70, height: 70, borderRadius: 1.5, border: `1.5px dashed ${tk.border}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: tk.textHint, gap: 0.3, transition: 'all 0.15s', '&:hover': { borderColor: tk.accent, color: tk.accent, backgroundColor: tk.accentBg } }}>
                             <Add sx={{ fontSize: 18 }} />
@@ -1684,87 +1717,93 @@ export default function RegisterModal({ open, onClose }) {
         </Box>
       </Dialog>
 
-      {photoEditOpen && pendingFiles.length > 0 && (
-        <PhotoEditModal
-          open={photoEditOpen}
-          images={pendingFiles}
-          onClose={() => { setPhotoEditOpen(false); setPendingFiles([]); setEditingImageIdx(null); }}
-          onDone={handlePhotoDone}
-          tk={tk}
-          mode={mode}
-        />
-      )}
+      {
+        photoEditOpen && pendingFiles.length > 0 && (
+          <PhotoEditModal
+            open={photoEditOpen}
+            images={pendingFiles}
+            onClose={() => { setPhotoEditOpen(false); setPendingFiles([]); setEditingImageIdx(null); }}
+            onDone={handlePhotoDone}
+            tk={tk}
+            mode={mode}
+          />
+        )
+      }
 
-      {mentionAC.open && mentionAC.suggestions.length > 0 && (
-        <Box sx={{
-          position: 'fixed',
-          top: mentionAC.anchorPos.top,
-          left: mentionAC.anchorPos.left,
-          zIndex: 9999,
-          minWidth: 200,
-          borderRadius: 1.5,
-          border: `1px solid ${tk.border}`,
-          backgroundColor: tk.paper,
-          boxShadow: '0 8px 24px rgba(15,23,42,0.15)',
-          overflow: 'hidden',
-        }}>
-          {mentionAC.suggestions.map((u, idx) => (
-            <Box key={u.USER_ID}
-              onMouseDown={(e) => { e.preventDefault(); mentionAC.insertMention(u.NICKNAME); }}
-              onMouseEnter={() => mentionAC.setActiveIdx(idx)}
-              sx={{
-                display: 'flex', alignItems: 'center', gap: 1.2,
-                px: 1.5, py: 0.9, cursor: 'pointer',
-                backgroundColor: idx === mentionAC.activeIdx
-                  ? (mode === 'dark' ? '#1E3A5F' : '#EFF6FF')
-                  : tk.paper,
-                borderBottom: idx < mentionAC.suggestions.length - 1 ? `1px solid ${tk.border}` : 'none',
-                transition: 'background 0.1s',
-              }}>
-              <Box sx={{
-                width: 28, height: 28, borderRadius: '50%', overflow: 'hidden',
-                border: `1.5px solid ${tk.border}`, backgroundColor: '#0F172A',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-              }}>
-                {u.AVATAR
-                  ? <img src={`${API}${u.AVATAR}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, color: '#fff' }}>{u.NICKNAME?.charAt(0).toUpperCase()}</Typography>
-                }
+      {
+        mentionAC.open && mentionAC.suggestions.length > 0 && (
+          <Box sx={{
+            position: 'fixed',
+            top: mentionAC.anchorPos.top,
+            left: mentionAC.anchorPos.left,
+            zIndex: 9999,
+            minWidth: 200,
+            borderRadius: 1.5,
+            border: `1px solid ${tk.border}`,
+            backgroundColor: tk.paper,
+            boxShadow: '0 8px 24px rgba(15,23,42,0.15)',
+            overflow: 'hidden',
+          }}>
+            {mentionAC.suggestions.map((u, idx) => (
+              <Box key={u.USER_ID}
+                onMouseDown={(e) => { e.preventDefault(); mentionAC.insertMention(u.NICKNAME); }}
+                onMouseEnter={() => mentionAC.setActiveIdx(idx)}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 1.2,
+                  px: 1.5, py: 0.9, cursor: 'pointer',
+                  backgroundColor: idx === mentionAC.activeIdx
+                    ? (mode === 'dark' ? '#1E3A5F' : '#EFF6FF')
+                    : tk.paper,
+                  borderBottom: idx < mentionAC.suggestions.length - 1 ? `1px solid ${tk.border}` : 'none',
+                  transition: 'background 0.1s',
+                }}>
+                <Box sx={{
+                  width: 28, height: 28, borderRadius: '50%', overflow: 'hidden',
+                  border: `1.5px solid ${tk.border}`, backgroundColor: '#0F172A',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }}>
+                  {u.AVATAR
+                    ? <img src={`${API}${u.AVATAR}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, color: '#fff' }}>{u.NICKNAME?.charAt(0).toUpperCase()}</Typography>
+                  }
+                </Box>
+                <Typography sx={{ flex: 1, fontSize: '0.83rem', fontWeight: 700, color: tk.textPrimary }}>{u.NICKNAME}</Typography>
+                <Typography sx={{ fontSize: '0.65rem', color: tk.textHint, fontWeight: 600, backgroundColor: tk.inputBg, border: `1px solid ${tk.border}`, borderRadius: 0.5, px: 0.6, py: 0.2 }}>Tab</Typography>
               </Box>
-              <Typography sx={{ flex: 1, fontSize: '0.83rem', fontWeight: 700, color: tk.textPrimary }}>{u.NICKNAME}</Typography>
-              <Typography sx={{ fontSize: '0.65rem', color: tk.textHint, fontWeight: 600, backgroundColor: tk.inputBg, border: `1px solid ${tk.border}`, borderRadius: 0.5, px: 0.6, py: 0.2 }}>Tab</Typography>
-            </Box>
-          ))}
-        </Box>
-      )}
-      {reelMentionOpen && reelMentionSuggestions.length > 0 && (
-        <Box sx={{
-          position: 'fixed',
-          top: reelMentionAnchor.top,
-          left: reelMentionAnchor.left,
-          zIndex: 9999, minWidth: 200, borderRadius: 1.5,
-          border: `1px solid ${tk.border}`, backgroundColor: tk.paper,
-          boxShadow: '0 8px 24px rgba(15,23,42,0.15)', overflow: 'hidden',
-        }}>
-          {reelMentionSuggestions.map((u, idx) => (
-            <Box key={u.USER_ID}
-              onMouseDown={(e) => { e.preventDefault(); insertReelMention(u.NICKNAME); }}
-              onMouseEnter={() => setReelMentionActiveIdx(idx)}
-              sx={{
-                display: 'flex', alignItems: 'center', gap: 1.2,
-                px: 1.5, py: 0.9, cursor: 'pointer',
-                backgroundColor: idx === reelMentionActiveIdx ? (mode === 'dark' ? '#1E3A5F' : '#EFF6FF') : tk.paper,
-                borderBottom: idx < reelMentionSuggestions.length - 1 ? `1px solid ${tk.border}` : 'none',
-              }}>
-              <Box sx={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', border: `1.5px solid ${tk.border}`, backgroundColor: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                {u.AVATAR ? <img src={`${API}${u.AVATAR}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, color: '#fff' }}>{u.NICKNAME?.charAt(0).toUpperCase()}</Typography>}
+            ))}
+          </Box>
+        )
+      }
+      {
+        reelMentionOpen && reelMentionSuggestions.length > 0 && (
+          <Box sx={{
+            position: 'fixed',
+            top: reelMentionAnchor.top,
+            left: reelMentionAnchor.left,
+            zIndex: 9999, minWidth: 200, borderRadius: 1.5,
+            border: `1px solid ${tk.border}`, backgroundColor: tk.paper,
+            boxShadow: '0 8px 24px rgba(15,23,42,0.15)', overflow: 'hidden',
+          }}>
+            {reelMentionSuggestions.map((u, idx) => (
+              <Box key={u.USER_ID}
+                onMouseDown={(e) => { e.preventDefault(); insertReelMention(u.NICKNAME); }}
+                onMouseEnter={() => setReelMentionActiveIdx(idx)}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 1.2,
+                  px: 1.5, py: 0.9, cursor: 'pointer',
+                  backgroundColor: idx === reelMentionActiveIdx ? (mode === 'dark' ? '#1E3A5F' : '#EFF6FF') : tk.paper,
+                  borderBottom: idx < reelMentionSuggestions.length - 1 ? `1px solid ${tk.border}` : 'none',
+                }}>
+                <Box sx={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', border: `1.5px solid ${tk.border}`, backgroundColor: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {u.AVATAR ? <img src={`${API}${u.AVATAR}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, color: '#fff' }}>{u.NICKNAME?.charAt(0).toUpperCase()}</Typography>}
+                </Box>
+                <Typography sx={{ flex: 1, fontSize: '0.83rem', fontWeight: 700, color: tk.textPrimary }}>{u.NICKNAME}</Typography>
+                <Typography sx={{ fontSize: '0.65rem', color: tk.textHint, fontWeight: 600, backgroundColor: tk.inputBg, border: `1px solid ${tk.border}`, borderRadius: 0.5, px: 0.6, py: 0.2 }}>Tab</Typography>
               </Box>
-              <Typography sx={{ flex: 1, fontSize: '0.83rem', fontWeight: 700, color: tk.textPrimary }}>{u.NICKNAME}</Typography>
-              <Typography sx={{ fontSize: '0.65rem', color: tk.textHint, fontWeight: 600, backgroundColor: tk.inputBg, border: `1px solid ${tk.border}`, borderRadius: 0.5, px: 0.6, py: 0.2 }}>Tab</Typography>
-            </Box>
-          ))}
-        </Box>
-      )}
+            ))}
+          </Box>
+        )
+      }
       <LeaveConfirmDialog open={leaveConfirm} onConfirm={doClose} onCancel={() => setLeaveConfirm(false)} tk={tk} />
 
       <BadWordModal
@@ -1776,6 +1815,6 @@ export default function RegisterModal({ open, onClose }) {
         onCancel={() => setBadWordModal(false)}
         tk={tk}
       />
-    </ThemeProvider>
+    </ThemeProvider >
   );
 }

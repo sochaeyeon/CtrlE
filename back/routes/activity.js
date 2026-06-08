@@ -8,7 +8,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 router.get('/stats', authMiddleware, async (req, res) => {
     const userId = req.user.userId ?? req.user.id;
-
+    const { granularity = 'monthly', year, month } = req.query;
     try {
         const [
             summary,
@@ -20,35 +20,19 @@ router.get('/stats', authMiddleware, async (req, res) => {
             recentPosts,
             topLikedPosts,
             topViewedPosts,
-            topScrappedPosts,
         ] = await Promise.all([
             getSummary(userId),
-            getMonthlyActivity(userId),
-            getFollowMonthlyActivity(userId),
+            getActivityData(userId, granularity, Number(year), Number(month)),
+            getFollowActivityData(userId, granularity, Number(year), Number(month)),
             getTopTags(userId),
             getSaveStats(userId),
             getFollowStats(userId),
             getRecentPostsForAI(userId),
             getTopLikedPosts(userId),
             getTopViewedPosts(userId),
-            getTopScrappedPosts(userId),
         ]);
 
-        res.json({
-            success: true,
-            data: {
-                summary,
-                monthlyActivity,
-                followMonthlyActivity,
-                topTags,
-                saveStats,
-                followStats,
-                recentPosts,
-                topLikedPosts,
-                topViewedPosts,
-                topScrappedPosts,
-            },
-        });
+        res.json({ success: true, data: { summary, monthlyActivity, followMonthlyActivity, topTags, saveStats, followStats, recentPosts, topLikedPosts, topViewedPosts } });
     } catch (err) {
         console.error('[activity/stats error]', err);
         res.status(500).json({ success: false, message: '서버 에러' });
@@ -93,9 +77,6 @@ ${postsText}
     }
 });
 
-// ─────────────────────────────────────────
-// 기존 함수들
-// ─────────────────────────────────────────
 async function getSummary(userId) {
     let connection;
     try {
@@ -123,89 +104,169 @@ async function getSummary(userId) {
     }
 }
 
-async function getMonthlyActivity(userId) {
+async function getActivityData(userId, granularity, year, month) {
     let connection;
     try {
         connection = await db.getConnection();
+        const currentYear = year || new Date().getFullYear();
+        const currentMonth = month || new Date().getMonth() + 1;
 
-        const postResult = await connection.execute(
-            `SELECT TO_CHAR(CREATED_AT, 'YYYY-MM') AS month, COUNT(*) AS cnt
-         FROM POSTS
-        WHERE USER_ID = :userId
-          AND STATUS = 'ACTIVE'
-          AND CREATED_AT >= ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -11)
-        GROUP BY TO_CHAR(CREATED_AT, 'YYYY-MM')
-        ORDER BY month`,
-            { userId }
-        );
+        let postSql, commentSql, params, generateFn;
 
-        const commentResult = await connection.execute(
-            `SELECT TO_CHAR(CREATED_AT, 'YYYY-MM') AS month, COUNT(*) AS cnt
-         FROM COMMENTS
-        WHERE USER_ID = :userId
-          AND STATUS = 'ACTIVE'
-          AND CREATED_AT >= ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -11)
-        GROUP BY TO_CHAR(CREATED_AT, 'YYYY-MM')
-        ORDER BY month`,
-            { userId }
-        );
+        if (granularity === 'yearly') {
+            postSql = `SELECT TO_CHAR(CREATED_AT, 'YYYY') AS period, COUNT(*) AS cnt
+                       FROM POSTS WHERE USER_ID = :userId AND STATUS = 'ACTIVE'
+                       AND CREATED_AT >= ADD_MONTHS(SYSDATE, -35)
+                       GROUP BY TO_CHAR(CREATED_AT, 'YYYY') ORDER BY period`;
+            commentSql = `SELECT TO_CHAR(CREATED_AT, 'YYYY') AS period, COUNT(*) AS cnt
+                          FROM COMMENTS WHERE USER_ID = :userId AND STATUS = 'ACTIVE'
+                          AND CREATED_AT >= ADD_MONTHS(SYSDATE, -35)
+                          GROUP BY TO_CHAR(CREATED_AT, 'YYYY') ORDER BY period`;
+            params = { userId };
+            generateFn = generateYears;
 
-        const months = generateLast12Months();
+        } else if (granularity === 'daily') {
+            postSql = `SELECT TO_CHAR(CREATED_AT, 'DD') AS period, COUNT(*) AS cnt
+                       FROM POSTS WHERE USER_ID = :userId AND STATUS = 'ACTIVE'
+                       AND TO_CHAR(CREATED_AT, 'YYYY') = :year
+                       AND TO_CHAR(CREATED_AT, 'MM') = :month
+                       GROUP BY TO_CHAR(CREATED_AT, 'DD') ORDER BY period`;
+            commentSql = `SELECT TO_CHAR(CREATED_AT, 'DD') AS period, COUNT(*) AS cnt
+                          FROM COMMENTS WHERE USER_ID = :userId AND STATUS = 'ACTIVE'
+                          AND TO_CHAR(CREATED_AT, 'YYYY') = :year
+                          AND TO_CHAR(CREATED_AT, 'MM') = :month
+                          GROUP BY TO_CHAR(CREATED_AT, 'DD') ORDER BY period`;
+            params = { userId, year: String(currentYear), month: String(currentMonth).padStart(2, '0') };
+            generateFn = () => generateDays(currentYear, currentMonth);
+
+        } else {
+            // monthly (default)
+            postSql = `SELECT TO_CHAR(CREATED_AT, 'YYYY-MM') AS period, COUNT(*) AS cnt
+                       FROM POSTS WHERE USER_ID = :userId AND STATUS = 'ACTIVE'
+                       AND TO_CHAR(CREATED_AT, 'YYYY') = :year
+                       GROUP BY TO_CHAR(CREATED_AT, 'YYYY-MM') ORDER BY period`;
+            commentSql = `SELECT TO_CHAR(CREATED_AT, 'YYYY-MM') AS period, COUNT(*) AS cnt
+                          FROM COMMENTS WHERE USER_ID = :userId AND STATUS = 'ACTIVE'
+                          AND TO_CHAR(CREATED_AT, 'YYYY') = :year
+                          GROUP BY TO_CHAR(CREATED_AT, 'YYYY-MM') ORDER BY period`;
+            params = { userId, year: String(currentYear) };
+            generateFn = () => generateMonths(currentYear);
+        }
+
+        const [postResult, commentResult] = await Promise.all([
+            connection.execute(postSql, params),
+            connection.execute(commentSql, params),
+        ]);
+
+        const periods = generateFn();
         const postMap = Object.fromEntries(postResult.rows.map(r => [r[0], Number(r[1])]));
         const commentMap = Object.fromEntries(commentResult.rows.map(r => [r[0], Number(r[1])]));
 
-        return months.map(m => ({ month: m, posts: postMap[m] || 0, comments: commentMap[m] || 0 }));
+        return periods.map(p => {
+            if (granularity === 'yearly') return { year: p, posts: postMap[p] || 0, comments: commentMap[p] || 0 };
+            if (granularity === 'daily') return { day: p, posts: postMap[p] || 0, comments: commentMap[p] || 0 };
+            return { month: `${currentYear}-${p}`, posts: postMap[`${currentYear}-${p}`] || 0, comments: commentMap[`${currentYear}-${p}`] || 0 };
+        });
+
     } finally {
         if (connection) await connection.close();
     }
 }
 
-/**
- * 팔로워/팔로잉 월별 변동 추이
- * FOLLOWS 테이블에서 월별 누적 팔로워·팔로잉 수를 계산합니다.
- * STATUS = 'ACCEPTED' 기준, 최근 12개월
- */
-async function getFollowMonthlyActivity(userId) {
+function generateYears() {
+    const current = new Date().getFullYear();
+    return [String(current - 2), String(current - 1), String(current)];
+}
+
+function generateMonths(year) {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const maxMonth = year === currentYear ? currentMonth : 12;
+    return Array.from({ length: maxMonth }, (_, i) => String(i + 1).padStart(2, '0'));
+}
+
+function generateDays(year, month) {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const currentDay = now.getDate();
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const maxDay = (year === currentYear && month === currentMonth) ? currentDay : daysInMonth;
+    return Array.from({ length: maxDay }, (_, i) => String(i + 1).padStart(2, '0'));
+}
+async function getFollowActivityData(userId, granularity, year, month) {
     let connection;
     try {
         connection = await db.getConnection();
+        const currentYear = year || new Date().getFullYear();
+        const currentMonth = month || new Date().getMonth() + 1;
 
-        // 월별 신규 팔로워 수 (나를 팔로우한 사람)
-        const followerResult = await connection.execute(
-            `SELECT TO_CHAR(CREATED_AT, 'YYYY-MM') AS month, COUNT(*) AS cnt
-         FROM FOLLOWS
-        WHERE FOLLOWING_ID = :userId
-          AND STATUS = 'ACCEPTED'
-          AND CREATED_AT >= ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -11)
-        GROUP BY TO_CHAR(CREATED_AT, 'YYYY-MM')
-        ORDER BY month`,
-            { userId }
-        );
+        let followerSql, followingSql, params, generateFn;
 
-        // 월별 신규 팔로잉 수 (내가 팔로우한 사람)
-        const followingResult = await connection.execute(
-            `SELECT TO_CHAR(CREATED_AT, 'YYYY-MM') AS month, COUNT(*) AS cnt
-         FROM FOLLOWS
-        WHERE FOLLOWER_ID = :userId
-          AND STATUS = 'ACCEPTED'
-          AND CREATED_AT >= ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -11)
-        GROUP BY TO_CHAR(CREATED_AT, 'YYYY-MM')
-        ORDER BY month`,
-            { userId }
-        );
+        if (granularity === 'yearly') {
+            followerSql = `SELECT TO_CHAR(CREATED_AT, 'YYYY') AS period, COUNT(*) AS cnt
+                           FROM FOLLOWS WHERE FOLLOWING_ID = :userId AND STATUS = 'ACCEPTED'
+                           AND CREATED_AT >= ADD_MONTHS(SYSDATE, -35)
+                           GROUP BY TO_CHAR(CREATED_AT, 'YYYY') ORDER BY period`;
+            followingSql = `SELECT TO_CHAR(CREATED_AT, 'YYYY') AS period, COUNT(*) AS cnt
+                            FROM FOLLOWS WHERE FOLLOWER_ID = :userId AND STATUS = 'ACCEPTED'
+                            AND CREATED_AT >= ADD_MONTHS(SYSDATE, -35)
+                            GROUP BY TO_CHAR(CREATED_AT, 'YYYY') ORDER BY period`;
+            params = { userId };
+            generateFn = generateYears;
 
-        const months = generateLast12Months();
+        } else if (granularity === 'daily') {
+            followerSql = `SELECT TO_CHAR(CREATED_AT, 'DD') AS period, COUNT(*) AS cnt
+                           FROM FOLLOWS WHERE FOLLOWING_ID = :userId AND STATUS = 'ACCEPTED'
+                           AND TO_CHAR(CREATED_AT, 'YYYY') = :year
+                           AND TO_CHAR(CREATED_AT, 'MM') = :month
+                           GROUP BY TO_CHAR(CREATED_AT, 'DD') ORDER BY period`;
+            followingSql = `SELECT TO_CHAR(CREATED_AT, 'DD') AS period, COUNT(*) AS cnt
+                            FROM FOLLOWS WHERE FOLLOWER_ID = :userId AND STATUS = 'ACCEPTED'
+                            AND TO_CHAR(CREATED_AT, 'YYYY') = :year
+                            AND TO_CHAR(CREATED_AT, 'MM') = :month
+                            GROUP BY TO_CHAR(CREATED_AT, 'DD') ORDER BY period`;
+            params = { userId, year: String(currentYear), month: String(currentMonth).padStart(2, '0') };
+            generateFn = () => generateDays(currentYear, currentMonth);
+
+        } else {
+            // monthly
+            followerSql = `SELECT TO_CHAR(CREATED_AT, 'YYYY-MM') AS period, COUNT(*) AS cnt
+                           FROM FOLLOWS WHERE FOLLOWING_ID = :userId AND STATUS = 'ACCEPTED'
+                           AND TO_CHAR(CREATED_AT, 'YYYY') = :year
+                           GROUP BY TO_CHAR(CREATED_AT, 'YYYY-MM') ORDER BY period`;
+            followingSql = `SELECT TO_CHAR(CREATED_AT, 'YYYY-MM') AS period, COUNT(*) AS cnt
+                            FROM FOLLOWS WHERE FOLLOWER_ID = :userId AND STATUS = 'ACCEPTED'
+                            AND TO_CHAR(CREATED_AT, 'YYYY') = :year
+                            GROUP BY TO_CHAR(CREATED_AT, 'YYYY-MM') ORDER BY period`;
+            params = { userId, year: String(currentYear) };
+            generateFn = () => generateMonths(currentYear);
+        }
+
+        const [followerResult, followingResult] = await Promise.all([
+            connection.execute(followerSql, params),
+            connection.execute(followingSql, params),
+        ]);
+
+        const periods = generateFn();
         const followerMap = Object.fromEntries(followerResult.rows.map(r => [r[0], Number(r[1])]));
         const followingMap = Object.fromEntries(followingResult.rows.map(r => [r[0], Number(r[1])]));
 
-        // 누적 합산으로 변환 (월별 신규 → 누적)
+        // 누적 합산
         let cumulativeFollowers = 0;
         let cumulativeFollowing = 0;
-        return months.map(m => {
-            cumulativeFollowers += followerMap[m] || 0;
-            cumulativeFollowing += followingMap[m] || 0;
-            return { month: m, followers: cumulativeFollowers, following: cumulativeFollowing };
+
+        return periods.map(p => {
+            const key = granularity === 'monthly' ? `${currentYear}-${p}` : p;
+            cumulativeFollowers += followerMap[key] || 0;
+            cumulativeFollowing += followingMap[key] || 0;
+
+            if (granularity === 'yearly') return { year: p, followers: cumulativeFollowers, following: cumulativeFollowing };
+            if (granularity === 'daily') return { day: p, followers: cumulativeFollowers, following: cumulativeFollowing };
+            return { month: `${currentYear}-${p}`, followers: cumulativeFollowers, following: cumulativeFollowing };
         });
+
     } finally {
         if (connection) await connection.close();
     }
@@ -238,13 +299,15 @@ async function getSaveStats(userId) {
         connection = await db.getConnection();
         const result = await connection.execute(
             `SELECT
-        (SELECT COUNT(*) FROM SCRAPS    WHERE USER_ID = :u1) AS scrap_count,
-        (SELECT COUNT(*) FROM BOOKMARKS WHERE USER_ID = :u2) AS bookmark_count
-       FROM DUAL`,
+    (SELECT COUNT(*) FROM COMMENTS c
+       JOIN POSTS p ON c.POST_ID = p.POST_ID
+      WHERE p.USER_ID = :u1 AND c.STATUS = 'ACTIVE' AND p.STATUS = 'ACTIVE') AS received_comment_count,
+    (SELECT COUNT(*) FROM BOOKMARKS WHERE USER_ID = :u2) AS bookmark_count
+   FROM DUAL`,
             { u1: userId, u2: userId }
         );
         const row = result.rows[0];
-        return { scrapCount: Number(row[0]), bookmarkCount: Number(row[1]) };
+        return { receivedCommentCount: Number(row[0]), bookmarkCount: Number(row[1]) };
     } finally {
         if (connection) await connection.close();
     }
@@ -328,27 +391,6 @@ async function getTopViewedPosts(userId) {
             { userId }
         );
         return result.rows.map(r => ({ postId: r[0], title: r[1], viewCount: Number(r[2]) }));
-    } finally {
-        if (connection) await connection.close();
-    }
-}
-
-/** 스크랩 많은 게시글 TOP 5 */
-async function getTopScrappedPosts(userId) {
-    let connection;
-    try {
-        connection = await db.getConnection();
-        const result = await connection.execute(
-            `SELECT p.POST_ID, p.TITLE, COUNT(s.POST_ID) AS scrap_count
-         FROM POSTS p
-         LEFT JOIN SCRAPS s ON p.POST_ID = s.POST_ID
-        WHERE p.USER_ID = :userId AND p.STATUS = 'ACTIVE'
-        GROUP BY p.POST_ID, p.TITLE
-        ORDER BY scrap_count DESC
-        FETCH FIRST 5 ROWS ONLY`,
-            { userId }
-        );
-        return result.rows.map(r => ({ postId: r[0], title: r[1], scrapCount: Number(r[2]) }));
     } finally {
         if (connection) await connection.close();
     }

@@ -6,22 +6,22 @@ const jwtAuthentication = require('../middlewares/auth');
 
 const getUserId = (req) => req.user?.userId ?? req.user?.id ?? null;
 
-// ──────────────────────────────────────────────────────────
-//  GET /explore/trending-tags — 트렌딩 태그 Top 10
-// ──────────────────────────────────────────────────────────
 router.get('/trending-tags', jwtAuthentication, async (req, res) => {
     const conn = await db.getConnection();
     try {
         const result = await conn.execute(
             `SELECT t.TAG_NAME,
-                    COUNT(pt.POST_ID) AS POST_COUNT,
-                    COUNT(CASE WHEN p.CREATED_AT > SYSDATE - 7 THEN 1 END) AS RECENT_COUNT
-             FROM TAGS t
-             JOIN POST_TAGS pt ON pt.TAG_ID = t.TAG_ID
-             JOIN POSTS p ON p.POST_ID = pt.POST_ID AND p.STATUS = 'ACTIVE'
-             GROUP BY t.TAG_NAME
-             ORDER BY POST_COUNT DESC
-             FETCH FIRST 10 ROWS ONLY`,
+        c.CATEGORY_NAME,
+        MIN(c.DISPLAY_ORDER) AS DISPLAY_ORDER,
+        COUNT(pt.POST_ID) AS POST_COUNT
+        FROM TAGS t
+        JOIN POST_TAGS pt ON pt.TAG_ID = t.TAG_ID
+        JOIN POSTS p ON p.POST_ID = pt.POST_ID AND p.STATUS = 'ACTIVE'
+        LEFT JOIN CATEGORIES c ON c.CATEGORY_ID = p.CATEGORY_ID
+        GROUP BY t.TAG_NAME, c.CATEGORY_NAME
+        ORDER BY MIN(c.DISPLAY_ORDER), POST_COUNT DESC
+        FETCH FIRST 40 ROWS ONLY`
+            ,
             {},
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
@@ -34,10 +34,6 @@ router.get('/trending-tags', jwtAuthentication, async (req, res) => {
     }
 });
 
-// ──────────────────────────────────────────────────────────
-//  GET /explore/recommended-users — 팔로우 추천 유저
-//  (팔로워 많은 순, 본인 제외, 이미 팔로잉 제외)
-// ──────────────────────────────────────────────────────────
 router.get('/recommended-users', jwtAuthentication, async (req, res) => {
     const userId = getUserId(req);
     const conn = await db.getConnection();
@@ -49,14 +45,19 @@ router.get('/recommended-users', jwtAuthentication, async (req, res) => {
                     (SELECT IMAGE_URL FROM PROFILE_IMAGES
                      WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR,
                     (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWING_ID = u.USER_ID AND STATUS = 'ACCEPTED') AS FOLLOWER_COUNT,
-                    (SELECT COUNT(*) FROM FOLLOWS
-                     WHERE FOLLOWER_ID = :userId1 AND FOLLOWING_ID = u.USER_ID AND STATUS = 'ACCEPTED') AS IS_FOLLOWING
+                  (SELECT CASE WHEN COUNT(*) > 0 THEN 'ACCEPTED' ELSE 'N' END
+                    FROM FOLLOWS
+                    WHERE FOLLOWER_ID = :userId1 AND FOLLOWING_ID = u.USER_ID AND STATUS = 'ACCEPTED') AS IS_FOLLOWING
              FROM USERS u
-             WHERE u.USER_ID != :userId2
-               AND u.STATUS = 'ACTIVE'
+         WHERE u.USER_ID != :userId2
+            AND u.STATUS = 'ACTIVE'
+            AND NOT EXISTS (
+                SELECT 1 FROM FOLLOWS
+                WHERE FOLLOWER_ID = :userId3 AND FOLLOWING_ID = u.USER_ID AND STATUS = 'ACCEPTED'
+            )
              ORDER BY FOLLOWER_COUNT DESC
              FETCH FIRST 8 ROWS ONLY`,
-            { userId1: userId, userId2: userId },
+            { userId1: userId, userId2: userId, userId3: userId },
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
         res.json({ success: true, users: result.rows });
@@ -68,14 +69,10 @@ router.get('/recommended-users', jwtAuthentication, async (req, res) => {
     }
 });
 
-// ──────────────────────────────────────────────────────────
-//  GET /explore/posts — 탐색 추천 게시물 (이미지 전용 그리드용)
-// ──────────────────────────────────────────────────────────
 router.get('/posts', jwtAuthentication, async (req, res) => {
     const userId = getUserId(req);
     const conn = await db.getConnection();
     try {
-        // 이미지가 있는 게시물만 최신순으로 가져오기
         const sql = `
             SELECT p.POST_ID        AS "id",
                    p.TITLE          AS "title",
@@ -91,7 +88,6 @@ router.get('/posts', jwtAuthentication, async (req, res) => {
             FROM POSTS p
             JOIN USERS u ON u.USER_ID = p.USER_ID
             WHERE p.STATUS = 'ACTIVE'
-              AND EXISTS (SELECT 1 FROM ATTACHED_FILES f WHERE f.TARGET_ID = p.POST_ID AND f.TARGET_TYPE = 'POST')
             ORDER BY p.CREATED_AT DESC
             FETCH FIRST 18 ROWS ONLY
         `;
@@ -105,7 +101,7 @@ router.get('/posts', jwtAuthentication, async (req, res) => {
             const imageList = row.images ? row.images.split(',') : [];
             return {
                 ...row,
-                firstImage: imageList[0] || null,
+                firstImage: imageList[0] || '/uploads/post/defaultImg.png',
                 liked: row.liked > 0,
                 bookmarked: row.bookmarked > 0,
             };
@@ -120,13 +116,9 @@ router.get('/posts', jwtAuthentication, async (req, res) => {
     }
 });
 
-// ──────────────────────────────────────────────────────────
-//  GET /explore/search — 통합 검색 (posts / users / tags)
-//  Query params: q, type (posts|users|tags|all), tag, page, limit
-// ──────────────────────────────────────────────────────────
 router.get('/search', jwtAuthentication, async (req, res) => {
     const userId = getUserId(req);
-    const { q = '', type = 'all', tag = '', page = 1, limit = 20 } = req.query;
+    const { q = '', type = 'all', tag = '', category = '', location = '', page = 1, limit = 20 } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
     const keyword = `%${q.toLowerCase()}%`;
 
@@ -134,7 +126,6 @@ router.get('/search', jwtAuthentication, async (req, res) => {
     try {
         const output = {};
 
-        // ── Posts ──
         if (type === 'posts' || type === 'all') {
             const postSql = `
                 SELECT p.POST_ID        AS "id",
@@ -161,18 +152,20 @@ router.get('/search', jwtAuthentication, async (req, res) => {
                 FROM POSTS p
                 JOIN USERS u ON u.USER_ID = p.USER_ID
                 LEFT JOIN CATEGORIES c ON c.CATEGORY_ID = p.CATEGORY_ID
-                WHERE p.STATUS = 'ACTIVE'
-                  AND (
-                        :q = '%%'
-                        OR LOWER(p.TITLE) LIKE :q
-                        OR EXISTS (
-                            SELECT 1 FROM POST_TAGS pt2
-                            JOIN TAGS t2 ON t2.TAG_ID = pt2.TAG_ID
-                            WHERE pt2.POST_ID = p.POST_ID
-                              AND LOWER(t2.TAG_NAME) LIKE :q2
-                        )
-                  )
-                  AND (:tag IS NULL OR :tag = '' OR EXISTS (
+              WHERE p.STATUS = 'ACTIVE'
+  AND (
+        :q = '%%'
+        OR LOWER(p.TITLE) LIKE :q
+        OR EXISTS (
+            SELECT 1 FROM POST_TAGS pt2
+            JOIN TAGS t2 ON t2.TAG_ID = pt2.TAG_ID
+            WHERE pt2.POST_ID = p.POST_ID
+              AND LOWER(t2.TAG_NAME) LIKE :q2
+        )
+  )
+AND (:category IS NULL OR :category = '' OR UPPER(c.CATEGORY_NAME) = UPPER(:category2))
+AND (:location IS NULL OR :location = '' OR UPPER(p.LOCATION) = UPPER(:location2))  -- ← 추가
+AND (:tag IS NULL OR :tag = '' OR EXISTS (
                         SELECT 1 FROM POST_TAGS pt3
                         JOIN TAGS t3 ON t3.TAG_ID = pt3.TAG_ID
                         WHERE pt3.POST_ID = p.POST_ID
@@ -183,20 +176,19 @@ router.get('/search', jwtAuthentication, async (req, res) => {
             `;
             const postRes = await conn.execute(
                 postSql,
-                { userId1: userId, userId2: userId, q: keyword, q2: keyword, tag: tag || null, offset, lim: Number(limit) },
+                { userId1: userId, userId2: userId, q: keyword, q2: keyword, tag: tag || null, category: category || null, category2: category || null, location: location || null, location2: location || null, offset, lim: Number(limit) },
                 { outFormat: oracledb.OUT_FORMAT_OBJECT }
             );
 
             output.posts = await Promise.all(postRes.rows.map(async (row) => {
                 let desc = row.description;
                 if (desc && typeof desc.getData === 'function') desc = await desc.getData();
-                // HTML 태그 제거해서 미리보기 텍스트만
                 const plainDesc = desc ? desc.replace(/<[^>]*>?/gm, '').slice(0, 150) : '';
                 const imageList = row.images ? row.images.split(',') : [];
                 return {
                     ...row,
                     description: plainDesc,
-                    firstImage: imageList[0] || null,
+                    firstImage: imageList[0] || '/uploads/post/defaultImg.png',
                     liked: row.liked > 0,
                     bookmarked: row.bookmarked > 0,
                     tags: row.tags ? row.tags.split(',') : [],
@@ -204,7 +196,6 @@ router.get('/search', jwtAuthentication, async (req, res) => {
             }));
         }
 
-        // ── Users ──
         if (type === 'users' || type === 'all') {
             const userRes = await conn.execute(
                 `SELECT u.USER_ID,
@@ -229,7 +220,6 @@ router.get('/search', jwtAuthentication, async (req, res) => {
             }));
         }
 
-        // ── Tags ──
         if (type === 'tags' || type === 'all') {
             const tagRes = await conn.execute(
                 `SELECT t.TAG_NAME,
@@ -274,25 +264,21 @@ router.post('/follow/:targetId', jwtAuthentication, async (req, res) => {
         );
 
         if (exists.rows[0].CNT > 0) {
-            // 언팔로우: FOLLOWS 행 삭제
             await conn.execute(
                 `DELETE FROM FOLLOWS WHERE FOLLOWER_ID = :userId AND FOLLOWING_ID = :targetId`,
                 { userId, targetId }
             );
-            // 연관된 FOLLOW_REQUESTS도 정리
             await conn.execute(
                 `DELETE FROM FOLLOW_REQUESTS
                  WHERE SENDER_ID = :userId AND RECEIVER_ID = :targetId`,
                 { userId, targetId }
             );
         } else {
-            // 팔로우: FOLLOWS에 바로 ACCEPTED로 삽입
             await conn.execute(
                 `INSERT INTO FOLLOWS (FOLLOWER_ID, FOLLOWING_ID, STATUS)
                  VALUES (:userId, :targetId, 'ACCEPTED')`,
                 { userId, targetId }
             );
-            // FOLLOW_REQUESTS 기록 (이미 있으면 UPDATE, 없으면 INSERT)
             await conn.execute(
                 `MERGE INTO FOLLOW_REQUESTS fr
                  USING (SELECT :userId AS SID, :targetId AS RID FROM DUAL) src
@@ -304,7 +290,6 @@ router.post('/follow/:targetId', jwtAuthentication, async (req, res) => {
                    VALUES (SEQ_REQUEST_ID.NEXTVAL, :userId2, :targetId2, 'PENDING')`,
                 { userId, targetId, userId2: userId, targetId2: targetId }
             );
-            // 팔로우 알림
             await conn.execute(
                 `INSERT INTO NOTIFICATIONS (NOTI_ID, RECEIVER_ID, SENDER_ID, NOTI_TYPE, TARGET_TYPE, TARGET_ID)
                  VALUES (SEQ_NOTI_ID.NEXTVAL, :targetId, :userId, 'FOLLOW', 'USER', :targetId2)`,

@@ -16,7 +16,7 @@ import {
   ReplyOutlined, VisibilityOutlined, Close,
   MoreHoriz, Edit, Delete, SmartToyOutlined, AutoAwesome,
   RefreshOutlined, PlayArrow,
-  LocationOn, ChevronLeft, ChevronRight, VolumeOff, VolumeUp
+  LocationOn, ChevronLeft, ChevronRight, VolumeOff, VolumeUp, Code
 } from '@mui/icons-material';
 import { useColorMode } from '../App';
 import EditModal from './EditModal';
@@ -80,9 +80,6 @@ const resolveAvatarSrc = (src) => {
   return `${API}${src}`;
 };
 
-// ──────────────────────────────────────────
-//  colors 팩토리
-// ──────────────────────────────────────────
 const makeColors = (mode) => ({
   mode,
   bg: mode === 'dark' ? '#0F1117' : '#F8FAFC',
@@ -606,13 +603,10 @@ const PostSkeleton = ({ colors }) => (
   </Box>
 );
 
-// ──────────────────────────────────────────
-//  본문 콘텐츠 스타일
-// ──────────────────────────────────────────
 const makeContentSx = (colors) => ({
   fontSize: '0.93rem', color: colors.textMuted, lineHeight: 1.85, mb: 1,
   '& img': { maxWidth: '100%', borderRadius: 1.5, my: 1.5, display: 'block' },
-  '& p': { mb: 1.5, mt: 0, color: colors.textMuted },
+  '& p': { mb: 1.5, mt: 0, color: colors.textMuted, whiteSpace: 'pre-wrap' },
   '& h1, & h2, & h3': { fontWeight: 800, color: colors.textPrimary, mb: 1, mt: 2 },
   '& ul, & ol': { pl: 2.5, mb: 1.5, color: colors.textMuted },
   '& li': { mb: 0.5 },
@@ -825,7 +819,6 @@ const AIAnswerSection = ({ postId, token, colors, postUpdatedAt, isMyPost }) => 
     '& pre': { backgroundColor: '#0D1117', color: '#D4D4D4', borderRadius: '6px', p: 1.5, fontSize: '0.76rem', fontFamily: '"JetBrains Mono",monospace', overflowX: 'auto', lineHeight: 1.7, my: 1, border: '1px solid #1E293B' },
   };
 
-  // 타인: 버튼 없음, 답변 있을 때만 보기 버튼
   if (!isMyPost) {
     if (!answer) return null;
     return (
@@ -977,6 +970,20 @@ const CommentItem = ({ comment, index, depth = 0, onReply, onDelete, onEdit, myN
   const leaveTimer = useRef(null);
   const hoverTimer = useRef(null);
 
+  const [editMode] = useState(() => {
+    return (comment.COMMENT_MODE || comment.commentMode) === 'rich' ? 'rich' : 'plain';
+  });
+
+  const [editPlainText, setEditPlainText] = useState('');
+  const editPlainRef = useRef(null);
+  const editMentionStartRef = useRef(-1);
+  const editMentionDebounceRef = useRef(null);
+  const [editMentionOpen, setEditMentionOpen] = useState(false);
+  const [editMentionSuggestions, setEditMentionSuggestions] = useState([]);
+  const [editMentionActiveIdx, setEditMentionActiveIdx] = useState(0);
+  const [editMentionAnchorPos, setEditMentionAnchorPos] = useState({ top: 0, left: 0 });
+  const editMentionStateRef = useRef({ open: false, suggestions: [], activeIdx: 0 });
+
   const handleCommentLike = async (e) => {
     e.stopPropagation();
     const next = !commentLiked;
@@ -995,15 +1002,74 @@ const CommentItem = ({ comment, index, depth = 0, onReply, onDelete, onEdit, myN
 
   const handleEditSubmit = async () => {
     try {
+      let finalContent;
+      if (editMode === 'plain') {
+        finalContent = `<p>${editPlainText
+          .replace(/\n/g, '<br>')
+          .replace(/@(\w+)/g, '<span style="color:#2563EB;font-weight:600">@$1</span>')
+          }</p>`;
+      } else {
+        finalContent = editContent;
+      }
       const res = await fetch(`${API}/feed/${comment.POST_ID}/comment/${comment.COMMENT_ID}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ content: editContent }),
+        body: JSON.stringify({ content: finalContent }),
       });
-      if (res.ok) { onEdit(comment.COMMENT_ID, editContent); setEditing(false); }
+      if (res.ok) {
+        onEdit(comment.COMMENT_ID, finalContent);
+        setEditing(false);
+      }
     } catch { }
   };
+  const handleEditPlainChange = (e) => {
+    const val = e.target.value;
+    setEditPlainText(val);
+    const cursor = e.target.selectionStart;
+    const textBefore = val.slice(0, cursor);
+    const atIdx = textBefore.lastIndexOf('@');
+    if (atIdx === -1 || textBefore.slice(atIdx + 1).includes(' ') || textBefore.slice(atIdx + 1).includes('\n')) {
+      setEditMentionOpen(false); editMentionStateRef.current.open = false; return;
+    }
+    editMentionStartRef.current = atIdx;
+    const rect = e.target.getBoundingClientRect();
+    setEditMentionAnchorPos({
+      top: rect.bottom + 4,
+      left: rect.left
+    });
+    clearTimeout(editMentionDebounceRef.current);
+    const q = textBefore.slice(atIdx + 1);
+    editMentionDebounceRef.current = setTimeout(async () => {
+      try {
+        const url = q ? `${API}/user/tag-search?q=${encodeURIComponent(q)}` : `${API}/user/tag-search`;
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        if (data.success) {
+          const users = data.users || [];
+          setEditMentionSuggestions(users);
+          setEditMentionOpen(users.length > 0);
+          setEditMentionActiveIdx(0);
+          editMentionStateRef.current = { open: users.length > 0, suggestions: users, activeIdx: 0 };
+        }
+      } catch { setEditMentionOpen(false); }
+    }, q === '' ? 0 : 150);
+  };
 
+  const insertEditMention = (nickname) => {
+    const input = editPlainRef.current;
+    if (!input) return;
+    const start = editMentionStartRef.current;
+    const before = editPlainText.slice(0, start);
+    const after = editPlainText.slice(input.selectionStart);
+    setEditPlainText(`${before}@${nickname} ${after}`);
+    setEditMentionOpen(false);
+    editMentionStateRef.current.open = false;
+    setTimeout(() => {
+      input.focus();
+      const pos = start + nickname.length + 2;
+      input.setSelectionRange(pos, pos);
+    }, 0);
+  };
   const handleDelete = async () => {
     try {
       const res = await fetch(`${API}/feed/${comment.POST_ID}/comment/${comment.COMMENT_ID}`, {
@@ -1023,6 +1089,7 @@ const CommentItem = ({ comment, index, depth = 0, onReply, onDelete, onEdit, myN
     '& blockquote': { borderLeft: `3px solid ${colors.accent}`, pl: 1.5, my: 0.8, color: colors.textHint, fontStyle: 'italic', backgroundColor: colors.inputBg, py: 0.5, borderRadius: '0 4px 4px 0' },
     '& pre': { backgroundColor: '#0D1117', color: '#D4D4D4', borderRadius: '6px', p: 1.5, fontSize: '0.78rem', fontFamily: '"JetBrains Mono",monospace', overflowX: 'auto', my: 1, whiteSpace: 'pre-wrap', border: '1px solid #1E293B' },
     '& code': { backgroundColor: colors.inputBg, color: '#CE9178', px: 0.6, py: 0.15, borderRadius: 0.5, fontSize: '0.82em', fontFamily: '"JetBrains Mono",monospace' },
+    '&:hover': { textDecoration: 'underline', cursor: 'pointer' },
   };
 
   return (
@@ -1088,7 +1155,21 @@ const CommentItem = ({ comment, index, depth = 0, onReply, onDelete, onEdit, myN
             <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}
               PaperProps={{ sx: { backgroundColor: colors.paper, border: `1px solid ${colors.border}`, boxShadow: '0 8px 32px rgba(15,23,42,0.15)', borderRadius: 1.5, minWidth: 120 } }}>
               {isMyComment ? [
-                <MenuItem key="edit" onClick={() => { setEditing(true); setEditContent(comment.CONTENT || comment.content || ''); setMenuAnchor(null); }}
+                <MenuItem key="edit" onClick={() => {
+                  const raw = comment.CONTENT || comment.content || '';
+                  setEditing(true);
+                  setMenuAnchor(null);
+                  if (editMode === 'plain') {
+                    const plain = raw
+                      .replace(/<br\s*\/?>/gi, '\n')
+                      .replace(/<span[^>]*>(@\w+)<\/span>/gi, '$1')
+                      .replace(/<[^>]*>/g, '')
+                      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+                    setEditPlainText(plain);
+                  } else {
+                    setEditContent(raw);
+                  }
+                }}
                   sx={{ fontSize: '0.82rem', gap: 1, color: colors.textPrimary }}>
                   <Edit sx={{ fontSize: 15, color: colors.textMuted }} />수정
                 </MenuItem>,
@@ -1107,11 +1188,71 @@ const CommentItem = ({ comment, index, depth = 0, onReply, onDelete, onEdit, myN
 
           {editing ? (
             <Box>
-              <Box sx={makeQuillBoxSx(colors)}>
-                <ReactQuill theme="snow" value={editContent} onChange={setEditContent} modules={commentModules} />
-              </Box>
+              {editMode === 'plain' ? (
+                <Box
+                  component="textarea"
+                  ref={editPlainRef}
+                  value={editPlainText}
+                  onChange={handleEditPlainChange}
+                  onKeyDown={e => {
+                    const { open, suggestions, activeIdx } = editMentionStateRef.current;
+                    if (open && suggestions.length) {
+                      if (e.key === 'ArrowDown') { e.preventDefault(); const n = Math.min(activeIdx + 1, suggestions.length - 1); setEditMentionActiveIdx(n); editMentionStateRef.current.activeIdx = n; }
+                      else if (e.key === 'ArrowUp') { e.preventDefault(); const n = Math.max(activeIdx - 1, 0); setEditMentionActiveIdx(n); editMentionStateRef.current.activeIdx = n; }
+                      else if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); if (suggestions[activeIdx]) insertEditMention(suggestions[activeIdx].NICKNAME); }
+                      else if (e.key === 'Escape') { setEditMentionOpen(false); editMentionStateRef.current.open = false; }
+                      return;
+                    }
+                  }}
+                  rows={3}
+                  sx={{
+                    width: '100%', resize: 'none', outline: 'none',
+                    border: `1px solid ${colors.border}`, borderRadius: 1.5,
+                    backgroundColor: colors.paper, color: colors.textPrimary,
+                    fontSize: '0.88rem', lineHeight: 1.75, p: '10px 14px',
+                    fontFamily: '"Plus Jakarta Sans","Noto Sans KR",sans-serif',
+                    transition: 'border-color 0.2s',
+                    '&:focus': { borderColor: colors.accent },
+                  }}
+                />
+              ) : (
+                <Box sx={makeQuillBoxSx(colors)}>
+                  <ReactQuill theme="snow" value={editContent} onChange={setEditContent} modules={commentModules} />
+                </Box>
+              )}
+
+              {/* 수정 모드 멘션 드롭다운 */}
+              {editMentionOpen && editMentionSuggestions.length > 0 && ReactDOM.createPortal(
+                <Box sx={{
+                  position: 'fixed', top: editMentionAnchorPos.top, left: editMentionAnchorPos.left,
+                  zIndex: 9999, minWidth: 220, borderRadius: 1.5,
+                  border: `1px solid ${colors.border}`, backgroundColor: colors.paper,
+                  boxShadow: '0 8px 24px rgba(15,23,42,0.15)', overflow: 'hidden',
+                }}>
+                  {editMentionSuggestions.map((u, idx) => (
+                    <Box key={u.USER_ID}
+                      onMouseDown={e => { e.preventDefault(); insertEditMention(u.NICKNAME); }}
+                      onMouseEnter={() => { setEditMentionActiveIdx(idx); editMentionStateRef.current.activeIdx = idx; }}
+                      sx={{
+                        display: 'flex', alignItems: 'center', gap: 1.2, px: 1.5, py: 0.9, cursor: 'pointer',
+                        backgroundColor: idx === editMentionActiveIdx ? (colors.mode === 'dark' ? '#1E3A5F' : '#EFF6FF') : colors.paper,
+                        borderBottom: idx < editMentionSuggestions.length - 1 ? `1px solid ${colors.border}` : 'none',
+                      }}>
+                      <Box sx={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', border: `1.5px solid ${colors.border}`, backgroundColor: colors.textPrimary, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        {u.AVATAR
+                          ? <img src={`${API}${u.AVATAR}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, color: colors.paper }}>{u.NICKNAME?.charAt(0).toUpperCase()}</Typography>
+                        }
+                      </Box>
+                      <Typography sx={{ flex: 1, fontSize: '0.83rem', fontWeight: 700, color: colors.textPrimary }}>{u.NICKNAME}</Typography>
+                    </Box>
+                  ))}
+                </Box>,
+                document.body
+              )}
+
               <Stack direction="row" spacing={1} justifyContent="flex-end" mt={1}>
-                <Button size="small" onClick={() => setEditing(false)}
+                <Button size="small" onClick={() => { setEditing(false); setEditMentionOpen(false); }}
                   sx={{ fontSize: '0.78rem', color: colors.textMuted, border: `1px solid ${colors.border}`, borderRadius: 1.5, textTransform: 'none' }}>
                   취소
                 </Button>
@@ -1122,9 +1263,21 @@ const CommentItem = ({ comment, index, depth = 0, onReply, onDelete, onEdit, myN
               </Stack>
             </Box>
           ) : (
-            renderContentWithCopy(comment.CONTENT || comment.content || '', colors, commentBodySx)
+            <Box
+              onClick={(e) => {
+                const target = e.target.closest('span[data-mention]') ||
+                  (e.target.tagName === 'SPAN' && e.target.style.color === 'rgb(37, 99, 235)' ? e.target : null);
+                if (!target) return;
+                const nickname = target.textContent.replace('@', '').trim();
+                if (nickname) {
+                  e.stopPropagation();
+                  navigate(`/user/${nickname}`);
+                }
+              }}
+            >
+              {renderContentWithCopy(comment.CONTENT || comment.content || '', colors, commentBodySx)}
+            </Box>
           )}
-
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
             {depth < 2 && (
               <Button size="small" startIcon={<ReplyOutlined sx={{ fontSize: 13 }} />} onClick={() => onReply(comment)}
@@ -1251,18 +1404,281 @@ export default function PostDetail() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [heartTrigger, setHeartTrigger] = useState(0);
 
-  const lastTapRef = useRef(0);
   const commentSectionRef = useRef(null);
   const commentListRef = useRef(null);
-  const commentInputRef = useRef(null);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionSuggestions, setMentionSuggestions] = useState([]);
+  const [mentionActiveIdx, setMentionActiveIdx] = useState(0);
+  const [mentionAnchorPos, setMentionAnchorPos] = useState({ top: 0, left: 0 });
+  const commentQuillRef = useRef(null);
+
+
+  const mentionStartRef = useRef(-1);
+  const mentionStateRef = useRef({ open: false, suggestions: [], activeIdx: 0 });
+  const mentionDebounceRef = useRef(null);
+
+  const fetchMentionUsers = useCallback(async (q) => {
+    try {
+      const url = q ? `${API}/user/tag-search?q=${encodeURIComponent(q)}` : `${API}/user/tag-search`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (data.success) {
+        const users = data.users || [];
+        setMentionSuggestions(users);
+        setMentionOpen(users.length > 0);
+        setMentionActiveIdx(0);
+        mentionStateRef.current.suggestions = users;
+        mentionStateRef.current.open = users.length > 0;
+        mentionStateRef.current.activeIdx = 0;
+      }
+    } catch { setMentionOpen(false); }
+  }, [token]);
+
+  const plainInputRef = useRef(null);
+  const [plainText, setPlainText] = useState('');
+  const [commentMode, setCommentMode] = useState('plain');
+
+  const insertPlainMention = useCallback((nickname) => {
+    const el = plainInputRef.current;
+    if (!el) return;
+    el.focus();
+
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+
+    const range = sel.getRangeAt(0);
+    const textNode = range.startContainer;
+    const cursorPos = range.startOffset;
+    const start = mentionStartRef.current;
+
+    // textNode가 텍스트 노드인지, start가 유효한지 확인
+    if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
+    const nodeLen = textNode.textContent.length;
+    const safeStart = Math.max(0, Math.min(start, nodeLen));
+    const safeEnd = Math.max(safeStart, Math.min(cursorPos, nodeLen));
+
+    const deleteRange = document.createRange();
+    deleteRange.setStart(textNode, safeStart);
+    deleteRange.setEnd(textNode, safeEnd);
+    deleteRange.deleteContents();
+
+    const span = document.createElement('span');
+    span.style.color = '#2563EB';
+    span.style.fontWeight = '600';
+    span.textContent = `@${nickname}`;
+    span.contentEditable = 'false';
+    deleteRange.insertNode(span);
+
+    const space = document.createTextNode(' ');
+    span.after(space);
+    const newRange = document.createRange();
+    newRange.setStartAfter(space);
+    newRange.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(newRange);
+
+    setPlainText(el.innerText || '');
+    setMentionOpen(false);
+    mentionStateRef.current = { open: false, suggestions: [], activeIdx: 0 };
+    mentionStartRef.current = -1;
+  }, []);
+
+  const insertCommentMention = useCallback((nickname) => {
+    const quill = commentQuillRef.current?.getEditor();
+    if (!quill) return;
+    const sel = quill.getSelection();
+    if (!sel) return;
+    const start = mentionStartRef.current;
+    quill.deleteText(start, sel.index - start, 'user');
+    quill.insertText(start, `@${nickname} `, { color: '#2563EB', bold: false }, 'user');
+    quill.formatText(start + nickname.length + 2, 1, { color: false }, 'silent');
+    quill.setSelection(start + nickname.length + 2, 0, 'silent');
+    setMentionOpen(false);
+    setMentionSuggestions([]);
+    mentionStartRef.current = -1;
+    mentionStateRef.current = { open: false, suggestions: [], activeIdx: 0 };
+  }, []);
+  const handlePlainChange = useCallback((e) => {
+    const val = e.target.value;
+    setPlainText(val);
+    const cursor = e.target.selectionStart;
+    const textBefore = val.slice(0, cursor);
+    const atIdx = textBefore.lastIndexOf('@');
+    if (atIdx === -1 || textBefore.slice(atIdx + 1).includes(' ') || textBefore.slice(atIdx + 1).includes('\n')) {
+      setMentionOpen(false); mentionStateRef.current.open = false; return;
+    }
+    mentionStartRef.current = atIdx;
+
+    const getCaretCoords = (el, pos) => {
+      const div = document.createElement('div');
+      const style = getComputedStyle(el);
+      ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'padding', 'border',
+        'boxSizing', 'whiteSpace', 'wordWrap', 'overflowWrap', 'width'].forEach(p => {
+          div.style[p] = style[p];
+        });
+      div.style.position = 'absolute';
+      div.style.visibility = 'hidden';
+      div.style.whiteSpace = 'pre-wrap';
+      div.style.top = '0'; div.style.left = '0';
+      document.body.appendChild(div);
+      const text = el.value.slice(0, pos);
+      div.textContent = text;
+      const span = document.createElement('span');
+      span.textContent = el.value.slice(pos) || '.';
+      div.appendChild(span);
+      const rect = el.getBoundingClientRect();
+      const spanRect = span.getBoundingClientRect();
+      document.body.removeChild(div);
+      return { top: rect.top + (spanRect.top - div.getBoundingClientRect?.()?.top || 0) + window.scrollY + 24, left: rect.left };
+    };
+
+    const rect = e.target.getBoundingClientRect();
+    const pos = {
+      top: rect.top - 4,
+      left: rect.left
+    };
+    setMentionAnchorPos(pos);
+
+    clearTimeout(mentionDebounceRef.current);
+    const q = textBefore.slice(atIdx + 1);
+    mentionDebounceRef.current = setTimeout(() => fetchMentionUsers(q), q === '' ? 0 : 150);
+  }, [fetchMentionUsers]);
+
+  const handlePlainInput = useCallback((e) => {
+    const el = plainInputRef.current;
+    if (!el) return;
+
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const preCaretRange = range.cloneRange();
+    preCaretRange.selectNodeContents(el);
+    preCaretRange.setEnd(range.endContainer, range.endOffset);
+    const textBefore = preCaretRange.toString();
+    const fullText = el.innerText || '';
+    setPlainText(fullText);
+
+    const atIdx = textBefore.lastIndexOf('@');
+    if (atIdx === -1 || textBefore.slice(atIdx + 1).includes(' ') || textBefore.slice(atIdx + 1).includes('\n')) {
+      setMentionOpen(false); mentionStateRef.current.open = false; return;
+    }
+    mentionStartRef.current = atIdx;
+    const rect = el.getBoundingClientRect();
+    setMentionAnchorPos({ top: rect.top - 4, left: rect.left });
+    clearTimeout(mentionDebounceRef.current);
+    const q = textBefore.slice(atIdx + 1);
+    mentionDebounceRef.current = setTimeout(() => fetchMentionUsers(q), q === '' ? 0 : 150);
+  }, [fetchMentionUsers]);
+
+  const handleAddPlainComment = useCallback(async () => {
+    if (!plainText.trim() || submitting) return;
+    const el = plainInputRef.current;
+    const mentionMatches = [...(el?.innerText || plainText).matchAll(/@([\w가-힣]+)/g)].map(m => m[1]);
+
+    const content = el ? `<p>${el.innerHTML.replace(/\n/g, '<br>')}</p>` : `<p>${plainText}</p>`;
+    const currentReplyTarget = replyTarget;
+    const optimistic = {
+      id: Date.now(), COMMENT_ID: Date.now(),
+      WRITER: myNickname || '나', AVATAR: myAvatar,
+      CONTENT: content, PARENT_ID: currentReplyTarget?.COMMENT_ID ?? null, replies: []
+    };
+    if (currentReplyTarget) setComments(prev => addReplyToTree(prev, currentReplyTarget.COMMENT_ID, optimistic));
+    else setComments(c => [...c, optimistic]);
+
+    setPlainText('');
+    if (plainInputRef.current) plainInputRef.current.innerHTML = '';
+
+    setReplyTarget(null);
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${API}/feed/${postId}/comment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ text: plainText.trim(), content, parentId: optimistic.PARENT_ID, commentMode: 'plain' }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const serverComment = { ...data.comment, replies: [] };
+        if (currentReplyTarget) setComments(prev => replaceInTree(prev, optimistic.COMMENT_ID, serverComment));
+        else setComments(c => c.map(cm => (cm.COMMENT_ID === optimistic.COMMENT_ID || cm.id === optimistic.id) ? serverComment : cm));
+        if (mentionMatches.length > 0) {
+          fetch(`${API}/user/notify-mention`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ nicknames: mentionMatches, postId: Number(postId) }),
+          }).catch(() => { });
+        }
+      }
+    } catch { }
+    finally { setSubmitting(false); }
+  }, [plainText, submitting, replyTarget, myNickname, myAvatar, postId, token]);
+
   const commentImageFiles = useRef([]);
   const clickTimerRef = useRef(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [aiModal, setAiModal] = useState(false);
   const [writerHoverAnchor, setWriterHoverAnchor] = useState(null);
   const [writerHoverVisible, setWriterHoverVisible] = useState(false);
   const writerLeaveTimer = useRef(null);
   const writerHoverTimer = useRef(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const quill = commentQuillRef.current?.getEditor();
+
+
+      if (!quill) return;
+
+      const onTextChange = () => {
+        const sel = quill.getSelection();
+        if (!sel) return;
+        const text = quill.getText(0, sel.index);
+        const atIdx = text.lastIndexOf('@');
+        if (atIdx === -1 || text.slice(atIdx + 1).includes(' ') || text.slice(atIdx + 1).includes('\n')) {
+          setMentionOpen(false); mentionStateRef.current.open = false; return;
+        }
+        mentionStartRef.current = atIdx;
+        const bounds = quill.getBounds(atIdx);
+        const rect = quill.root.getBoundingClientRect();
+        setMentionAnchorPos({
+          top: rect.bottom + 4,
+          left: rect.left
+        });
+        clearTimeout(mentionDebounceRef.current);
+        const q = text.slice(atIdx + 1);
+        mentionStateRef.current.open = false;
+        mentionDebounceRef.current = setTimeout(() => fetchMentionUsers(q), q === '' ? 0 : 150);
+      };
+
+      const onKeyDown = (e) => {
+        const { open, suggestions, activeIdx } = mentionStateRef.current;
+        if (!open || !suggestions.length) return;
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          const n = Math.min(activeIdx + 1, suggestions.length - 1);
+          setMentionActiveIdx(n); mentionStateRef.current.activeIdx = n;
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          const n = Math.max(activeIdx - 1, 0);
+          setMentionActiveIdx(n); mentionStateRef.current.activeIdx = n;
+        } else if (e.key === 'Tab') {
+          e.preventDefault();
+          if (suggestions[activeIdx]) insertCommentMention(suggestions[activeIdx].NICKNAME);
+        } else if (e.key === 'Escape') {
+          setMentionOpen(false); mentionStateRef.current.open = false;
+        }
+      };
+
+      quill.on('text-change', onTextChange);
+      quill.root.addEventListener('keydown', onKeyDown, true);
+
+      return () => {
+        quill.off('text-change', onTextChange);
+        quill.root.removeEventListener('keydown', onKeyDown, true);
+      };
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [fetchMentionUsers]);
 
   const commentImageHandler = useCallback(() => {
     const input = document.createElement('input');
@@ -1272,7 +1688,8 @@ export default function PostDetail() {
       if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
-        const quill = commentInputRef.current?.getEditor();
+        const quill = commentQuillRef.current?.getEditor();
+
         if (!quill) return;
         const range = quill.getSelection(true);
         const index = range ? range.index : quill.getLength();
@@ -1303,7 +1720,11 @@ export default function PostDetail() {
   const isCommentEmpty = (html) => !html || html.replace(/<[^>]*>?/gm, '').trim().length === 0;
 
   useEffect(() => {
-    const handleScroll = () => setShowScrollTop(window.scrollY > 400);
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 400);
+      setMentionOpen(false);
+      mentionStateRef.current.open = false;
+    };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -1343,17 +1764,9 @@ export default function PostDetail() {
     if (location.hash === '#comments') {
       setTimeout(() => {
         commentSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        setTimeout(() => commentInputRef.current?.focus?.(), 400);
       }, 200);
     }
   }, [location.hash, loading]);
-
-  useEffect(() => {
-    if (location.state?.showAIModal && feed && !loading) {
-      setAiModal(true);
-      window.history.replaceState({}, '');
-    }
-  }, [location.state, feed, loading]);
 
   const handleProfileClick = useCallback((writerNickname) => {
     if (!writerNickname) return;
@@ -1442,13 +1855,22 @@ export default function PostDetail() {
       const res = await fetch(`${API}/feed/${postId}/comment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ text: optimistic.CONTENT.replace(/<[^>]*>?/gm, '').trim(), content: optimistic.CONTENT, parentId: optimistic.PARENT_ID }),
+        body: JSON.stringify({ text: optimistic.CONTENT.replace(/<[^>]*>?/gm, '').trim(), content: optimistic.CONTENT, parentId: optimistic.PARENT_ID, commentMode: 'rich' }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
         const serverComment = { ...data.comment, replies: [] };
         if (currentReplyTarget) setComments(prev => replaceInTree(prev, optimistic.COMMENT_ID, serverComment));
         else setComments(c => c.map(cm => (cm.COMMENT_ID === optimistic.COMMENT_ID || cm.id === optimistic.id) ? serverComment : cm));
+
+        const mentionMatches = [...optimistic.CONTENT.matchAll(/@([\w가-힣]+)/g)].map(m => m[1]);
+        if (mentionMatches.length > 0) {
+          fetch(`${API}/user/notify-mention`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ nicknames: mentionMatches, postId: Number(postId) }),
+          }).catch(() => { });
+        }
       }
     } catch { }
     finally { setSubmitting(false); }
@@ -1555,7 +1977,7 @@ export default function PostDetail() {
                         {feed.WRITER || feed.writer || 'Unknown'}
                       </Typography>
                       <Typography sx={{ color: colors.textHint, fontSize: '0.75rem', mt: 0.2 }}>
-                        {(feed.ROLE || feed.role || 'Developer')}
+                        {feed.BIO_SHORT || feed.ROLE || feed.role || ''}
                         {(feed.CREATED_AT || feed.createdAt) ? ` · ${formatRelativeTime(feed.CREATED_AT || feed.createdAt)}` : ''}
                       </Typography>
 
@@ -1606,6 +2028,7 @@ export default function PostDetail() {
                     ? (feed.DESCRIPTION || feed.description || feed.CONTENT || feed.content || '')
                       .replace(/<video[^>]*>.*?<\/video>/gi, '')
                       .replace(/<video[^>]*\/>/gi, '')
+                      .replace(/<p><br><\/p>/g, '<p>&nbsp;</p>')
                       .trim()
                     : (feed.DESCRIPTION || feed.description || feed.CONTENT || feed.content),
                   colors
@@ -1686,7 +2109,7 @@ export default function PostDetail() {
                   </Box>
                   <Box sx={{ px: 3, py: 3, borderTop: `1px solid ${colors.border}`, backgroundColor: colors.mode === 'dark' ? 'rgba(255,255,255,0.02)' : '#FAFBFC' }}>
                     {replyTarget && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, mb: 1.5, backgroundColor: colors.mode === 'dark' ? '#1E3A5F' : '#EFF6FF', borderRadius: 1.5, border: `1px solid ${colors.accent}`, animation: 'slideDown 0.2s ease both', '@keyframes slideDown': { from: { opacity: 0, transform: 'translateY(-8px)' }, to: { opacity: 1, transform: 'translateY(0)' } } }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, mb: 1.5, backgroundColor: colors.mode === 'dark' ? '#1E3A5F' : '#EFF6FF', borderRadius: 1.5, border: `1px solid ${colors.accent}` }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
                           <ReplyOutlined sx={{ fontSize: 14, color: colors.accent }} />
                           <Typography sx={{ fontSize: '0.78rem', color: colors.accent, fontWeight: 600 }}>
@@ -1698,17 +2121,123 @@ export default function PostDetail() {
                         </IconButton>
                       </Box>
                     )}
+
+                    <Box sx={{ display: 'flex', gap: 0.5, mb: 1.5 }}>
+                      <Tooltip title="@멘션으로 사용자 태그 가능" placement="top">
+                        <Button size="small"
+                          onClick={() => setCommentMode('plain')}
+                          startIcon={<ChatBubbleOutline sx={{ fontSize: '13px !important' }} />}
+                          sx={{
+                            fontSize: '0.72rem', fontWeight: 700, textTransform: 'none',
+                            px: 1.2, py: 0.4, borderRadius: 1,
+                            backgroundColor: commentMode === 'plain' ? colors.textPrimary : 'transparent',
+                            color: commentMode === 'plain' ? colors.paper : colors.textHint,
+                            border: `1px solid ${commentMode === 'plain' ? colors.textPrimary : colors.border}`,
+                            '&:hover': { backgroundColor: commentMode === 'plain' ? colors.textPrimary : colors.inputBg },
+                          }}>
+                          일반
+                        </Button>
+                      </Tooltip>
+
+                      <Tooltip title="코드블록, 인용구, 이미지 등 서식 작성 가능" placement="top">
+                        <Button size="small"
+                          onClick={() => setCommentMode('rich')}
+                          startIcon={<Code sx={{ fontSize: '13px !important' }} />}
+                          sx={{
+                            fontSize: '0.72rem', fontWeight: 700, textTransform: 'none',
+                            px: 1.2, py: 0.4, borderRadius: 1,
+                            backgroundColor: commentMode === 'rich' ? colors.textPrimary : 'transparent',
+                            color: commentMode === 'rich' ? colors.paper : colors.textHint,
+                            border: `1px solid ${commentMode === 'rich' ? colors.textPrimary : colors.border}`,
+                            '&:hover': { backgroundColor: commentMode === 'rich' ? colors.textPrimary : colors.inputBg },
+                          }}>
+                          코드
+                        </Button>
+                      </Tooltip>
+                      <Typography sx={{ fontSize: '0.7rem', color: colors.textHint, alignSelf: 'center', ml: 0.5 }}>
+                        {commentMode === 'plain' ? '· @닉네임으로 멘션, 알림이 전송됩니다' : '· 코드블록·인용구·이미지 사용 가능'}
+                      </Typography>
+                    </Box>
+
                     <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
                       <Avatar src={resolveAvatarSrc(myAvatar)} sx={{ width: 34, height: 34, fontSize: '0.7rem', backgroundColor: colors.textPrimary, flexShrink: 0, mt: 0.5, fontWeight: 800 }}>
                         {getInitial(myNickname)}
                       </Avatar>
                       <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Box sx={makeQuillBoxSx(colors)}>
-                          <ReactQuill ref={commentInputRef} theme="snow" value={newComment} onChange={setNewComment} modules={commentModules}
-                            placeholder={replyTarget ? `@${replyTarget.WRITER || replyTarget.writer}에게 답글...` : '댓글을 작성하세요... 코드 강조, 인용구 사용 가능'} />
-                        </Box>
+                        {commentMode === 'plain' ? (
+                          <Box
+                            ref={plainInputRef}
+                            contentEditable
+                            suppressContentEditableWarning
+                            onInput={handlePlainInput}
+                            onKeyDown={e => {
+                              const { open, suggestions, activeIdx } = mentionStateRef.current;
+                              if (open && suggestions.length) {
+                                if (e.key === 'ArrowDown') { e.preventDefault(); const n = Math.min(activeIdx + 1, suggestions.length - 1); setMentionActiveIdx(n); mentionStateRef.current.activeIdx = n; }
+                                else if (e.key === 'ArrowUp') { e.preventDefault(); const n = Math.max(activeIdx - 1, 0); setMentionActiveIdx(n); mentionStateRef.current.activeIdx = n; }
+                                else if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); if (suggestions[activeIdx]) insertPlainMention(suggestions[activeIdx].NICKNAME); }
+                                else if (e.key === 'Escape') { setMentionOpen(false); mentionStateRef.current.open = false; }
+                                return;
+                              }
+                              if (e.ctrlKey && e.key === ' ') {
+                                e.preventDefault();
+                                const el = plainInputRef.current;
+                                if (!el) return;
+                                const sel = window.getSelection();
+                                const cursor = sel.getRangeAt(0).startOffset;
+                                const textBefore = sel.anchorNode?.textContent?.slice(0, cursor) || '';
+                                const atIdx = textBefore.lastIndexOf('@');
+                                if (atIdx === -1) return;
+                                mentionStartRef.current = atIdx;
+                                const rect = el.getBoundingClientRect();
+                                setMentionAnchorPos({ top: rect.top - 4, left: rect.left });
+                                fetchMentionUsers(textBefore.slice(atIdx + 1));
+                                return;
+                              }
+                              if (e.key === 'Enter' && !e.ctrlKey) {
+                                e.preventDefault();
+                                setMentionOpen(false);
+                                mentionStateRef.current.open = false;
+                                handleAddPlainComment();
+                              }
+                              if (e.key === 'Enter' && e.ctrlKey) {
+                                e.preventDefault();
+                                document.execCommand('insertLineBreak');
+                              }
+                            }}
+                            data-placeholder={replyTarget ? `@${replyTarget.WRITER || replyTarget.writer}에게 답글... (@멘션 지원)` : '댓글을 작성하세요... (@닉네임으로 멘션)'}
+                            sx={{
+                              width: '100%', minHeight: 72, outline: 'none',
+                              border: `1px solid ${colors.border}`, borderRadius: 1.5,
+                              backgroundColor: colors.paper, color: colors.textPrimary,
+                              fontSize: '0.88rem', lineHeight: 1.75, p: '10px 14px',
+                              fontFamily: '"Plus Jakarta Sans","Noto Sans KR",sans-serif',
+                              transition: 'border-color 0.2s', wordBreak: 'break-word',
+                              '&:focus': { borderColor: colors.accent },
+                              '&:empty::before': { content: 'attr(data-placeholder)', color: colors.textHint, pointerEvents: 'none' },
+                            }}
+                          />
+                        ) : (
+                          <Box sx={makeQuillBoxSx(colors)}>
+                            <ReactQuill
+                              ref={commentQuillRef}
+                              theme="snow"
+                              value={newComment}
+                              onChange={setNewComment}
+                              modules={commentModules}
+                              placeholder="서식 있는 댓글을 작성하세요..."
+                            />
+                          </Box>
+                        )}
+
                         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1.5 }}>
-                          <Button variant="contained" disabled={isCommentEmpty(newComment) || submitting} onClick={handleAddComment}
+                          <Button variant="contained"
+                            disabled={(commentMode === 'plain' ? !plainText.trim() : isCommentEmpty(newComment)) || submitting}
+                            onClick={commentMode === 'plain' ? () => {
+                              setMentionOpen(false);
+                              mentionStateRef.current.open = false;
+                              handleAddPlainComment();
+                            } : handleAddComment}
                             endIcon={submitting ? <CircularProgress size={13} sx={{ color: '#fff' }} /> : <ArrowUpward sx={{ fontSize: 15 }} />}
                             sx={{ backgroundColor: colors.textPrimary, color: colors.paper, textTransform: 'none', fontWeight: 700, fontSize: '0.82rem', px: 2.5, py: 0.8, borderRadius: 1.5, boxShadow: 'none', '&:hover': { backgroundColor: colors.accent }, '&.Mui-disabled': { backgroundColor: colors.border, color: colors.textHint }, transition: 'all 0.15s' }}>
                             {replyTarget ? '답글 등록' : '댓글 등록'}
@@ -1799,6 +2328,40 @@ export default function PostDetail() {
           게시글이 삭제되었습니다.
         </Alert>
       </Snackbar>
+
+      {mentionOpen && mentionSuggestions.length > 0 && (
+        <Box sx={{
+          position: 'fixed', top: mentionAnchorPos.top, left: mentionAnchorPos.left,
+          transform: 'translateY(-100%)',
+          zIndex: 9999, minWidth: 220, borderRadius: 1.5,
+          border: `1px solid ${colors.border}`, backgroundColor: colors.paper,
+          boxShadow: '0 8px 24px rgba(15,23,42,0.15)', overflow: 'hidden',
+        }}>
+          {mentionSuggestions.map((u, idx) => (
+            <Box key={u.USER_ID}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                if (commentMode === 'plain') insertPlainMention(u.NICKNAME);
+                else insertCommentMention(u.NICKNAME);
+              }}
+              onMouseEnter={() => { setMentionActiveIdx(idx); mentionStateRef.current.activeIdx = idx; }}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 1.2, px: 1.5, py: 0.9, cursor: 'pointer',
+                backgroundColor: idx === mentionActiveIdx ? (colors.mode === 'dark' ? '#1E3A5F' : '#EFF6FF') : colors.paper,
+                borderBottom: idx < mentionSuggestions.length - 1 ? `1px solid ${colors.border}` : 'none',
+                transition: 'background 0.1s',
+              }}>
+              <Box sx={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', border: `1.5px solid ${colors.border}`, backgroundColor: colors.textPrimary, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {u.AVATAR
+                  ? <img src={`${API}${u.AVATAR}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, color: colors.paper }}>{u.NICKNAME?.charAt(0).toUpperCase()}</Typography>
+                }
+              </Box>
+              <Typography sx={{ flex: 1, fontSize: '0.83rem', fontWeight: 700, color: colors.textPrimary }}>{u.NICKNAME}</Typography>
+            </Box>
+          ))}
+        </Box>
+      )}
       {showScrollTop && (
         <Box onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           sx={{ position: 'fixed', bottom: 32, right: 32, zIndex: 200, width: 44, height: 44, borderRadius: '50%', backgroundColor: colors.textPrimary, color: colors.paper, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 20px rgba(15,23,42,0.2)', animation: 'fadeUp 0.2s ease both', transition: 'all 0.2s', '&:hover': { backgroundColor: colors.accent, transform: 'translateY(-2px)' } }}>

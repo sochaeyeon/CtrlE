@@ -35,11 +35,13 @@ router.get('/', auth, async (req, res) => {
                 if (typeof content.getData === 'function') {
                     content = await content.getData();
                 }
-                const match = content.match(/src="([^"]+)"/);
-                if (match) targetImage = match[1];
+                const imgMatch = content.match(/<img[^>]+src=["']([^"']+)["']/);
+                const videoMatch = content.match(/<(?:video|source)[^>]+src=["']([^"']+)["']/);
+                targetImage = imgMatch ? imgMatch[1] : (videoMatch ? videoMatch[1] : null);
             }
+            const isVideo = targetImage ? /\.(mp4|webm|mov)(\?|$)/i.test(targetImage) : false;
             const { TARGET_CONTENT, ...rest } = row;
-            return { ...rest, TARGET_IMAGE: targetImage };
+            return { ...rest, TARGET_IMAGE: targetImage, TARGET_IS_VIDEO: isVideo ? 'Y' : 'N' };
         }));
 
         const unread_count = notifications.filter(r => r.IS_READ === 'N').length;

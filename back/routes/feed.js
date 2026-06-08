@@ -460,6 +460,7 @@ router.get('/:postId', jwtAuthentication, async (req, res) => {
        c.CATEGORY_NAME AS CATEGORY_NAME,
        u.NICKNAME  AS WRITER,
        u.BIO       AS ROLE,
+       u.BIO_SHORT AS BIO_SHORT,
        (SELECT IMAGE_URL FROM PROFILE_IMAGES
         WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR,
        (SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID) AS LIKES,
@@ -537,7 +538,7 @@ router.get('/:postId', jwtAuthentication, async (req, res) => {
 
 router.get('/:postId/comments', jwtAuthentication, async (req, res) => {
     const { postId } = req.params;
-    const userId = getUserId(req); 
+    const userId = getUserId(req);
     const conn = await db.getConnection();
 
     try {
@@ -546,6 +547,8 @@ router.get('/:postId/comments', jwtAuthentication, async (req, res) => {
                     c.CONTENT, c.CODE_CONTENT, c.LANGUAGE,
                     c.CREATED_AT,
                     u.NICKNAME  AS WRITER,
+                    u.BIO       AS ROLE,
+                    u.BIO_SHORT AS BIO_SHORT,
                     (SELECT IMAGE_URL FROM PROFILE_IMAGES
                      WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR,
                      (SELECT COUNT(*) FROM COMMENT_LIKES WHERE COMMENT_ID = c.COMMENT_ID) AS LIKE_COUNT,
@@ -592,7 +595,7 @@ router.get('/:postId/comments', jwtAuthentication, async (req, res) => {
 router.post('/:postId/comment', jwtAuthentication, async (req, res) => {
     const { postId } = req.params;
     const userId = getUserId(req);
-    const { text, content, parentId, codeContent, language } = req.body;
+    const { text, content, parentId, codeContent, language, commentMode } = req.body;
 
     if (!text?.trim()) {
         return res.status(400).json({ success: false, message: '내용을 입력해주세요.' });
@@ -601,14 +604,15 @@ router.post('/:postId/comment', jwtAuthentication, async (req, res) => {
     const conn = await db.getConnection();
     try {
         await conn.execute(
-            `INSERT INTO COMMENTS (COMMENT_ID, POST_ID, USER_ID, PARENT_ID, CONTENT, CODE_CONTENT, LANGUAGE, STATUS)
-             VALUES (SEQ_COMMENT_ID.NEXTVAL, :postId, :userId, :parentId, :content, :codeContent, :language, 'ACTIVE')`,
+            `INSERT INTO COMMENTS (COMMENT_ID, POST_ID, USER_ID, PARENT_ID, CONTENT, CODE_CONTENT, LANGUAGE, COMMENT_MODE, STATUS)
+     VALUES (SEQ_COMMENT_ID.NEXTVAL, :postId, :userId, :parentId, :content, :codeContent, :language, :commentMode, 'ACTIVE')`,
             {
                 postId, userId,
                 parentId: parentId ?? null,
                 content: content ?? text,
                 codeContent: codeContent ?? null,
                 language: language ?? null,
+                commentMode: commentMode ?? 'plain',
             }
         );
 
@@ -631,7 +635,7 @@ router.post('/:postId/comment', jwtAuthentication, async (req, res) => {
 
         const inserted = await conn.execute(
             `SELECT c.COMMENT_ID, c.POST_ID, c.PARENT_ID,
-                    c.CONTENT, c.CODE_CONTENT, c.LANGUAGE, c.CREATED_AT,
+                    c.CONTENT, c.CODE_CONTENT, c.LANGUAGE, c.COMMENT_MODE, c.COMMENT_MODE,c.CREATED_AT,
                     u.NICKNAME AS WRITER,
                     (SELECT IMAGE_URL FROM PROFILE_IMAGES
                      WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR

@@ -267,7 +267,8 @@ router.get('/mypage/data', jwtAuthentication, async (req, res) => {
             }
 
             const imgMatch = content ? content.match(/<img[^>]+src=["']([^"']+)["']/) : null;
-            const firstImage = imgMatch ? imgMatch[1] : null;
+            const videoMatch = content ? content.match(/<(?:video|source)[^>]+src=["']([^"']+)["']/) : null;
+            const firstImage = imgMatch ? imgMatch[1] : (videoMatch ? videoMatch[1] : null);
 
             return { ...row, description: content, images: firstImage, views: row.views ?? 0 };
         }));
@@ -508,7 +509,6 @@ router.post('/follow/:targetId', jwtAuthentication, async (req, res) => {
             return res.json({ success: true, status: 'NONE' });
         }
 
-        // 신규
         const followStatus = isPrivate ? 'PENDING' : 'ACCEPTED';
         await conn.execute(
             `INSERT INTO FOLLOWS (FOLLOWER_ID, FOLLOWING_ID, STATUS) 
@@ -516,7 +516,6 @@ router.post('/follow/:targetId', jwtAuthentication, async (req, res) => {
             { userId, targetId, status: followStatus }
         );
 
-        // 알림 타입 분기
         const notiType = isPrivate ? 'FOLLOW_REQUEST' : 'FOLLOW';
         await conn.execute(
             `INSERT INTO NOTIFICATIONS (NOTI_ID, RECEIVER_ID, SENDER_ID, NOTI_TYPE, TARGET_TYPE, TARGET_ID)
@@ -647,7 +646,9 @@ router.get('/profile/:nickname', jwtAuthentication, async (req, res) => {
                     content = await content.getData();
                 }
                 const imgMatch = content ? content.match(/<img[^>]+src=["']([^"']+)["']/) : null;
-                return { ...row, description: content, images: imgMatch ? imgMatch[1] : null, views: row.views ?? 0 };
+                const videoMatch = content ? content.match(/<(?:video|source)[^>]+src=["']([^"']+)["']/) : null;
+                const firstImage = imgMatch ? imgMatch[1] : (videoMatch ? videoMatch[1] : null);
+                return { ...row, description: content, images: firstImage, views: row.views ?? 0 };
             }));
         }
 
@@ -725,7 +726,9 @@ router.get('/bookmarks', jwtAuthentication, async (req, res) => {
                 content = await content.getData();
             }
             const imgMatch = content ? content.match(/<img[^>]+src=["']([^"']+)["']/) : null;
-            return { ...row, description: content, images: imgMatch ? imgMatch[1] : null, views: row.views ?? 0 };
+            const videoMatch = content ? content.match(/<(?:video|source)[^>]+src=["']([^"']+)["']/) : null;
+            const firstImage = imgMatch ? imgMatch[1] : (videoMatch ? videoMatch[1] : null);
+            return { ...row, description: content, images: firstImage, views: row.views ?? 0 };
         }));
 
         res.json({ success: true, list: bookmarkData });
@@ -862,15 +865,24 @@ router.get('/tag-search', jwtAuthentication, async (req, res) => {
         const keyword = q ? `%${q.toLowerCase()}%` : null;
 
         const tagAllowFilter = `
-        AND (
-          u.TAG_ALLOW = 'EVERYONE'
-          OR (u.TAG_ALLOW = 'FOLLOWING' AND EXISTS (
-            SELECT 1 FROM FOLLOWS f
-            WHERE f.FOLLOWER_ID = :myId8
-              AND f.FOLLOWING_ID = u.USER_ID
-              AND f.STATUS = 'ACCEPTED'
-          ))
-        )`;
+            AND (
+            u.TAG_ALLOW = 'EVERYONE'
+            OR (u.TAG_ALLOW = 'FOLLOWING' AND EXISTS (
+                SELECT 1 FROM FOLLOWS f
+                WHERE f.FOLLOWER_ID = :myId8
+                AND f.FOLLOWING_ID = u.USER_ID
+                AND f.STATUS = 'ACCEPTED'
+            ))
+            )
+            AND (
+            u.MENTION_ALLOW = 'EVERYONE'
+            OR (u.MENTION_ALLOW = 'FOLLOWING' AND EXISTS (
+                SELECT 1 FROM FOLLOWS f2
+                WHERE f2.FOLLOWER_ID = :myId9
+                AND f2.FOLLOWING_ID = u.USER_ID
+                AND f2.STATUS = 'ACCEPTED'
+            ))
+            )`;
 
         const sql = keyword ? `
       SELECT u.USER_ID, u.NICKNAME,
@@ -918,8 +930,8 @@ router.get('/tag-search', jwtAuthentication, async (req, res) => {
     `;
 
         const binds = keyword
-            ? { myId, myId2: myId, myId3: myId, myId4: myId, myId5: myId, myId6: myId, myId7: myId, myId8: myId, keyword }
-            : { myId, myId2: myId, myId3: myId, myId4: myId, myId5: myId, myId6: myId, myId7: myId, myId8: myId };
+            ? { myId, myId2: myId, myId3: myId, myId4: myId, myId5: myId, myId6: myId, myId7: myId, myId8: myId, myId9: myId, keyword }
+            : { myId, myId2: myId, myId3: myId, myId4: myId, myId5: myId, myId6: myId, myId7: myId, myId8: myId, myId9: myId };
 
         const result = await conn.execute(sql, binds, { outFormat: oracledb.OUT_FORMAT_OBJECT });
         res.json({ success: true, users: result.rows });
@@ -929,10 +941,11 @@ router.get('/tag-search', jwtAuthentication, async (req, res) => {
         await conn.close();
     }
 });
-// POST /user/notify-mention — 태그 알림 발송
+
 router.post('/notify-mention', jwtAuthentication, async (req, res) => {
     const myId = req.user.userId;
-    const { nicknames } = req.body; // string[]
+    const { nicknames, postId } = req.body;
+    console.log('==== notify-mention 호출됨 ====', { nicknames, postId, myId });
     if (!nicknames || nicknames.length === 0) return res.json({ success: true });
     const conn = await db.getConnection();
     try {
@@ -945,13 +958,15 @@ router.post('/notify-mention', jwtAuthentication, async (req, res) => {
             if (!targetId || targetId === myId) continue;
             await conn.execute(
                 `INSERT INTO NOTIFICATIONS (NOTI_ID, RECEIVER_ID, SENDER_ID, NOTI_TYPE, TARGET_TYPE, TARGET_ID)
-         VALUES (SEQ_NOTI_ID.NEXTVAL, :targetId, :myId, 'MENTION', 'USER', :myId2)`,
-                { targetId, myId, myId2: myId }, { autoCommit: false }
+                 VALUES (SEQ_NOTI_ID.NEXTVAL, :targetId, :myId, 'MENTION', 'POST', :postId)`,
+                { targetId, myId, postId: Number(postId) },
+                { autoCommit: false }
             );
         }
         await conn.commit();
         res.json({ success: true });
     } catch (err) {
+        console.error('[notify-mention error]', err);
         await conn.rollback();
         res.status(500).json({ success: false, message: err.message });
     } finally {
@@ -959,7 +974,6 @@ router.post('/notify-mention', jwtAuthentication, async (req, res) => {
     }
 });
 
-// GET /user/followers/by/:userId — 특정 유저의 팔로워 목록
 router.get('/followers/by/:targetId', jwtAuthentication, async (req, res) => {
     const { targetId } = req.params;
     const conn = await db.getConnection();

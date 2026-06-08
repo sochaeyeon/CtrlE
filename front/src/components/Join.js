@@ -185,7 +185,7 @@ export default function Signup() {
         ...f,
         email: oauthEmail,
         nickname: oauthNick ? decodeURIComponent(oauthNick) : '',
-        password: 'OAUTH_ACCOUNT', 
+        password: 'OAUTH_ACCOUNT',
         confirmPassword: 'OAUTH_ACCOUNT'
       }));
     }
@@ -282,7 +282,7 @@ export default function Signup() {
             termsAgree: form.termsAgree ? 'Y' : 'N',
             privacyAgree: form.privacyAgree ? 'Y' : 'N',
             marketingAgree: form.marketingAgree ? 'Y' : 'N',
-            code: 'OAUTH_SKIP_CODE' 
+            code: 'OAUTH_SKIP_CODE'
           })
         });
         const data = await response.json();
@@ -382,17 +382,20 @@ export default function Signup() {
       <CssBaseline />
 
       <Box sx={{ minHeight: '100vh', width: '100vw', margin: { md: '-24px', xs: '-16px' }, display: 'flex', backgroundColor: '#F8FAFC' }}>
-        <Box sx={{ display: { xs: 'none', md: 'flex' }, flexDirection: 'column', justifyContent: 'space-between', width: '42%', minHeight: '100vh', backgroundColor: '#0F172A', p: '52px 48px', position: 'relative', overflow: 'hidden' }}>
-          <Box sx={{ position: 'absolute', top: '-80px', right: '-80px', width: 320, height: 320, borderRadius: '50%', background: 'radial-gradient(circle, rgba(37,99,235,0.15) 0%, transparent 70%)', pointerEvents: 'none' }} />
-          <Box sx={{ position: 'absolute', bottom: '60px', left: '-60px', width: 240, height: 240, borderRadius: '50%', background: 'radial-gradient(circle, rgba(37,99,235,0.08) 0%, transparent 70%)', pointerEvents: 'none' }} />
-          <Box><Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}><Box sx={{ width: 32, height: 32, borderRadius: 1.2, backgroundColor: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '0.9rem', lineHeight: 1 }}>{'<>'}</Typography></Box><Typography sx={{ color: '#FFFFFF', fontWeight: 800, fontSize: '1.1rem', letterSpacing: '-0.02em' }}>CtrlE</Typography></Box></Box>
-          <Box><Typography variant="h3" sx={{ color: '#FFFFFF', fontSize: { md: '2.4rem', lg: '2.8rem' }, mb: 3 }}>버그를 함께<br />해결하는 곳</Typography><Typography sx={{ color: '#94A3B8', fontSize: '0.88rem', lineHeight: 1.8, maxWidth: 280 }}>로컬 에러를 실시간으로 공유하고,<br />개발자 커뮤니티와 함께 빠르게 해결하세요.</Typography><Stack direction="row" spacing={4} sx={{ mt: 5 }}>{[['12K+', '활성 개발자'], ['98%', '문제 해결률'], ['3분', '평균 응답']].map(([val, lbl]) => (<Box key={lbl}><Typography sx={{ color: '#2563EB', fontWeight: 800, fontSize: '1.3rem', lineHeight: 1 }}>{val}</Typography><Typography sx={{ color: '#64748B', fontSize: '0.72rem', mt: 0.4 }}>{lbl}</Typography></Box>))}</Stack></Box>
-          <Typography sx={{ color: '#334155', fontSize: '0.72rem', fontStyle: 'italic' }}>"Code is communication."</Typography>
-        </Box>
-
         <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', p: { xs: 3, sm: 5 } }}>
           <Box sx={{ width: '100%', maxWidth: 420 }}>
-
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, mb: 4 }}>
+              <Box sx={{
+                width: 32, height: 32, borderRadius: 1.2,
+                backgroundColor: '#000000',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Typography sx={{ color: '#FFFFFF', fontWeight: 900, fontSize: '0.9rem', lineHeight: 1 }}>{'<>'}</Typography>
+              </Box>
+              <Typography sx={{ color: '#000000', fontWeight: 800, fontSize: '1.3rem', letterSpacing: '-0.02em' }}>
+                CtrlE
+              </Typography>
+            </Box>
             {step === 'SUCCESS' && (
               <Box sx={{ textAlign: 'center', animation: 'fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards', '@keyframes fadeInUp': { '0%': { opacity: 0, transform: 'translateY(15px)' }, '100%': { opacity: 1, transform: 'translateY(0)' } } }}>
                 <Box sx={{ width: 72, height: 72, borderRadius: '50%', backgroundColor: 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px auto', animation: 'scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both', '@keyframes scaleIn': { '0%': { transform: 'scale(0)' }, '100%': { transform: 'scale(1)' } } }}><CheckCircleOutline sx={{ fontSize: 40, color: '#10B981' }} /></Box>

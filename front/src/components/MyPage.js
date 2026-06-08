@@ -340,6 +340,54 @@ const GitHubInput = ({ value, onChange, colors }) => {
   );
 };
 
+// ── 비디오 썸네일 캡처 훅 ─────────────────────────────────────
+const useVideoThumbnail = (src) => {
+  const [thumb, setThumb] = useState(null);
+
+  useEffect(() => {
+    if (!src) return;
+    const video = document.createElement('video');
+    video.crossOrigin = 'anonymous';
+    video.preload = 'metadata';
+    video.muted = true;
+    video.src = src;
+
+    video.onloadedmetadata = () => {
+      // 중간 프레임으로 시크
+      video.currentTime = video.duration / 2;
+    };
+
+    video.onseeked = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 320;
+      canvas.height = video.videoHeight || 320;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      setThumb(canvas.toDataURL('image/jpeg', 0.8));
+      video.src = ''; // 메모리 해제
+    };
+
+    video.onerror = () => setThumb(null);
+  }, [src]);
+
+  return thumb;
+};
+
+// ── VideoThumb 컴포넌트 ───────────────────────────────────────
+const VideoThumb = ({ src, sx }) => {
+  const thumb = useVideoThumbnail(src);
+
+  if (thumb) {
+    return <Box component="img" src={thumb} sx={sx} />;
+  }
+  // 로딩 중엔 어두운 플레이스홀더
+  return (
+    <Box sx={{ ...sx, backgroundColor: '#1E293B', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <CircularProgress size={20} sx={{ color: '#475569' }} />
+    </Box>
+  );
+};
+
 // ── FollowModal (마이페이지용) ─────────────────────────────────
 const FollowModal = ({ open, initialTab, token, onClose, onFollowChange, colors }) => {
   const navigate = useNavigate();
@@ -639,10 +687,18 @@ const PostGrid = ({ posts, onPostClick }) => (
               '&:hover img, &:hover .default-img, &:hover video': { filter: 'brightness(0.55)' },
             }}>
 
-            {/* 썸네일 */}
             {isReel ? (
-              <Box component="video" src={post.image} muted playsInline
-                sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', transition: 'filter 0.2s', pointerEvents: 'none' }} />
+              <Box
+                component="video"
+                src={post.image}
+                muted
+                playsInline
+                loop
+                sx={{
+                  width: '100%', height: '100%', objectFit: 'cover',
+                  display: 'block', transition: 'filter 0.2s', pointerEvents: 'none',
+                }}
+              />
             ) : (
               <Box component={post.image ? 'img' : 'div'} src={post.image || undefined}
                 className={post.image ? '' : 'default-img'}
@@ -845,6 +901,7 @@ export default function Mypage() {
     setUser(updated);
     updateHeaderBg(updated.avatar);
     setToast({ open: true, message: '프로필이 저장되었습니다.', severity: 'success' });
+    window.dispatchEvent(new CustomEvent('avatarUpdated', { detail: { avatar: updated.avatar } }));
   };
 
   const handlePostClick = (postId) => { navigate(`/post/${postId}`); };
@@ -858,7 +915,12 @@ export default function Mypage() {
         setBookmarks((data.list || []).map(p => ({
           ...p, id: p.id || p.POST_ID, title: p.title || p.TITLE || '',
           tag: p.tag || 'General', likes: p.likes ?? 0, commentCount: p.commentCount ?? 0,
-          image: p.images?.trim() ? (p.images.trim().startsWith('http') ? p.images.trim() : `${API}${p.images.trim()}`) : null, views: p.views ?? 0,
+          image: (() => {
+            const src = p.firstImage || p.images?.split(',')[0]?.trim();
+            if (!src) return null;
+            if (src.startsWith('http')) return src;
+            return `${API}${src.startsWith('/') ? '' : '/'}${src}`;
+          })(), views: p.views ?? 0,
         })));
       }
     } catch (err) { console.error('북마크 로드 실패:', err); }

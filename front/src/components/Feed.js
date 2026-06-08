@@ -329,13 +329,23 @@ const ProfileHoverCard = ({ nickname, token, anchorEl, colors, navigate, onMouse
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 '&:hover': { opacity: 0.8 }, transition: 'opacity 0.15s',
               }}>
-              <Box component="img"
-                src={p.images
-                  ? (p.images.startsWith('http') ? p.images : `${API}${p.images}`)
-                  : `${API}/uploads/post/defaultImg.png`
-                }
-                sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
+              {(p.tag === 'REEL' || p.category === 'REEL') && p.images ? (
+                <Box
+                  component="video"
+                  src={p.images.startsWith('http') ? p.images : `${API}${p.images}`}
+                  muted
+                  preload="metadata"
+                  sx={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
+                />
+              ) : (
+                <Box component="img"
+                  src={p.images
+                    ? (p.images.startsWith('http') ? p.images : `${API}${p.images}`)
+                    : `${API}/uploads/post/defaultImg.png`
+                  }
+                  sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              )}
             </Box>
           ))}
         </Box>
@@ -527,7 +537,16 @@ const ShareModal = ({ open, onClose, feed, token, colors }) => {
     setSending(true);
     const newSent = new Set(sentIds);
     const isReelPost = feed.tag === 'REEL' || feed.category === 'REEL';
-    const message = `__SHARE__${JSON.stringify({ postId: feed.id, title: feed.title, description: feed.description, image: isReelPost ? null : (feed.images?.split(',')[0] || null), isReel: isReelPost, url: shareUrl, text: shareText })}`;
+    const reelVideoUrl = isReelPost ? (feed.images?.split(',')[0]?.trim() || null) : null;
+    const message = `__SHARE__${JSON.stringify({
+      postId: feed.id,
+      title: feed.title,
+      description: feed.description,
+      image: isReelPost ? reelVideoUrl : (feed.images?.split(',')[0] || null),  // ← 릴스도 영상 URL 포함
+      isReel: isReelPost,
+      url: shareUrl,
+      text: shareText
+    })}`;
 
     try {
       const roomKeys = selected.filter(id => typeof id === 'string' && id.startsWith('room_'));
@@ -606,11 +625,12 @@ const ShareModal = ({ open, onClose, feed, token, colors }) => {
       const roomId = roomData.roomId ?? roomData.room_id;
       if (!roomId) throw new Error('그룹방 생성 실패');
       const isReelPost2 = feed.tag === 'REEL' || feed.category === 'REEL';
+      const reelVideoUrl2 = isReelPost2 ? (feed.images?.split(',')[0]?.trim() || null) : null;
 
       await fetch(`${API}/messages/${roomId}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ message: `__SHARE__${JSON.stringify({ postId: feed.id, title: feed.title, description: feed.description, image: isReelPost2 ? null : (feed.images?.split(',')[0] || null), isReel: isReelPost2, url: shareUrl, text: shareText })}` }),
+        body: JSON.stringify({ message: `__SHARE__${JSON.stringify({ postId: feed.id, title: feed.title, description: feed.description, image: isReelPost2 ? reelVideoUrl2 : (feed.images?.split(',')[0] || null), isReel: isReelPost2, url: shareUrl, text: shareText })}` }),
       });
       setSendSuccessOpen(true);
       onClose();
@@ -1749,6 +1769,21 @@ export default function Feed() {
     return () => window.removeEventListener('postCreated', handler);
   }, [loadFeeds]);
 
+  useEffect(() => {
+    const saved = sessionStorage.getItem('feedScrollY');
+    if (saved) {
+      setTimeout(() => {
+        window.scrollTo({ top: Number(saved), behavior: 'instant' });
+        sessionStorage.removeItem('feedScrollY');
+      }, 50);
+    }
+    const handleScroll = () => {
+      sessionStorage.setItem('feedScrollY', String(window.scrollY));
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   const bottomRef = useRef(null);
   useEffect(() => {
     if (showRecommended || feeds.length === 0) return;
@@ -1787,7 +1822,6 @@ export default function Feed() {
   const handleFilterChange = (label) => {
     setActiveFilter(label);
     loadTrending(label);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const dynamicTagLabels = activeFilter === '릴스' ? [] : trending.map(t => t.TAG_NAME || t.tag).filter(Boolean);
@@ -1892,8 +1926,7 @@ export default function Feed() {
             )}
           </Box>
 
-          {/* 사이드바 */}
-          <Box sx={{ width: 280, flexShrink: 0, display: { xs: 'none', lg: 'block' }, position: 'sticky', top: 120 }}>
+          <Box sx={{ width: 280, flexShrink: 0, display: { xs: 'none', lg: 'block' }, position: 'sticky', top: 80, alignSelf: 'flex-start' }}>
             <Sidebar
               trending={trending}
               suggestions={suggestions}
@@ -1955,4 +1988,6 @@ export default function Feed() {
       <NotificationModal open={notiModalOpen} onClose={() => setNotiModalOpen(false)} token={token} navigate={navigate} colors={colors} />
     </Box>
   );
-} 
+}
+
+export { ShareModal };

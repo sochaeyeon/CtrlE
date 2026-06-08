@@ -735,6 +735,7 @@ export default function Messages() {
 
     mentionReadRoomsRef.current[roomId] = true;
     sessionStorage.setItem('mentionReadRooms', JSON.stringify(mentionReadRoomsRef.current));
+    window.dispatchEvent(new Event('messagesRead'));
     setLoadingChat(true);
     setDeleteMode(false);
     setSelectedDeleteIds([]);
@@ -2095,18 +2096,22 @@ export default function Messages() {
                                                   />
                                                 )}
                                                 {data.isReel && (
-                                                  <Box sx={{ width: '100%', height: 360, backgroundColor: '#000', position: 'relative', overflow: 'hidden' }}>                                                    <video
-                                                    src={(() => {
-                                                      const match = (data.description || '').match(/src="([^"]+)"/);
-                                                      const url = match ? match[1] : null;
-                                                      if (!url) return null;
-                                                      return url.startsWith('http') ? url : `http://localhost:3010${url}`;
-                                                    })()}
-                                                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                                                    muted
-                                                    playsInline
-                                                    preload="metadata"
-                                                  />
+                                                  <Box sx={{ width: '100%', height: 360, backgroundColor: '#000', position: 'relative', overflow: 'hidden' }}>
+                                                    <video
+                                                      src={(() => {
+                                                        if (data.image) {
+                                                          return data.image.startsWith('http') ? data.image : `${API}${data.image}`;
+                                                        }
+                                                        const match = (data.description || '').match(/src="([^"]+)"/);
+                                                        const url = match ? match[1] : null;
+                                                        if (!url) return null;
+                                                        return url.startsWith('http') ? url : `${API}${url}`;
+                                                      })()}
+                                                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                                                      muted
+                                                      playsInline
+                                                      preload="metadata"
+                                                    />
                                                     <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.3)' }}>
                                                       <Box sx={{ width: 40, height: 40, borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                         <Box sx={{ width: 0, height: 0, borderTop: '8px solid transparent', borderBottom: '8px solid transparent', borderLeft: '14px solid #fff', ml: '3px' }} />

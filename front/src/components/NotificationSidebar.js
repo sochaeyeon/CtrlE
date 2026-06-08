@@ -31,14 +31,17 @@ const getCategory = (dateStr) => {
   return '이전 활동';
 };
 
-const getNotiMessage = (notiType) => {
+const getNotiMessage = (notiType, targetType) => {
   switch (notiType) {
     case 'LIKE': return '님이 회원님의 게시물을 좋아합니다.';
     case 'FOLLOW': return '님이 회원님을 팔로우하기 시작했습니다.';
     case 'FOLLOW_REQUEST': return '님이 팔로우를 요청했습니다.';
     case 'FOLLOW_ACCEPTED': return '님이 팔로우 요청을 수락했습니다.';
     case 'COMMENT': return '님이 회원님의 게시물에 댓글을 남겼습니다.';
-    case 'MENTION': return '님이 프로필에서 회원님을 언급했습니다.';
+    case 'MENTION':
+      return targetType === 'POST'
+        ? '님이 댓글에서 회원님을 언급했습니다.'
+        : '님이 프로필에서 회원님을 언급했습니다.';
     default: return '님이 새로운 활동을 했습니다.';
   }
 };
@@ -151,7 +154,13 @@ export default function NotificationSidebar({ open, onClose }) {
     if (notif.NOTI_TYPE === 'FOLLOW' || notif.NOTI_TYPE === 'FOLLOW_ACCEPTED') {
       navigate(`/user/${notif.SENDER_NICKNAME}`);
     } else if (notif.NOTI_TYPE === 'MENTION') {
-      navigate(`/user/${notif.SENDER_NICKNAME}`);
+      if (notif.TARGET_TYPE === 'POST' && notif.TARGET_ID) {
+        navigate(`/post/${notif.TARGET_ID}`, {
+          state: { highlightComment: true, highlightNickname: notif.SENDER_NICKNAME, highlightNotiId: notif.NOTI_ID }
+        });
+      } else {
+        navigate(`/user/${notif.SENDER_NICKNAME}`);
+      }
     } else if (notif.NOTI_TYPE === 'LIKE') {
       if (notif.TARGET_TYPE === 'POST' && notif.TARGET_ID) navigate(`/post/${notif.TARGET_ID}`);
     } else if (notif.NOTI_TYPE === 'COMMENT') {
@@ -263,7 +272,7 @@ export default function NotificationSidebar({ open, onClose }) {
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography sx={{ fontSize: '0.88rem', lineHeight: 1.4, color: 'var(--text-primary)' }}>
                           <Box component="span" sx={{ fontWeight: 800 }}>{notif.SENDER_NICKNAME}</Box>
-                          {getNotiMessage(notif.NOTI_TYPE)}
+                          {getNotiMessage(notif.NOTI_TYPE, notif.TARGET_TYPE)}
                           <Box component="span" sx={{ color: 'var(--text-secondary)', ml: 0.6, fontSize: '0.78rem' }}>
                             {formatTime(notif.CREATED_AT)}
                           </Box>
@@ -311,8 +320,18 @@ export default function NotificationSidebar({ open, onClose }) {
                       )}
 
                       {['LIKE', 'COMMENT'].includes(notif.NOTI_TYPE) && notif.TARGET_IMAGE && (
-                        <Box component="img" src={notif.TARGET_IMAGE}
-                          sx={{ width: 44, height: 44, borderRadius: 1.5, objectFit: 'cover', flexShrink: 0 }} />
+                        <Box sx={{ width: 44, height: 44, borderRadius: 1.5, overflow: 'hidden', flexShrink: 0, backgroundColor: '#0F172A' }}>
+                          {notif.TARGET_IS_VIDEO === 'Y'
+                            ? <Box
+                              component="video"
+                              src={notif.TARGET_IMAGE}
+                              muted
+                              playsInline
+                              sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }}
+                            />
+                            : <Box component="img" src={notif.TARGET_IMAGE} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          }
+                        </Box>
                       )}
                     </Box>
                   ))}

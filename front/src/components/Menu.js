@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Drawer, List, ListItem, ListItemText, ListItemIcon, Box, Typography,
@@ -14,6 +14,7 @@ import {
   Menu as MenuIcon,
   BarChartOutlined, BarChart,
   DarkModeOutlined, LightModeOutlined,
+  SmartDisplayOutlined, SmartDisplay
 } from '@mui/icons-material';
 import NotificationSidebar from './NotificationSidebar';
 import { useColorMode } from '../App';
@@ -26,6 +27,7 @@ const getInitial = (name) => (name ? name.charAt(0).toUpperCase() : '?');
 const MENU_ITEMS = [
   { text: '피드', icon: <HomeOutlined sx={{ fontSize: 28 }} />, activeIcon: <Home sx={{ fontSize: 28 }} />, path: '/feed' },
   { text: '탐색', icon: <SearchOutlined sx={{ fontSize: 28 }} />, activeIcon: <SearchOutlined sx={{ fontSize: 28 }} />, path: '/explore' },
+  { text: '릴스', icon: <SmartDisplayOutlined sx={{ fontSize: 28 }} />, activeIcon: <SmartDisplay sx={{ fontSize: 28 }} />, path: '/reels' },
   { text: '메시지', icon: <ForumOutlined sx={{ fontSize: 26 }} />, activeIcon: <Forum sx={{ fontSize: 26 }} />, path: '/messages' },
   { id: 'noti', text: '알림', icon: <NotificationsNoneOutlined sx={{ fontSize: 28 }} />, activeIcon: <Notifications sx={{ fontSize: 28 }} /> },
   { id: 'register', text: '새 게시물', icon: <AddBoxOutlined sx={{ fontSize: 28 }} />, activeIcon: <AddBox sx={{ fontSize: 28 }} /> },
@@ -33,7 +35,35 @@ const MENU_ITEMS = [
   { text: '설정', icon: <SettingsOutlined sx={{ fontSize: 28 }} />, activeIcon: <Settings sx={{ fontSize: 28 }} />, path: '/settings' },
 ];
 
+// ─── NavItem ──────────────────────────────────────────────────────────────────
 const NavItem = ({ item, isActive, isOpen, onClick, colors }) => {
+  const baseIcon = isActive ? item.activeIcon : item.icon;
+
+  // 1) 숫자 뱃지 (메시지 미확인 수)
+  const iconWithBadge = item.badge
+    ? <Badge badgeContent={item.badge} color="error">{baseIcon}</Badge>
+    : baseIcon;
+
+  // 2) 빨간 점 (알림 미확인)
+  const iconFinal = item.hasDot
+    ? (
+      <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+        {iconWithBadge}
+        <Box sx={{
+          position: 'absolute',
+          top: 0,
+          right: -2,
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          backgroundColor: '#EF4444',
+          border: '1.5px solid',
+          borderColor: colors.paper,
+        }} />
+      </Box>
+    )
+    : iconWithBadge;
+
   return (
     <ListItem
       button
@@ -69,9 +99,7 @@ const NavItem = ({ item, isActive, isOpen, onClick, colors }) => {
           flexShrink: 0,
         }}
       >
-        {item.badge
-          ? <Badge badgeContent={item.badge} color="error">{isActive ? item.activeIcon : item.icon}</Badge>
-          : (isActive ? item.activeIcon : item.icon)}
+        {iconFinal}
       </ListItemIcon>
 
       <Typography sx={{
@@ -91,6 +119,7 @@ const NavItem = ({ item, isActive, isOpen, onClick, colors }) => {
   );
 };
 
+// ─── Menu (main) ──────────────────────────────────────────────────────────────
 export default function Menu() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -115,9 +144,14 @@ export default function Menu() {
   const [moreAnchorEl, setMoreAnchorEl] = useState(null);
   const [user, setUser] = useState({ name: '사용자', handle: '@user', avatar: null });
 
+  // ─── 미확인 카운트 state ───────────────────────────────────────────────────
+  const [unreadMsg, setUnreadMsg] = useState(0);       // 메시지 미확인 총합
+  const [hasUnreadNoti, setHasUnreadNoti] = useState(false); // 알림 미확인 존재 여부
+
   const drawerOpen = isHovered && !notiOpen && !registerOpen;
   const drawerWidth = drawerOpen ? DRAWER_WIDTH : 72;
 
+  // ─── 유저 정보 fetch ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!token) return;
     (async () => {
@@ -143,16 +177,76 @@ export default function Menu() {
     return () => window.removeEventListener('avatarUpdated', handler);
   }, []);
 
+  // ─── 미확인 수 fetch (30초 폴링) ──────────────────────────────────────────
+  const fetchUnreadCounts = useCallback(async () => {
+    if (!token) return;
+    try {
+      // 메시지 미확인 수: 모든 방의 UNREAD_COUNT 합산
+      const msgRes = await fetch(`${API}/messages/rooms`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const msgData = await msgRes.json();
+      if (msgData.success) {
+        const total = msgData.rooms.reduce(
+          (sum, r) => sum + (Number(r.UNREAD_COUNT) || 0), 0
+        );
+        setUnreadMsg(total);
+      }
+
+      // 알림 미확인 여부
+      const notiRes = await fetch(`${API}/notifications`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const notiData = await notiRes.json();
+      if (notiData.success) {
+        setHasUnreadNoti(notiData.unread_count > 0);
+      }
+    } catch (err) {
+      console.error('[fetchUnreadCounts]', err);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    fetchUnreadCounts();
+    const interval = setInterval(fetchUnreadCounts, 5000);
+    return () => clearInterval(interval);
+  }, [fetchUnreadCounts]);
+
+  // ─── 채팅 페이지 진입 시 메시지 뱃지 즉시 제거 ──────────────────────────
+  useEffect(() => {
+    const handler = () => setUnreadMsg(0);
+    window.addEventListener('messagesRead', handler);
+    return () => window.removeEventListener('messagesRead', handler);
+  }, []);
+
+  // ─── 메뉴 클릭 ───────────────────────────────────────────────────────────
   const handleMenuClick = (item) => {
     if (item.id === 'noti') {
       setNotiOpen(true);
       localStorage.setItem('notiSidebarOpen', 'true');
+      // 즉시 점 제거 후 서버 읽음 처리
+      setHasUnreadNoti(false);
+      fetch(`${API}/notifications/read`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(console.error);
     }
     if (item.id === 'register') setRegisterOpen(true);
   };
 
   const handleLogoutClick = (e) => { e.stopPropagation(); setMoreAnchorEl(null); setLogoutOpen(true); };
   const confirmLogout = () => { setLogoutOpen(false); localStorage.removeItem('accessToken'); navigate('/'); };
+
+  // ─── MENU_ITEMS에 badge/hasDot 주입 ──────────────────────────────────────
+  const menuItemsWithBadge = MENU_ITEMS.map(item => {
+    if (item.path === '/messages') {
+      return { ...item, badge: unreadMsg > 0 ? unreadMsg : null };
+    }
+    if (item.id === 'noti') {
+      return { ...item, hasDot: hasUnreadNoti };
+    }
+    return item;
+  });
 
   return (
     <>
@@ -179,7 +273,7 @@ export default function Menu() {
           },
         }}
       >
-        {/* ── 로고 */}
+        {/* 로고 */}
         <Box sx={{ px: '12px', py: '24px', mb: '4px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
           <Box
             component={Link}
@@ -205,10 +299,10 @@ export default function Menu() {
           </Box>
         </Box>
 
-        {/* ── 메뉴 */}
+        {/* 메뉴 리스트 */}
         <Box sx={{ flex: 1 }}>
           <List disablePadding>
-            {MENU_ITEMS.map(item => (
+            {menuItemsWithBadge.map(item => (
               <NavItem
                 key={item.text}
                 item={item}
@@ -226,7 +320,7 @@ export default function Menu() {
           </List>
         </Box>
 
-        {/* ── 더보기 (햄버거) */}
+        {/* 더 보기 */}
         <ListItem
           button
           onClick={(e) => setMoreAnchorEl(e.currentTarget)}
@@ -258,7 +352,7 @@ export default function Menu() {
           </Typography>
         </ListItem>
 
-        {/* ── 더보기 Popover */}
+        {/* 더 보기 팝오버 */}
         <Popover
           open={Boolean(moreAnchorEl)}
           anchorEl={moreAnchorEl}
@@ -277,7 +371,6 @@ export default function Menu() {
             },
           }}
         >
-          {/* 다크모드 행 */}
           <Box
             onClick={toggleColorMode}
             sx={{
@@ -303,10 +396,8 @@ export default function Menu() {
             />
           </Box>
 
-          {/* 구분선 */}
           <Box sx={{ height: '1px', backgroundColor: colors.border, my: 0.5 }} />
 
-          {/* 로그아웃 행 */}
           <Box
             onClick={handleLogoutClick}
             sx={{
@@ -323,7 +414,7 @@ export default function Menu() {
           </Box>
         </Popover>
 
-        {/* ── 프로필 */}
+        {/* 프로필 */}
         <Box
           onClick={() => navigate('/mypage')}
           sx={{
@@ -374,6 +465,7 @@ export default function Menu() {
 
       <RegisterModal open={registerOpen} onClose={() => setRegisterOpen(false)} />
 
+      {/* 로그아웃 다이얼로그 */}
       <Dialog
         open={logoutOpen}
         onClose={() => setLogoutOpen(false)}

@@ -17,6 +17,9 @@ import NotificationSidebar from './components/NotificationSidebar';
 import Settings from './components/Settings';
 import Myactivity from './components/Myactivity';
 import EditModal from './components/EditModal';
+import Reels from './components/Reels';
+import AdminLogin from './components/AdminLogin';
+import AdminDashboard from './components/AdminDashboard';
 
 const API = 'http://localhost:3010';
 
@@ -27,7 +30,6 @@ export const ColorModeContext = createContext({
 
 export const useColorMode = () => useContext(ColorModeContext);
 
-// 전역 카운터로 항상 고유한 id 보장
 let notiCounter = 0;
 
 function GlobalMessageToast({ notification, onClose, onMute, onUnmute }) {
@@ -263,6 +265,9 @@ function AppContent() {
           <Route path="/messages/room/:roomId" element={<Messages />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/myactivity" element={<Myactivity />} />
+          <Route path="/reels" element={<Reels />} />
+          <Route path="/adminLogin" element={<AdminLogin />} />
+          <Route path="/admin" element={<AdminDashboard />} />
         </Routes>
       </Box>
 

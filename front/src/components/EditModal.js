@@ -17,7 +17,7 @@ import {
   Crop169, CropPortrait, ZoomIn, ZoomOut,
   WbSunny, Contrast, InvertColors,
   LocationOn, Image,
-  BlurOn, LensBlur, Brightness4, CropFree,
+  BlurOn, LensBlur, Brightness4, CropFree, Videocam,
 } from '@mui/icons-material';
 import ReactQuill, { Quill } from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
@@ -57,6 +57,7 @@ const CATEGORIES = [
   { value: 'ERROR', label: '트러블슈팅 / 에러 해결', icon: <BugReport sx={{ fontSize: 16 }} />, color: '#EF4444', bg: '#FEF2F2', darkBg: '#2D1515' },
   { value: 'QUESTION', label: '일반 질문', icon: <HelpOutline sx={{ fontSize: 16 }} />, color: '#2563EB', bg: '#EFF6FF', darkBg: '#172033' },
   { value: 'FREE', label: '자유 게시판', icon: <ChatBubbleOutline sx={{ fontSize: 16 }} />, color: '#10B981', bg: '#ECFDF5', darkBg: '#0D2318' },
+  { value: 'REEL', label: '릴스', icon: <Videocam sx={{ fontSize: 16 }} />, color: '#8B5CF6', bg: '#F5F3FF', darkBg: '#1E1535' },
 ];
 
 const ASPECT_RATIOS = [
@@ -579,7 +580,6 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
     },
   }), [mode, tk]);
 
-  // ── 상태 ──────────────────────────────────────────────────────
   const [initialLoading, setInitialLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -590,6 +590,15 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
   const [replaceMap, setReplaceMap] = useState({});
   const [activeTab, setActiveTab] = useState('settings');
   const [location, setLocation] = useState('');
+  const [reelContent, setReelContent] = useState('');
+  const reelInputRef = useRef(null);
+  const [reelMentionOpen, setReelMentionOpen] = useState(false);
+  const [reelMentionSuggestions, setReelMentionSuggestions] = useState([]);
+  const [reelMentionActiveIdx, setReelMentionActiveIdx] = useState(0);
+  const [reelMentionStart, setReelMentionStart] = useState(-1);
+  const [reelMentionAnchor, setReelMentionAnchor] = useState({ top: 0, left: 0 });
+  const reelDebounceRef = useRef(null);
+
   const [hideLikes, setHideLikes] = useState(false);
   const [disableComments, setDisableComments] = useState(false);
   const [imageFiles, setImageFiles] = useState([]);
@@ -597,7 +606,7 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
   const [photoEditOpen, setPhotoEditOpen] = useState(false);
   const [editingImageIdx, setEditingImageIdx] = useState(null);
   const [metadata, setMetadata] = useState({ category: 'ERROR', title: '', tags: [] });
-
+  const isReel = metadata.category === 'REEL';
   useEffect(() => {
     if (!open || !postId) return;
 
@@ -634,22 +643,35 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
           tags: feed.TAGS ? feed.TAGS.split(',').filter(Boolean) : (feed.tags || []),
         });
 
-        // ✅ 가능한 모든 키 조합 시도
         const loc = feed.LOCATION ?? feed.location ?? feed['LOCATION'] ?? '';
         console.log('[EditModal] resolved location:', loc);
         setLocation(loc);
+        if (feed.CATEGORY_NAME === 'REEL' || feed.category === 'REEL') {
+          const rawContent = feed.CONTENT || feed.content || '';
+          const plainText = rawContent
+            .replace(/<video[^>]*>.*?<\/video>/gs, '')
+            .replace(/<[^>]*>/g, '')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&')
+            .trim();
+          setReelContent(plainText);
+        }
 
         setHideLikes(feed.HIDE_LIKE_COUNT === 'Y' || feed.hide_like_count === 'Y');
         setDisableComments(feed.DISABLE_COMMENTS === 'Y' || feed.disable_comments === 'Y');
+        let existingContent = feed.CONTENT || feed.content || '';
 
-        const existingContent = feed.CONTENT || feed.content || '';
+        existingContent = existingContent.replace(/<img[^>]+src="data:[^"]*"[^>]*\/?>/gi, '');
+        existingContent = existingContent.replace(/<p>(\s|<br\s*\/?>)*<\/p>/gi, '');
+
         contentRef.current = existingContent;
 
-        // 기존 이미지 복원
-        const imgRegex = /<img[^>]+src="([^">]+)"/g;
+        const mediaRegex = /<(?:img|video)[^>]+src="([^">]+)"/g;
         let match;
         const restoredImages = [];
-        while ((match = imgRegex.exec(existingContent)) !== null) {
+        while ((match = mediaRegex.exec(existingContent)) !== null) {
           const src = match[1];
           restoredImages.push({
             file: null,
@@ -837,7 +859,63 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
     }
   }, []);
 
-  // ── 비속어 검사 ───────────────────────────────────────────────
+  const fetchReelMentionUsers = useCallback(async (q) => {
+    try {
+      const url = q ? `${API}/user/tag-search?q=${encodeURIComponent(q)}` : `${API}/user/tag-search`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (data.success) {
+        setReelMentionSuggestions(data.users || []);
+        setReelMentionOpen((data.users || []).length > 0);
+        setReelMentionActiveIdx(0);
+      }
+    } catch { setReelMentionOpen(false); }
+  }, [token]);
+
+  const handleReelContentChange = (e) => {
+    const val = e.target.value;
+    setReelContent(val);
+    const html = val.split('\n').map(line => `<p>${line || '<br>'}</p>`).join('');
+    contentRef.current = html;
+    markDirty();
+
+    const cursor = e.target.selectionStart;
+    const textBefore = val.slice(0, cursor);
+    const atIdx = textBefore.lastIndexOf('@');
+    if (atIdx !== -1) {
+      const query = textBefore.slice(atIdx + 1);
+      if (!query.includes(' ') && !query.includes('\n')) {
+        setReelMentionStart(atIdx);
+        const rect = e.target.getBoundingClientRect();
+        setReelMentionAnchor({ top: rect.bottom + window.scrollY, left: rect.left });
+        clearTimeout(reelDebounceRef.current);
+        reelDebounceRef.current = setTimeout(() => fetchReelMentionUsers(query), query === '' ? 0 : 150);
+        return;
+      }
+    }
+    setReelMentionOpen(false);
+  };
+
+  const insertReelMention = (nickname) => {
+    const before = reelContent.slice(0, reelMentionStart);
+    const cursor = reelInputRef.current?.selectionStart ?? reelContent.length;
+    const after = reelContent.slice(cursor);
+    const newVal = `${before}@${nickname} ${after}`;
+    setReelContent(newVal);
+    contentRef.current = `<p>${newVal}</p>`;
+    setReelMentionOpen(false);
+    setReelMentionSuggestions([]);
+    markDirty();
+  };
+
+  const handleReelKeyDown = (e) => {
+    if (!reelMentionOpen || reelMentionSuggestions.length === 0) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setReelMentionActiveIdx(i => Math.min(i + 1, reelMentionSuggestions.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setReelMentionActiveIdx(i => Math.max(i - 1, 0)); }
+    else if (e.key === 'Tab') { if (reelMentionSuggestions[reelMentionActiveIdx]) { e.preventDefault(); insertReelMention(reelMentionSuggestions[reelMentionActiveIdx].NICKNAME); } }
+    else if (e.key === 'Escape') { setReelMentionOpen(false); }
+  };
+
   const checkBadWords = async (title, plainContent) => {
     try {
       const res = await fetch(`${API}/feed/check-profanity`, {
@@ -856,29 +934,58 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
     }
   };
 
-  // ── 실제 저장 ─────────────────────────────────────────────────
   const doSubmit = async () => {
     setErrorMsg(''); setLoading(true);
     try {
-      let finalContent = contentRef.current;
+      const quillEditor = quillRef.current?.getEditor();
+      let finalContent = isReel
+        ? contentRef.current
+        : (quillEditor ? quillEditor.root.innerHTML : contentRef.current);
 
+      finalContent = finalContent.replace(
+        /<p>(?:[A-Za-z0-9+/=\r\n]){100,}<\/p>/g, ''
+      );
+      if (isReel) {
+        const existingSrcs = new Set();
+        const videoRegex = /<video[^>]+src="([^"]+)"[^>]*>\s*<\/video>/gi;
+        let vm;
+        while ((vm = videoRegex.exec(finalContent)) !== null) {
+          existingSrcs.add(vm[1]);
+        }
+        const missingVideos = imageFiles
+          .filter(f => f.isRestored && !existingSrcs.has(f.originalUrl) && !existingSrcs.has(f.editorSrc))
+          .map(f => `<video src="${f.originalUrl}" controls></video>`)
+          .join('');
+        finalContent = finalContent + missingVideos;
+      }
       for (const image of imageFiles) {
-        if (image.isRestored || !image.file) continue; // ✅ 기존 이미지 스킵
-        if (!finalContent.includes(image.editorSrc || image.previewUrl)) continue;
-
+        if (image.isRestored || !image.file) continue;
         const formData = new FormData();
-        formData.append('image', image.file);
-        const uploadRes = await fetch(`${API}/feed/upload`, {
+        let uploadUrl;
+        if (isReel) {
+          formData.append('video', image.file);
+          uploadUrl = `${API}/feed/upload-video`;
+        } else {
+          formData.append('image', image.file);
+          uploadUrl = `${API}/feed/upload`;
+        }
+        const uploadRes = await fetch(uploadUrl, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
           body: formData,
         });
         const uploadData = await uploadRes.json();
-        if (!uploadData.success) throw new Error('이미지 업로드 실패');
+        if (!uploadData.success) throw new Error('파일 업로드 실패');
         const serverUrl = `${API}${uploadData.fileUrl}`;
-        if (image.editorSrc) finalContent = finalContent.split(image.editorSrc).join(serverUrl);
-        if (image.previewUrl && image.previewUrl !== image.editorSrc) {
-          finalContent = finalContent.split(image.previewUrl).join(serverUrl);
+        if (isReel) {
+          if (!finalContent.includes(serverUrl)) {
+            finalContent = finalContent + `<video src="${serverUrl}" controls></video>`;
+          }
+        } else {
+          if (image.editorSrc) finalContent = finalContent.split(image.editorSrc).join(serverUrl);
+          if (image.previewUrl && image.previewUrl !== image.editorSrc) {
+            finalContent = finalContent.split(image.previewUrl).join(serverUrl);
+          }
         }
       }
 
@@ -921,7 +1028,7 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
         if (onSaved) {
           onSaved(feedData.success ? {
             ...feedData.feed,
-            images: extractedImages.join(','), 
+            images: extractedImages.join(','),
           } : null);
         } else {
           navigate(`/post/${postId}`);
@@ -1016,7 +1123,6 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
     .ql-editor blockquote { border-left-color: ${tk.accent} !important; color: ${tk.textSecondary} !important; }
   ` : '';
 
-  // ── 렌더 ──────────────────────────────────────────────────────
   return (
     <ThemeProvider theme={muiTheme}>
       <CssBaseline />
@@ -1117,30 +1223,42 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
                   />
                 </Box>
 
-                {/* 본문 */}
                 <Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, mb: 1.2 }}>
                     <ArticleOutlined sx={{ fontSize: 16, color: tk.accent }} />
                     <Typography sx={{ fontWeight: 800, fontSize: '0.85rem', color: tk.textPrimary }}>본문 <Box component="span" sx={{ color: '#EF4444' }}>*</Box></Typography>
-                    <Typography sx={{ fontSize: '0.75rem', color: tk.textHint, ml: 0.5 }}>[&lt;/&gt;] 버튼으로 코드 블록 삽입 (문법 색상 자동 적용)</Typography>
-                  </Box>
-                  <Box sx={{
-                    '.ql-toolbar': { borderTopLeftRadius: 8, borderTopRightRadius: 8 },
-                    '.ql-container': { borderBottomLeftRadius: 8, borderBottomRightRadius: 8, minHeight: 300, fontSize: '0.9rem' },
-                    '.ql-editor': { minHeight: 300, lineHeight: 1.8, padding: '14px' },
-                    '.ql-editor blockquote': { borderLeft: `3px solid ${tk.accent}`, paddingLeft: 14, color: tk.textSecondary, margin: '8px 0' },
-                    '.ql-editor img': { maxWidth: '100%', height: 'auto', borderRadius: 6, display: 'block', cursor: 'pointer' },
-                  }}>
-                    <ReactQuill
-                      ref={quillRef}
-                      theme="snow"
-                      defaultValue={contentRef.current}
-                      onChange={(val) => { contentRef.current = val; markDirty(); }}
-                      modules={quillModules}
-                      preserveWhitespace
-                      placeholder="내용을 입력하세요..."
+                    {!isReel && (
+                      <Typography sx={{ fontSize: '0.75rem', color: tk.textHint, ml: 0.5 }}>[&lt;/&gt;] 버튼으로 코드 블록 삽입 (문법 색상 자동 적용)</Typography>
+                    )}                  </Box>
+                  {isReel ? (
+                    <TextField
+                      fullWidth multiline rows={6}
+                      inputRef={reelInputRef}
+                      placeholder="릴스에 대한 설명을 작성해주세요..."
+                      value={reelContent}
+                      onChange={handleReelContentChange}
+                      onKeyDown={handleReelKeyDown}
+                      InputProps={{ sx: { fontSize: '0.88rem', alignItems: 'flex-start' } }}
                     />
-                  </Box>
+                  ) : (
+                    <Box sx={{
+                      '.ql-toolbar': { borderTopLeftRadius: 8, borderTopRightRadius: 8 },
+                      '.ql-container': { borderBottomLeftRadius: 8, borderBottomRightRadius: 8, minHeight: 300, fontSize: '0.9rem' },
+                      '.ql-editor': { minHeight: 300, lineHeight: 1.8, padding: '14px' },
+                      '.ql-editor blockquote': { borderLeft: `3px solid ${tk.accent}`, paddingLeft: 14, color: tk.textSecondary, margin: '8px 0' },
+                      '.ql-editor img': { maxWidth: '100%', height: 'auto', borderRadius: 6, display: 'block', cursor: 'pointer' },
+                    }}>
+                      <ReactQuill
+                        ref={quillRef}
+                        theme="snow"
+                        defaultValue={contentRef.current}
+                        onChange={(val) => { contentRef.current = val; markDirty(); }}
+                        modules={quillModules}
+                        preserveWhitespace
+                        placeholder="내용을 입력하세요..."
+                      />
+                    </Box>
+                  )}
                 </Box>
 
                 {/* 태그 */}
@@ -1224,38 +1342,93 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
                     <LocationAutocomplete value={location} onChange={(v) => { setLocation(v); markDirty(); }} tk={tk} />
                   </Box>
 
-                  {/* 첨부 사진 */}
+                  {/* 첨부 파일 */}
                   <Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.7, mb: 1 }}>
-                      <Image sx={{ fontSize: 15, color: tk.accent }} />
-                      <Typography sx={{ fontWeight: 700, fontSize: '0.82rem', color: tk.textPrimary }}>첨부 사진</Typography>
+                      {isReel ? <Videocam sx={{ fontSize: 15, color: tk.accent }} /> : <Image sx={{ fontSize: 15, color: tk.accent }} />}
+                      <Typography sx={{ fontWeight: 700, fontSize: '0.82rem', color: tk.textPrimary }}>
+                        {isReel ? '동영상 첨부' : '첨부 사진'}
+                      </Typography>
                       {imageFiles.length > 0 && (
-                        <Typography sx={{ fontSize: '0.72rem', color: tk.textHint, ml: 'auto' }}>{imageFiles.length}장</Typography>
+                        <Typography sx={{ fontSize: '0.72rem', color: tk.textHint, ml: 'auto' }}>
+                          {isReel ? `${imageFiles.length}개` : `${imageFiles.length}장`}
+                        </Typography>
                       )}
                     </Box>
 
-                    {imageFiles.length > 0 ? (
-                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                        {imageFiles.map((img, i) => (
-                          <Tooltip key={i} title="클릭하여 재편집" placement="top">
-                            <Box onClick={() => handleReEditImage(i)}
-                              sx={{ position: 'relative', width: 70, height: 70, borderRadius: 1.5, overflow: 'hidden', border: `1px solid ${tk.border}`, cursor: 'pointer', '&:hover .edit-overlay': { opacity: 1 }, transition: 'box-shadow 0.15s', '&:hover': { boxShadow: `0 0 0 2px ${tk.accent}` } }}>
-                              <img src={img.previewUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              <Box className="edit-overlay" sx={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.15s' }}>
-                                <Typography sx={{ color: '#fff', fontSize: '0.65rem', fontWeight: 800 }}>편집</Typography>
-                              </Box>
+                    {isReel ? (
+                      imageFiles.length > 0 ? (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          {imageFiles.map((vid, i) => (
+                            <Box key={i} sx={{ position: 'relative', borderRadius: 1.5, overflow: 'hidden', border: `1px solid ${tk.border}`, backgroundColor: '#000' }}>
+                              <video src={vid.previewUrl} controls style={{ width: '100%', maxHeight: 160, display: 'block' }} />
                               <IconButton size="small"
-                                onClick={e => { e.stopPropagation(); removeImageFromEditor(img); setImageFiles(p => { const n = [...p]; n.splice(i, 1); return n; }); }}
-                                sx={{ position: 'absolute', top: 2, right: 2, p: 0.3, backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 0.5, '&:hover': { backgroundColor: 'rgba(239,68,68,0.85)' } }}>
-                                <Close sx={{ fontSize: 10 }} />
+                                onClick={() => setImageFiles(p => { const n = [...p]; n.splice(i, 1); return n; })}
+                                sx={{ position: 'absolute', top: 4, right: 4, p: 0.3, backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 0.5, '&:hover': { backgroundColor: 'rgba(239,68,68,0.85)' } }}>
+                                <Close sx={{ fontSize: 12 }} />
                               </IconButton>
                             </Box>
-                          </Tooltip>
-                        ))}
+                          ))}
+                          <Box component="label" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, py: 1.2, borderRadius: 1.5, border: `1.5px dashed ${tk.border}`, cursor: 'pointer', color: tk.textHint, fontSize: '0.75rem', fontWeight: 600, '&:hover': { borderColor: tk.accent, color: tk.accent, backgroundColor: tk.accentBg } }}>
+                            <Add sx={{ fontSize: 16 }} /> 동영상 추가
+                            <input type="file" accept="video/*" multiple hidden onChange={e => {
+                              const files = Array.from(e.target.files);
+                              const newVids = files.map(f => ({ file: f, previewUrl: URL.createObjectURL(f), editorSrc: null }));
+                              setImageFiles(p => [...p, ...newVids]);
+                              markDirty();
+                            }} />
+                          </Box>
+                        </Box>
+                      ) : (
+                        <Box component="label" sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 3, borderRadius: 1.5, border: `1.5px dashed ${tk.border}`, cursor: 'pointer', color: tk.textHint, gap: 0.5, transition: 'all 0.15s', '&:hover': { borderColor: tk.accent, color: tk.accent, backgroundColor: tk.accentBg } }}>
+                          <Videocam sx={{ fontSize: 28 }} />
+                          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600 }}>동영상 추가</Typography>
+                          <Typography sx={{ fontSize: '0.68rem', color: tk.textHint }}>mp4, mov, webm 지원</Typography>
+                          <input type="file" accept="video/*" multiple hidden onChange={e => {
+                            const files = Array.from(e.target.files);
+                            const newVids = files.map(f => ({ file: f, previewUrl: URL.createObjectURL(f), editorSrc: null }));
+                            setImageFiles(p => [...p, ...newVids]);
+                            markDirty();
+                          }} />
+                        </Box>
+                      )
+                    ) : (
+                      imageFiles.length > 0 ? (
+                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                          {imageFiles.map((img, i) => (
+                            <Tooltip key={i} title="클릭하여 재편집" placement="top">
+                              <Box onClick={() => handleReEditImage(i)}
+                                sx={{ position: 'relative', width: 70, height: 70, borderRadius: 1.5, overflow: 'hidden', border: `1px solid ${tk.border}`, cursor: 'pointer', '&:hover .edit-overlay': { opacity: 1 }, transition: 'box-shadow 0.15s', '&:hover': { boxShadow: `0 0 0 2px ${tk.accent}` } }}>
+                                <img src={img.previewUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <Box className="edit-overlay" sx={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.15s' }}>
+                                  <Typography sx={{ color: '#fff', fontSize: '0.65rem', fontWeight: 800 }}>편집</Typography>
+                                </Box>
+                                <IconButton size="small"
+                                  onClick={e => { e.stopPropagation(); removeImageFromEditor(img); setImageFiles(p => { const n = [...p]; n.splice(i, 1); return n; }); }}
+                                  sx={{ position: 'absolute', top: 2, right: 2, p: 0.3, backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 0.5, '&:hover': { backgroundColor: 'rgba(239,68,68,0.85)' } }}>
+                                  <Close sx={{ fontSize: 10 }} />
+                                </IconButton>
+                              </Box>
+                            </Tooltip>
+                          ))}
+                          <Box component="label"
+                            sx={{ width: 70, height: 70, borderRadius: 1.5, border: `1.5px dashed ${tk.border}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: tk.textHint, gap: 0.3, transition: 'all 0.15s', '&:hover': { borderColor: tk.accent, color: tk.accent, backgroundColor: tk.accentBg } }}>
+                            <Add sx={{ fontSize: 18 }} />
+                            <Typography sx={{ fontSize: '0.62rem', fontWeight: 700 }}>추가</Typography>
+                            <input type="file" accept="image/*" multiple hidden onChange={e => {
+                              const files = Array.from(e.target.files);
+                              setPendingFiles(files.map(f => ({ originalFile: f, file: f, previewUrl: URL.createObjectURL(f) })));
+                              setEditingImageIdx(null);
+                              setPhotoEditOpen(true);
+                            }} />
+                          </Box>
+                        </Box>
+                      ) : (
                         <Box component="label"
-                          sx={{ width: 70, height: 70, borderRadius: 1.5, border: `1.5px dashed ${tk.border}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: tk.textHint, gap: 0.3, transition: 'all 0.15s', '&:hover': { borderColor: tk.accent, color: tk.accent, backgroundColor: tk.accentBg } }}>
-                          <Add sx={{ fontSize: 18 }} />
-                          <Typography sx={{ fontSize: '0.62rem', fontWeight: 700 }}>추가</Typography>
+                          sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 3, borderRadius: 1.5, border: `1.5px dashed ${tk.border}`, cursor: 'pointer', color: tk.textHint, gap: 0.5, transition: 'all 0.15s', '&:hover': { borderColor: tk.accent, color: tk.accent, backgroundColor: tk.accentBg } }}>
+                          <Image sx={{ fontSize: 24 }} />
+                          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600 }}>사진 추가</Typography>
+                          <Typography sx={{ fontSize: '0.68rem', color: tk.textHint }}>클릭하거나 에디터에 붙여넣기</Typography>
                           <input type="file" accept="image/*" multiple hidden onChange={e => {
                             const files = Array.from(e.target.files);
                             setPendingFiles(files.map(f => ({ originalFile: f, file: f, previewUrl: URL.createObjectURL(f) })));
@@ -1263,20 +1436,7 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
                             setPhotoEditOpen(true);
                           }} />
                         </Box>
-                      </Box>
-                    ) : (
-                      <Box component="label"
-                        sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 3, borderRadius: 1.5, border: `1.5px dashed ${tk.border}`, cursor: 'pointer', color: tk.textHint, gap: 0.5, transition: 'all 0.15s', '&:hover': { borderColor: tk.accent, color: tk.accent, backgroundColor: tk.accentBg } }}>
-                        <Image sx={{ fontSize: 24 }} />
-                        <Typography sx={{ fontSize: '0.75rem', fontWeight: 600 }}>사진 추가</Typography>
-                        <Typography sx={{ fontSize: '0.68rem', color: tk.textHint }}>클릭하거나 에디터에 붙여넣기</Typography>
-                        <input type="file" accept="image/*" multiple hidden onChange={e => {
-                          const files = Array.from(e.target.files);
-                          setPendingFiles(files.map(f => ({ originalFile: f, file: f, previewUrl: URL.createObjectURL(f) })));
-                          setEditingImageIdx(null);
-                          setPhotoEditOpen(true);
-                        }} />
-                      </Box>
+                      )
                     )}
                   </Box>
                 </Box>
@@ -1284,7 +1444,6 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
 
               {activeTab === 'advanced' && (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                  {/* 좋아요 숨기기 */}
                   <Box sx={{ py: 2.5, borderBottom: `1px solid ${tk.border}` }}>
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 0.8 }}>
                       <Typography sx={{ fontWeight: 700, fontSize: '0.84rem', color: tk.textPrimary }}>좋아요 및 조회수 숨기기</Typography>
@@ -1295,7 +1454,6 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
                     </Box>
                     <Typography sx={{ fontSize: '0.75rem', color: tk.textSecondary, lineHeight: 1.6 }}>이 게시물의 총 좋아요 및 조회수는 회원님만 볼 수 있습니다.</Typography>
                   </Box>
-                  {/* 댓글 기능 해제 */}
                   <Box sx={{ py: 2.5 }}>
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 0.8 }}>
                       <Typography sx={{ fontWeight: 700, fontSize: '0.84rem', color: tk.textPrimary }}>댓글 기능 해제</Typography>
@@ -1322,8 +1480,8 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
                 {loading ? <><CircularProgress size={14} sx={{ color: tk.paper, mr: 1 }} />저장 중...</> : '수정 저장하기'}
               </Button>
             </Box>
-          </Box>
-        </Box>
+          </Box>  {/* 우측 패널 Box 닫기 */}
+        </Box>  {/* 바디 Box 닫기 */}
       </Dialog>
 
       {/* PhotoEditModal */}
@@ -1337,10 +1495,40 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
         />
       )}
 
-      {/* 닫기 확인 */}
+      {reelMentionOpen && reelMentionSuggestions.length > 0 && (
+        <Box sx={{
+          position: 'fixed',
+          top: reelMentionAnchor.top,
+          left: reelMentionAnchor.left,
+          zIndex: 9999, minWidth: 200, borderRadius: 1.5,
+          border: `1px solid ${tk.border}`, backgroundColor: tk.paper,
+          boxShadow: '0 8px 24px rgba(15,23,42,0.15)', overflow: 'hidden',
+        }}>
+          {reelMentionSuggestions.map((u, idx) => (
+            <Box key={u.USER_ID}
+              onMouseDown={(e) => { e.preventDefault(); insertReelMention(u.NICKNAME); }}
+              onMouseEnter={() => setReelMentionActiveIdx(idx)}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 1.2,
+                px: 1.5, py: 0.9, cursor: 'pointer',
+                backgroundColor: idx === reelMentionActiveIdx ? (mode === 'dark' ? '#1E3A5F' : '#EFF6FF') : tk.paper,
+                borderBottom: idx < reelMentionSuggestions.length - 1 ? `1px solid ${tk.border}` : 'none',
+              }}>
+              <Box sx={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', border: `1.5px solid ${tk.border}`, backgroundColor: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {u.AVATAR
+                  ? <img src={`${API}${u.AVATAR}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, color: '#fff' }}>{u.NICKNAME?.charAt(0).toUpperCase()}</Typography>
+                }
+              </Box>
+              <Typography sx={{ flex: 1, fontSize: '0.83rem', fontWeight: 700, color: tk.textPrimary }}>{u.NICKNAME}</Typography>
+              <Typography sx={{ fontSize: '0.65rem', color: tk.textHint, fontWeight: 600, backgroundColor: tk.inputBg, border: `1px solid ${tk.border}`, borderRadius: 0.5, px: 0.6, py: 0.2 }}>Tab</Typography>
+            </Box>
+          ))}
+        </Box>
+      )}
+
       <LeaveConfirmDialog open={leaveConfirm} onConfirm={doClose} onCancel={() => setLeaveConfirm(false)} tk={tk} />
 
-      {/* 비속어 모달 */}
       <BadWordModal
         open={badWordModal}
         badWords={detectedWords}

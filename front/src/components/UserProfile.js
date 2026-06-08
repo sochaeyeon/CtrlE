@@ -11,7 +11,7 @@ import {
   GitHub, Language, ArrowBack, GridOn, ViewList,
   BugReport, Code, Rocket, Lightbulb, TrendingUp, Favorite, ChatBubbleOutline,
   Lock, PersonAdd, Check, AccessTime, MailOutlined, PersonPin,
-  SortRounded, Search, Close
+  SortRounded, Search, Close, Videocam, Visibility
 } from '@mui/icons-material';
 import { useColorMode } from '../App';
 
@@ -86,46 +86,74 @@ const StatBadge = ({ value, label, onClick, colors }) => (
 
 const PostGrid = ({ posts, onPostClick }) => (
   <Grid container spacing={1.5}>
-    {posts.map((post) => (
-      <Grid item xs={4} key={post.id}>
-        <Box onClick={() => onPostClick(post.id)}
-          sx={{
-            position: 'relative', cursor: 'pointer', overflow: 'hidden',
-            borderRadius: 1.5, border: '1px solid #E2E8F0',
-            aspectRatio: '1 / 1',
-            '&:hover .overlay': { opacity: 1 },
-            '&:hover img, &:hover .default-img': { filter: 'brightness(0.55)' },
-          }}>
-          <Box
-            component={post.image ? 'img' : 'div'}
-            src={post.image || undefined}
-            className={post.image ? '' : 'default-img'}
+    {posts.map((post) => {
+      const isReel = post.image && /\.(mp4|webm|mov)(\?|$)/i.test(post.image);
+      const views = post.views ?? 0;
+      return (
+        <Grid item xs={4} key={post.id}>
+          <Box onClick={() => onPostClick(post.id)}
             sx={{
-              width: '100%', height: '100%', objectFit: 'cover', display: 'block',
-              transition: 'filter 0.2s',
-              ...(post.image ? {} : {
-                backgroundImage: `url(${API}/uploads/post/defaultImg.png)`,
-                backgroundSize: 'cover', backgroundPosition: 'center',
-              }),
-            }}
-          />
-          <Box className="overlay" sx={{
-            position: 'absolute', inset: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
-            opacity: 0, transition: 'opacity 0.2s',
-          }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-              <Favorite sx={{ fontSize: 22, color: '#fff' }} />
-              <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.95rem' }}>{post.likes}</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-              <ChatBubbleOutline sx={{ fontSize: 22, color: '#fff' }} />
-              <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.95rem' }}>{post.commentCount}</Typography>
+              position: 'relative', cursor: 'pointer', overflow: 'hidden',
+              borderRadius: 1.5, border: '1px solid #E2E8F0', aspectRatio: '1 / 1',
+              '&:hover .overlay': { opacity: 1 },
+              '&:hover img, &:hover .default-img, &:hover video': { filter: 'brightness(0.55)' },
+            }}>
+
+            {isReel ? (
+              <Box
+                component="video"
+                src={post.image}
+                muted
+                playsInline
+                loop
+                sx={{
+                  width: '100%', height: '100%', objectFit: 'cover',
+                  display: 'block', transition: 'filter 0.2s', pointerEvents: 'none',
+                }}
+              />
+            ) : (
+              <Box component={post.image ? 'img' : 'div'} src={post.image || undefined}
+                className={post.image ? '' : 'default-img'}
+                sx={{
+                  width: '100%', height: '100%', objectFit: 'cover', display: 'block', transition: 'filter 0.2s',
+                  ...(post.image ? {} : { backgroundImage: `url(${API}/uploads/post/defaultImg.png)`, backgroundSize: 'cover', backgroundPosition: 'center' })
+                }}
+              />
+            )}
+
+            {isReel && (
+              <Box sx={{ position: 'absolute', top: 6, right: 6, color: '#fff', filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.7))' }}>
+                <Videocam sx={{ fontSize: 18 }} />
+              </Box>
+            )}
+
+            <Box className="overlay" sx={{ position: 'absolute', inset: 0, opacity: 0, transition: 'opacity 0.2s' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, height: '100%' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                  <Favorite sx={{ fontSize: 22, color: '#fff' }} />
+                  <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.95rem' }}>{post.likes}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                  <ChatBubbleOutline sx={{ fontSize: 22, color: '#fff' }} />
+                  <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.95rem' }}>{post.commentCount}</Typography>
+                </Box>
+              </Box>
+              {views > 0 && (
+                <Box sx={{ position: 'absolute', bottom: 6, left: 6, display: 'flex', alignItems: 'center', gap: 0.4 }}>
+                  {isReel
+                    ? <Videocam sx={{ fontSize: 13, color: '#fff', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.7))' }} />
+                    : <Visibility sx={{ fontSize: 13, color: '#fff', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.7))' }} />
+                  }
+                  <Typography sx={{ color: '#fff', fontSize: '0.72rem', fontWeight: 700, filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.7))' }}>
+                    {views >= 1000 ? `${(views / 1000).toFixed(1)}k` : views}
+                  </Typography>
+                </Box>
+              )}
             </Box>
           </Box>
-        </Box>
-      </Grid>
-    ))}
+        </Grid>
+      );
+    })}
   </Grid>
 );
 
@@ -490,6 +518,7 @@ export default function UserProfile() {
             tag: p.tag || 'General',
             likes: p.likes ?? 0,
             commentCount: p.commentCount ?? 0,
+            views: p.views ?? 0,   // ← 추가
             image: (p.images && p.images.trim()) ? (p.images.trim().startsWith('http') ? p.images.trim() : `${API}${p.images.trim()}`) : null,
           }));
 

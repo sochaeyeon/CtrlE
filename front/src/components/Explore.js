@@ -606,64 +606,79 @@ const DefaultView = ({ trendingTags, recommendedUsers, explorePosts, loadingDefa
     );
   }
 
-  const displayedTags = trendingTags.slice(0, 5);         // 태그 5개만
-  const displayedUsers = recommendedUsers.slice(0, 5);    // 유저 5명만
+  const CATEGORY_ORDER = ['QUESTION', 'FREE', 'ERROR', 'REEL'];
+  const tagsByCategory = {};
+  trendingTags.forEach(t => {
+    const cat = t.CATEGORY_NAME || 'FREE';
+    if (!tagsByCategory[cat]) tagsByCategory[cat] = [];
+    if (tagsByCategory[cat].length < 5) tagsByCategory[cat].push(t);
+  });
+
+  const CATEGORY_LABELS = { QUESTION: '질문', FREE: '자유', ERROR: '에러', REEL: '릴스' };
+
+  const displayedUsers = recommendedUsers.slice(0, 5);
 
   return (
     <Box sx={{ animation: 'fadeUp 0.3s ease both', position: 'relative' }}>
+
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <LocalFireDepartment sx={{ color: '#F87171', fontSize: 18, opacity: 0.75 }} />
+        <TrendingUp sx={{ color: colors.textHint, fontSize: 17 }} />
         <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: colors.textPrimary, letterSpacing: '-0.01em' }}>지금 뜨는 태그</Typography>
       </Box>
-      <Stack spacing={1.5} sx={{ mb: 3 }}>
-        {displayedTags.map((t, i) => {
-          const m = getTagColor(t.TAG_NAME);
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 2, mb: 3 }}>
+        {CATEGORY_ORDER.map(cat => {
+          const catTags = tagsByCategory[cat] || [];
+          if (catTags.length === 0) return null;
           return (
-            <Box key={t.TAG_NAME} onClick={() => onTagClick(t.TAG_NAME)} sx={{
-              display: 'flex', alignItems: 'center',
-              backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2,
-              px: 2, py: 1.6, cursor: 'pointer',
-              animation: `fadeUp 0.35s ease ${i * 0.05}s both`,
-              transition: 'all 0.18s',
-              '&:hover': { borderColor: '#2563EB', boxShadow: '0 4px 16px rgba(37,99,235,0.08)', transform: 'translateX(3px)' },
-            }}>
-              <Typography sx={{ color: colors.textHint, fontWeight: 800, fontSize: '0.78rem', width: 20, mr: 1.5 }}>{i + 1}</Typography>
-              <Tag sx={{ fontSize: 15, color: colors.textHint, mr: 1 }} />
-              <Typography sx={{ fontWeight: 700, fontSize: '0.88rem', color: colors.textPrimary, flex: 1 }}>#{t.TAG_NAME}</Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: colors.textHint, mr: 1 }}>{formatCount(t.POST_COUNT)} 게시물</Typography>
-              {i < 3 && <EmojiEvents sx={{ fontSize: 15, color: i === 0 ? '#D4A843' : i === 1 ? '#B0B8C4' : '#A07850', opacity: 0.7 }} />}
+            <Box key={cat} sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2, p: 2 }}>
+              <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, color: colors.textHint, letterSpacing: '0.06em', textTransform: 'uppercase', mb: 1.5 }}>
+                {CATEGORY_LABELS[cat] || cat}
+              </Typography>
+              <Stack spacing={1}>
+                {catTags.map((t, i) => (
+                  <Box key={t.TAG_NAME} onClick={() => onTagClick(t.TAG_NAME)} sx={{
+                    display: 'flex', alignItems: 'center', gap: 1.5,
+                    cursor: 'pointer', borderRadius: 1, px: 1, py: 0.6,
+                    transition: 'all 0.15s',
+                    '&:hover': { backgroundColor: colors.hover },
+                  }}>
+                    <Typography sx={{ color: colors.textHint, fontWeight: 800, fontSize: '0.72rem', width: 16, flexShrink: 0 }}>{i + 1}</Typography>
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.83rem', color: colors.textPrimary, flex: 1 }}>#{t.TAG_NAME}</Typography>
+                    <Typography sx={{ fontSize: '0.7rem', color: colors.textHint }}>{formatCount(t.POST_COUNT)}</Typography>
+                  </Box>
+                ))}
+              </Stack>
             </Box>
           );
         })}
-      </Stack>
+      </Box>
 
       <Divider sx={{ borderColor: colors.border, mb: 3 }} />
 
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <GroupAdd sx={{ color: '#93B4E0', fontSize: 18, opacity: 0.85 }} />
+          <People sx={{ color: colors.textHint, fontSize: 17 }} />
           <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: colors.textPrimary, letterSpacing: '-0.01em' }}>팔로우 추천</Typography>
         </Box>
         {recommendedUsers.length > 5 && (
-          <Typography onClick={() => setModalOpen(true)} sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#2563EB', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
-            모두보기
+          <Typography
+            onClick={() => setModalOpen(true)}
+            sx={{ fontSize: '0.75rem', fontWeight: 700, color: colors.textMuted, cursor: 'pointer', '&:hover': { color: colors.textPrimary } }}
+          >
+            더보기
           </Typography>
         )}
       </Box>
+
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 1.5, mb: 3 }}>
         {displayedUsers.map((u, i) => (
           <Box key={u.USER_ID || u.id || u.userId} sx={{ aspectRatio: '1 / 1' }}>
-            <UserGridCard
-              key={u.USER_ID || u.id || u.userId}
-              user={u}
-              idx={i}
-              token={token}
-              colors={colors}
-              navigate={navigate}
-            />
+            <UserGridCard user={u} idx={i} token={token} colors={colors} navigate={navigate} />
           </Box>
         ))}
       </Box>
+
       <FollowersModal open={modalOpen} onClose={() => setModalOpen(false)} users={recommendedUsers} token={token} colors={colors} navigate={navigate} />
 
       {explorePosts.length > 0 && <Divider sx={{ borderColor: colors.border, mb: 3 }} />}
@@ -671,7 +686,7 @@ const DefaultView = ({ trendingTags, recommendedUsers, explorePosts, loadingDefa
       {explorePosts.length > 0 && (
         <>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-            <AutoAwesome sx={{ color: '#F59E0B', fontSize: 18, opacity: 0.85 }} />
+            <Rocket sx={{ color: colors.textHint, fontSize: 17 }} />
             <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: colors.textPrimary, letterSpacing: '-0.01em' }}>추천 게시물</Typography>
           </Box>
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: { xs: 0.5, md: 1 } }}>
@@ -680,7 +695,6 @@ const DefaultView = ({ trendingTags, recommendedUsers, explorePosts, loadingDefa
         </>
       )}
 
-      {/* 맨위로 버튼 */}
       <Fade in={showTopBtn}>
         <Box
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
@@ -788,12 +802,14 @@ export default function Explore() {
     }
   }, [token]);
 
-  const doSearch = useCallback(async (q, searchType = 'all') => {
-    if (!q?.trim()) return;
+  const doSearch = useCallback(async (q, searchType = 'all', category = '', location = '') => {
+    if (!q?.trim() && !category && !location) return;
     setLoadingSearch(true);
     try {
+      const categoryParam = category ? `&category=${encodeURIComponent(category)}` : '';
+      const locationParam = location ? `&location=${encodeURIComponent(location)}` : '';  // ← 추가
       const res = await fetch(
-        `${API}/explore/search?q=${encodeURIComponent(q)}&type=${searchType}&limit=30`,
+        `${API}/explore/search?q=${encodeURIComponent(q)}&type=${searchType}&limit=30${categoryParam}${locationParam}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const data = await res.json();
@@ -828,7 +844,7 @@ export default function Explore() {
       setActiveTagFilter('all');
       setActiveCategoryFilter(null);
       setSearchContext('location');
-      doSearch(locationParam, 'posts');
+      doSearch('', 'posts', '', locationParam);
     } else if (categoryParam) {
       setInputValue(categoryParam);
       setQuery(categoryParam);
@@ -836,7 +852,7 @@ export default function Explore() {
       setActiveTagFilter('all');
       setActiveCategoryFilter(null);
       setSearchContext('category');
-      doSearch(categoryParam, 'posts');
+      doSearch('', 'posts', categoryParam);
     } else if (tagParam) {
       setInputValue(tagParam);
       setQuery(tagParam);
@@ -1005,21 +1021,21 @@ export default function Explore() {
 
               {activeResultTab === 'posts' && availableTags.length > 0 && (
                 <Box sx={{ display: 'flex', gap: 0.8, px: 2, py: 1.5, overflowX: 'auto', '&::-webkit-scrollbar': { display: 'none' }, borderBottom: `1px solid ${colors.border}` }}>
-                  {['all', ...availableTags].map(ct => {
-                    const active = activeTagFilter === ct;
-                    const m = ct !== 'all' ? getTagColor(ct) : null;
-                    return (
-                      <Chip key={ct} label={ct === 'all' ? '전체' : ct} size="small"
-                        onClick={() => setActiveTagFilter(ct)}
-                        sx={{
-                          fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer', flexShrink: 0,
-                          backgroundColor: active ? (m ? m.bg : colors.textPrimary) : colors.hover,
-                          color: active ? (m ? m.color : colors.paper) : colors.textHint,
-                          border: active ? `1px solid ${m ? m.color + '44' : 'transparent'}` : `1px solid ${colors.border}`,
-                          '&:hover': { opacity: 0.85 }, transition: 'all 0.15s',
-                        }}
-                      />
-                    );
+                  {['all', ...availableTags.slice(0, 8)].map(ct => {
+                  const active = activeTagFilter === ct;
+                  const m = ct !== 'all' ? getTagColor(ct) : null;
+                  return (
+                  <Chip key={ct} label={ct === 'all' ? '전체' : ct} size="small"
+                    onClick={() => setActiveTagFilter(ct)}
+                    sx={{
+                      fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer', flexShrink: 0,
+                      backgroundColor: active ? (m ? m.bg : colors.textPrimary) : colors.hover,
+                      color: active ? (m ? m.color : colors.paper) : colors.textHint,
+                      border: active ? `1px solid ${m ? m.color + '44' : 'transparent'}` : `1px solid ${colors.border}`,
+                      '&:hover': { opacity: 0.85 }, transition: 'all 0.15s',
+                    }}
+                  />
+                  );
                   })}
                 </Box>
               )}
