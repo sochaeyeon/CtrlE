@@ -124,19 +124,23 @@
 
 | 메시지 |
 |--------|
-| ![메시지](./assets/messages.png) |
+| ![메시지](./assets/message.png) |
 
 | 릴스 |
 |------|
 | ![릴스](./assets/reels.png) |
 
+| 피드 |
+|------|
+| ![피드](./assets/feed.png) |
+
+| 게시물 상세 |
+|------|
+| ![게시물상세](./assets/postdetail.png) |
+
 | 로그인 | 회원가입 |
 |--------|--------|
 | ![로그인](./assets/login.png) | ![회원가입](./assets/join.png) |
-
-| 피드 | 게시물 상세 |
-|------|-----------|
-| ![피드](./assets/feed.png) | ![게시물상세](./assets/postdetail.png) |
 
 | 탐색 | 알림 |
 |------|------|
