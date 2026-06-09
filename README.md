@@ -122,6 +122,14 @@
 
 ## 📸 화면 구성
 
+| 메시지 |
+|--------|
+| ![메시지](./assets/demo_message.gif) |
+
+| 릴스 |
+|------|
+| ![릴스](./assets/demo_reels.gif) |
+
 | 로그인 | 회원가입 |
 |--------|--------|
 | ![로그인](./assets/login.png) | ![회원가입](./assets/join.png) |
@@ -130,13 +138,9 @@
 |------|-----------|
 | ![피드](./assets/feed.png) | ![게시물상세](./assets/postdetail.png) |
 
-| 탐색 | 릴스 |
+| 탐색 | 알림 |
 |------|------|
-| ![탐색](./assets/explore.png) | ![릴스](./assets/reels.png) |
-
-| 메시지 | 알림 |
-|--------|------|
-| ![메시지](./assets/message.png) | ![알림](./assets/notification.png) |
+| ![탐색](./assets/explore.png) | ![알림](./assets/notification.png) |
 
 | 마이페이지 | 유저 프로필 |
 |-----------|-----------|
