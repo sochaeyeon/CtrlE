@@ -4,41 +4,8 @@
 
 <br/>
 
-## 🎬 시연영상
-
-[![시연영상](https://img.youtube.com/vi/du_X_FnkvBA/0.jpg)](https://youtu.be/du_X_FnkvBA)
-
-<br/>
-
-## 📸 화면 구성
-
-| 로그인 | 회원가입 |
-|--------|--------|
-| ![로그인](./assets/login.png) | ![회원가입](./assets/join.png) |
-
-| 피드 | 게시물 상세 |
-|------|-----------|
-| ![피드](./assets/feed.png) | ![게시물상세](./assets/postdetail.png) |
-
-| 탐색 | 릴스 |
-|------|------|
-| ![탐색](./assets/explore.png) | ![릴스](./assets/reels.png) |
-
-| 메시지 | 알림 |
-|--------|------|
-| ![메시지](./assets/message.png) | ![알림](./assets/notification.png) |
-
-| 마이페이지 | 유저 프로필 |
-|-----------|-----------|
-| ![마이페이지](./assets/mypage.png) | ![유저프로필](./assets/userprofile.png) |
-
-| 게시물 등록 | 내 활동 |
-|-----------|--------|
-| ![게시물등록](./assets/register.png) | ![내활동](./assets/myactivity.png) |
-
-| 설정 | 다크모드 |
-|------|--------|
-| ![설정](./assets/settings.png) | ![다크모드](./assets/darkmode.png) |
+<!-- 대표 이미지를 여기에 삽입하세요! (예: ./assets/main_banner.png) -->
+> 🖼️ **[여기에 대표 이미지를 넣으세요! (배너 또는 메인 화면 캡처 권장)]**
 
 <br/>
 
@@ -50,81 +17,62 @@
 
 <br/>
 
-## 🛠 기술 스택
+## 🗓 개발 기간 및 업무
 
-### Frontend
-| 분류 | 기술 |
-|------|------|
-| Framework | React 18 |
-| UI Library | MUI (Material UI) v6 |
-| Routing | React Router DOM v6 |
-| Editor | Tiptap, Monaco Editor, React Quill, SimpleMDE |
-| HTTP | Axios |
-| 기타 | Highlight.js, Lowlight, Emotion |
+| 기간 | 업무 내용 |
+|------|-----------|
+| 05.28 ~ 05.29 | 기획, 요구사항 분석, DB 설계, 화면 설계 |
+| 05.30 ~ 05.31 | 백엔드 기본 구조 세팅, 인증(JWT, OAuth) 구현 |
+| 06.01 ~ 06.03 | 피드, 게시물 CRUD, 댓글, 좋아요, 북마크 기능 개발 |
+| 06.04 ~ 06.05 | 채팅(1:1, 그룹), 알림, 릴스 기능 개발, 다크모드 |
+| 06.06 ~ 06.07 | 탐색/검색, 마이페이지, 설정, 관리자 기능 개발 |
+| 06.08 ~ 06.09 | UI 다듬기, 버그 수정 |
 
-### Backend
-| 분류 | 기술 |
-|------|------|
-| Runtime | Node.js |
-| Framework | Express v5 |
-| Database | Oracle DB (oracledb v6) |
-| 인증 | JWT, Passport.js (Google OAuth, GitHub OAuth) |
-| 파일 업로드 | Multer |
-| 메일 | Nodemailer |
-| AI | Google Gemini (@google/genai) |
-| 기타 | bcrypt, QRCode, dotenv |
+> 📅 **[2026.05.28 ~ 2026.06.09]**
 
 <br/>
 
-## 📁 프로젝트 구조
+## 👤 팀원 구성
 
-```
-/
-├── assets/                      # 스크린샷 이미지
-├── back/                        # 백엔드 (Node.js + Express)
-│   ├── middlewares/
-│   │   ├── auth.js              # JWT 인증 미들웨어
-│   │   └── upload.js            # Multer 파일 업로드
-│   ├── routes/
-│   │   ├── auth.js              # 소셜 로그인 (Google, GitHub)
-│   │   ├── user.js              # 유저 프로필, 팔로우
-│   │   ├── feed.js              # 피드, 게시물 CRUD
-│   │   ├── messages.js          # 채팅 (1:1, 그룹)
-│   │   ├── notifications.js     # 알림
-│   │   ├── explore.js           # 탐색 / 검색
-│   │   ├── reels.js             # 릴스 (동영상)
-│   │   └── activity.js          # 내 활동
-│   ├── uploads/                 # 업로드 파일 저장소
-│   │   ├── chat/
-│   │   ├── emoticon/
-│   │   ├── post/
-│   │   └── profile/
-│   ├── app.js                   # 서버 진입점
-│   ├── db.js                    # Oracle DB 연결
-│   └── passport.js              # OAuth 설정
-│
-└── front/                       # 프론트엔드 (React)
-    └── src/
-        ├── components/
-        │   ├── Menu.js          # 사이드 네비게이션
-        │   ├── Feed.js          # 피드
-        │   ├── Messages.js      # 채팅
-        │   ├── MyPage.js        # 마이페이지
-        │   ├── UserProfile.js   # 타 유저 프로필
-        │   ├── Explore.js       # 탐색
-        │   ├── Reels.js         # 릴스
-        │   ├── PostDetail.js    # 게시물 상세
-        │   ├── NotificationSidebar.js  # 알림 사이드바
-        │   ├── RegisterModal.js # 게시물 등록
-        │   ├── EditModal.js     # 게시물 수정
-        │   ├── Settings.js      # 설정
-        │   ├── Myactivity.js    # 내 활동
-        │   ├── Login.js         # 로그인
-        │   ├── Join.js          # 회원가입
-        │   ├── AdminDashboard.js
-        │   └── AdminLogin.js
-        └── App.js               # 라우팅 및 테마 설정
-```
+| 이름 | 역할 |
+|------|------|
+| **[소채연]** | 기획 · 설계 · 프론트엔드 · 백엔드 전체 (개인 프로젝트) |
+
+<br/>
+
+## 🛠 기술 스택
+
+**Frontend**  
+![React](https://img.shields.io/badge/React_18-61DAFB?style=flat&logo=react&logoColor=black)
+![MUI](https://img.shields.io/badge/MUI_v6-007FFF?style=flat&logo=mui&logoColor=white)
+![ReactRouter](https://img.shields.io/badge/React_Router_v6-CA4245?style=flat&logo=reactrouter&logoColor=white)
+![Axios](https://img.shields.io/badge/Axios-5A29E4?style=flat&logo=axios&logoColor=white)
+![Tiptap](https://img.shields.io/badge/Tiptap-000000?style=flat)
+![Monaco](https://img.shields.io/badge/Monaco_Editor-007ACC?style=flat&logo=visualstudiocode&logoColor=white)
+![HighlightJS](https://img.shields.io/badge/Highlight.js-F0DB4F?style=flat)
+![Emotion](https://img.shields.io/badge/Emotion-DB7093?style=flat)
+
+**Backend**  
+![NodeJS](https://img.shields.io/badge/Node.js-339933?style=flat&logo=nodedotjs&logoColor=white)
+![Express](https://img.shields.io/badge/Express_v5-000000?style=flat&logo=express&logoColor=white)
+![Oracle](https://img.shields.io/badge/Oracle_DB-F80000?style=flat&logo=oracle&logoColor=white)
+![JWT](https://img.shields.io/badge/JWT-000000?style=flat&logo=jsonwebtokens&logoColor=white)
+![Passport](https://img.shields.io/badge/Passport.js-34E27A?style=flat)
+![Multer](https://img.shields.io/badge/Multer-FF6600?style=flat)
+![Nodemailer](https://img.shields.io/badge/Nodemailer-0078D4?style=flat)
+![Gemini](https://img.shields.io/badge/Google_Gemini-4285F4?style=flat&logo=google&logoColor=white)
+![GoogleOAuth](https://img.shields.io/badge/Google_OAuth-4285F4?style=flat&logo=google&logoColor=white)
+![GitHubOAuth](https://img.shields.io/badge/GitHub_OAuth-181717?style=flat&logo=github&logoColor=white)
+![bcrypt](https://img.shields.io/badge/bcrypt-338?style=flat)
+
+<br/>
+
+## 🎬 발표 PPT 및 시연 영상
+
+| 구분 | 링크 |
+|------|------|
+| 📊 발표 PPT | **[여기에 PPT 링크를 넣으세요! (Google Drive 등)]** |
+| 🎥 시연 영상 | [![시연영상](https://img.youtube.com/vi/du_X_FnkvBA/0.jpg)](https://youtu.be/du_X_FnkvBA) |
 
 <br/>
 
@@ -168,6 +116,48 @@
 ### 🔍 탐색
 - 유저 / 게시물 검색
 - 카테고리별 탐색
+
+<br/>
+
+## 📸 화면 구성
+
+| 로그인 | 회원가입 |
+|--------|--------|
+| ![로그인](./assets/login.png) | ![회원가입](./assets/join.png) |
+
+| 피드 | 게시물 상세 |
+|------|-----------|
+| ![피드](./assets/feed.png) | ![게시물상세](./assets/postdetail.png) |
+
+| 탐색 | 릴스 |
+|------|------|
+| ![탐색](./assets/explore.png) | ![릴스](./assets/reels.png) |
+
+| 메시지 | 알림 |
+|--------|------|
+| ![메시지](./assets/message.png) | ![알림](./assets/notification.png) |
+
+| 마이페이지 | 유저 프로필 |
+|-----------|-----------|
+| ![마이페이지](./assets/mypage.png) | ![유저프로필](./assets/userprofile.png) |
+
+| 게시물 등록 | 내 활동 |
+|-----------|--------|
+| ![게시물등록](./assets/register.png) | ![내활동](./assets/myactivity.png) |
+
+| 설정 | 다크모드 |
+|------|--------|
+| ![설정](./assets/settings.png) | ![다크모드](./assets/darkmode.png) |
+
+<br/>
+
+## 📎 기타 산출물
+
+| 구분 | 링크 |
+|------|------|
+| 📐 설계 자료 (ERD, 화면설계서 등) | **[여기에 Google Drive 링크를 넣으세요!]** |
+| 📊 발표 PPT | **[여기에 PPT 링크를 넣으세요!]** |
+| 🎥 시연 영상 | [YouTube 바로가기](https://youtu.be/du_X_FnkvBA) |
 
 <br/>
 
@@ -235,3 +225,40 @@ Oracle DB를 사용합니다. 주요 테이블 목록:
 
 <br/>
 
+## 📁 프로젝트 구조
+
+```
+/
+├── assets/                      # 스크린샷 이미지
+├── back/                        # 백엔드 (Node.js + Express)
+│   ├── middlewares/
+│   │   ├── auth.js              # JWT 인증 미들웨어
+│   │   └── upload.js            # Multer 파일 업로드
+│   ├── routes/
+│   │   ├── auth.js              # 소셜 로그인 (Google, GitHub)
+│   │   ├── user.js              # 유저 프로필, 팔로우
+│   │   ├── feed.js              # 피드, 게시물 CRUD
+│   │   ├── messages.js          # 채팅 (1:1, 그룹)
+│   │   ├── notifications.js     # 알림
+│   │   ├── explore.js           # 탐색 / 검색
+│   │   ├── reels.js             # 릴스 (동영상)
+│   │   └── activity.js          # 내 활동
+│   ├── uploads/                 # 업로드 파일 저장소
+│   ├── app.js                   # 서버 진입점
+│   ├── db.js                    # Oracle DB 연결
+│   └── passport.js              # OAuth 설정
+│
+└── front/                       # 프론트엔드 (React)
+    └── src/
+        ├── components/
+        │   ├── Feed.js          # 피드
+        │   ├── Messages.js      # 채팅
+        │   ├── MyPage.js        # 마이페이지
+        │   ├── Explore.js       # 탐색
+        │   ├── Reels.js         # 릴스
+        │   ├── PostDetail.js    # 게시물 상세
+        │   ├── RegisterModal.js # 게시물 등록
+        │   ├── Settings.js      # 설정
+        │   └── ...
+        └── App.js               # 라우팅 및 테마 설정
+```
