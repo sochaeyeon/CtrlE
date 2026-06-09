@@ -122,21 +122,21 @@
 
 ## 📸 화면 구성
 
-| 메시지 |
-|--------|
-| ![메시지](./assets/message.png) |
-
 | 릴스 |
 |------|
-| ![릴스](./assets/reels.png) |
+| ![릴스](./assets/reels.gif) |
+
+| 메시지 |
+|--------|
+| ![메시지](./assets/message.gif) |
 
 | 피드 |
 |------|
-| ![피드](./assets/feed.png) |
+| ![피드](./assets/feed.gif) |
 
 | 게시물 상세 |
 |------|
-| ![게시물상세](./assets/postdetail.png) |
+| ![게시물상세](./assets/postdetail.gif) |
 
 | 로그인 | 회원가입 |
 |--------|--------|
