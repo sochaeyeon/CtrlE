@@ -15,8 +15,6 @@
 게시물 작성, 릴스, 실시간 채팅, 알림, 팔로우 시스템 등 SNS의 핵심 기능을 제공하며,  
 코드 하이라이팅, 마크다운 에디터, GitHub 소셜로그인 연동 등 개발자 특화 기능을 갖추고 있습니다.
 
-> 💡 **개인 프로젝트**로 기획부터 설계, 개발까지 혼자 진행하였습니다.
-
 <br/>
 
 ## 🗓 개발 기간 및 업무
@@ -30,7 +28,7 @@
 | 5주차 | 탐색/검색, 마이페이지, 설정, 관리자 기능 개발 |
 | 6주차 | UI 다듬기, 다크모드, 버그 수정, 배포 준비 |
 
-> 📅 **[여기에 실제 개발 기간을 명시하세요! 예: 2025.03.01 ~ 2025.04.15]**
+> 📅 **[2026.05.28 ~ 2026.06.09]**
 
 <br/>
 
@@ -38,34 +36,34 @@
 
 | 이름 | 역할 |
 |------|------|
-| **[본인 이름을 넣으세요!]** | 기획 · 설계 · 프론트엔드 · 백엔드 전체 (개인 프로젝트) |
+| **[소채연]** | 기획 · 설계 · 프론트엔드 · 백엔드 전체 (개인 프로젝트) |
 
 <br/>
 
 ## 🛠 기술 스택
 
-### Frontend
-| 분류 | 기술 |
-|------|------|
-| Framework | React 18 |
-| UI Library | MUI (Material UI) v6 |
-| Routing | React Router DOM v6 |
-| Editor | Tiptap, Monaco Editor, React Quill, SimpleMDE |
-| HTTP | Axios |
-| 기타 | Highlight.js, Lowlight, Emotion |
+**Frontend**  
+![React](https://img.shields.io/badge/React_18-61DAFB?style=flat&logo=react&logoColor=black)
+![MUI](https://img.shields.io/badge/MUI_v6-007FFF?style=flat&logo=mui&logoColor=white)
+![ReactRouter](https://img.shields.io/badge/React_Router_v6-CA4245?style=flat&logo=reactrouter&logoColor=white)
+![Axios](https://img.shields.io/badge/Axios-5A29E4?style=flat&logo=axios&logoColor=white)
+![Tiptap](https://img.shields.io/badge/Tiptap-000000?style=flat)
+![Monaco](https://img.shields.io/badge/Monaco_Editor-007ACC?style=flat&logo=visualstudiocode&logoColor=white)
+![HighlightJS](https://img.shields.io/badge/Highlight.js-F0DB4F?style=flat)
+![Emotion](https://img.shields.io/badge/Emotion-DB7093?style=flat)
 
-### Backend
-| 분류 | 기술 |
-|------|------|
-| Runtime | Node.js |
-| Framework | Express v5 |
-| Database | Oracle DB (oracledb v6) |
-| 인증 | JWT, Passport.js |
-| 파일 업로드 | Multer |
-| 메일 | Nodemailer |
-| AI | Google Gemini API (`@google/genai`) |
-| OAuth | Google OAuth 2.0, GitHub OAuth 2.0 |
-| 기타 | bcrypt, QRCode, dotenv |
+**Backend**  
+![NodeJS](https://img.shields.io/badge/Node.js-339933?style=flat&logo=nodedotjs&logoColor=white)
+![Express](https://img.shields.io/badge/Express_v5-000000?style=flat&logo=express&logoColor=white)
+![Oracle](https://img.shields.io/badge/Oracle_DB-F80000?style=flat&logo=oracle&logoColor=white)
+![JWT](https://img.shields.io/badge/JWT-000000?style=flat&logo=jsonwebtokens&logoColor=white)
+![Passport](https://img.shields.io/badge/Passport.js-34E27A?style=flat)
+![Multer](https://img.shields.io/badge/Multer-FF6600?style=flat)
+![Nodemailer](https://img.shields.io/badge/Nodemailer-0078D4?style=flat)
+![Gemini](https://img.shields.io/badge/Google_Gemini-4285F4?style=flat&logo=google&logoColor=white)
+![GoogleOAuth](https://img.shields.io/badge/Google_OAuth-4285F4?style=flat&logo=google&logoColor=white)
+![GitHubOAuth](https://img.shields.io/badge/GitHub_OAuth-181717?style=flat&logo=github&logoColor=white)
+![bcrypt](https://img.shields.io/badge/bcrypt-338?style=flat)
 
 <br/>
 
