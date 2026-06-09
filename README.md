@@ -4,8 +4,7 @@
 
 <br/>
 
-<!-- 대표 이미지를 여기에 삽입하세요! (예: ./assets/main_banner.png) -->
-> 🖼️ **[여기에 대표 이미지를 넣으세요! (배너 또는 메인 화면 캡처 권장)]**
+![CtrlE](./assets/대표이미지.png)
 
 <br/>
 
@@ -36,7 +35,7 @@
 
 | 이름 | 역할 |
 |------|------|
-| **[소채연]** | 기획 · 설계 · 프론트엔드 · 백엔드 전체 (개인 프로젝트) |
+| **소채연** | 기획 · 설계 · 프론트엔드 · 백엔드 전체 (개인 프로젝트) |
 
 <br/>
 
@@ -71,7 +70,7 @@
 
 | 구분 | 링크 |
 |------|------|
-| 📊 발표 PPT | **[여기에 PPT 링크를 넣으세요! (Google Drive 등)]** |
+| 📊 발표 PPT | [Google Drive](https://drive.google.com/drive/folders/1OyPIa5t26rHwU-wJ4xqEJzKxJdtKNJpx?hl=ko) |
 | 🎥 시연 영상 | [![시연영상](https://img.youtube.com/vi/du_X_FnkvBA/0.jpg)](https://youtu.be/du_X_FnkvBA) |
 
 <br/>
@@ -149,14 +148,18 @@
 |------|--------|
 | ![설정](./assets/settings.png) | ![다크모드](./assets/darkmode.png) |
 
+| 관리자 로그인 | 관리자 대시보드 |
+|-------------|--------------|
+| ![관리자로그인](./assets/adminLogin.png) | ![관리자대시보드](./assets/adminDashboard.png) |
+
 <br/>
 
 ## 📎 기타 산출물
 
 | 구분 | 링크 |
 |------|------|
-| 📐 설계 자료 (ERD, 화면설계서 등) | **[여기에 Google Drive 링크를 넣으세요!]** |
-| 📊 발표 PPT | **[여기에 PPT 링크를 넣으세요!]** |
+| 📐 설계 자료 (ERD, 화면설계서 등) | [Google Drive](https://drive.google.com/drive/folders/1OyPIa5t26rHwU-wJ4xqEJzKxJdtKNJpx?hl=ko) |
+| 📊 발표 PPT | [Google Drive](https://drive.google.com/drive/folders/1OyPIa5t26rHwU-wJ4xqEJzKxJdtKNJpx?hl=ko) |
 | 🎥 시연 영상 | [YouTube 바로가기](https://youtu.be/du_X_FnkvBA) |
 
 <br/>
