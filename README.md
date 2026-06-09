@@ -71,7 +71,7 @@
 | 구분 | 링크 |
 |------|------|
 | 📊 발표 PPT | [Google Drive](https://drive.google.com/drive/folders/1OyPIa5t26rHwU-wJ4xqEJzKxJdtKNJpx?hl=ko) |
-| 🎥 시연 영상 | [![시연영상](https://img.youtube.com/vi/WdeY-pxx67M/0.jpg)](https://youtu.be/WdeY-pxx67M) |
+| 🎥 시연 영상 | [![시연영상](https://img.youtube.com/vi/1FZpVp7_1Fw/0.jpg)](https://youtu.be/1FZpVp7_1Fw) |
 
 <br/>
 
