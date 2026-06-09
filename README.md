@@ -136,7 +136,7 @@
 
 | 게시물 상세 |
 |------|
-| ![게시물상세](https://github.com/sochaeyeon/CtrlE/issues/2#issue-4619852520) |
+| ![게시물상세](./assets/postdetail.gif) |
 
 | 로그인 | 회원가입 |
 |--------|--------|
