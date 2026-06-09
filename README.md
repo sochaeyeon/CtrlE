@@ -184,6 +184,38 @@ npm start
 
 > 백엔드는 `http://localhost:3010`, 프론트엔드는 `http://localhost:3000` 에서 실행됩니다.
 
+
+### 환경 변수
+
+`back/.env` 파일을 생성하고 아래 값을 설정하세요.
+
+```env
+# Oracle DB
+DB_USER=
+DB_PASSWORD=
+DB_CONNECT_STRING=
+
+# JWT
+JWT_SECRET=
+
+# Google OAuth
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_CALLBACK_URL=
+
+# GitHub OAuth
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+GITHUB_CALLBACK_URL=
+
+# Nodemailer
+MAIL_USER=
+MAIL_PASS=
+
+# Google Gemini AI
+GEMINI_API_KEY=
+```
+
 <br/>
 
 ## 🗄 데이터베이스
