@@ -1294,6 +1294,8 @@ export default function RegisterModal({ open, onClose }) {
         }
       }
 
+      finalContent = finalContent.replace(/<img[^>]*src="data:image\/[^"]*"[^>]*\/?>/gi, '');
+
       const res = await fetch(`${API}/feed/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -1644,7 +1646,7 @@ export default function RegisterModal({ open, onClose }) {
                                 size="small"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  removeImageFromEditor(img); 
+                                  removeImageFromEditor(img);
                                 }}
                                 sx={{ position: 'absolute', top: 2, right: 2, p: 0.3, backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 0.5, '&:hover': { backgroundColor: 'rgba(239,68,68,0.85)' } }}>
                                 <Close sx={{ fontSize: 10 }} />

@@ -90,16 +90,17 @@ router.get('/:postId/ai-answer', jwtAuthentication, async (req, res) => {
     try {
         conn = await db.getConnection();
         const result = await conn.execute(
-            `SELECT DBMS_LOB.SUBSTR(ANSWER, 10000, 1) AS ANSWER, UPDATED_AT
-         FROM AI_ANSWERS WHERE POST_ID = :postId
-         ORDER BY CREATED_AT DESC FETCH FIRST 1 ROWS ONLY`,
+            `SELECT DBMS_LOB.SUBSTR(ANSWER, 10000, 1) AS ANSWER, UPDATED_AT, CREATED_AT
+     FROM AI_ANSWERS WHERE POST_ID = :postId
+     ORDER BY CREATED_AT DESC FETCH FIRST 1 ROWS ONLY`,
             { postId: Number(postId) },
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
         res.json({
             success: true,
             answer: result.rows[0]?.ANSWER ?? null,
-            updatedAt: result.rows[0]?.UPDATED_AT ?? null
+            updatedAt: result.rows[0]?.UPDATED_AT ?? null,
+            createdAt: result.rows[0]?.CREATED_AT ?? null,  
         });
     } catch {
         res.json({ success: true, answer: null, updatedAt: null });
@@ -138,7 +139,7 @@ router.post('/:postId/ai-answer', jwtAuthentication, async (req, res) => {
 3. 친절하고 명확하게 원인과 해결 방법을 설명해주세요.`;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3.1-flash-lite',
             contents: prompt,
         });
         let htmlAnswer = response.text.replace(/```html\n?/g, '').replace(/```\n?/g, '').trim();

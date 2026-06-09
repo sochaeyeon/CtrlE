@@ -942,9 +942,6 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
         ? contentRef.current
         : (quillEditor ? quillEditor.root.innerHTML : contentRef.current);
 
-      finalContent = finalContent.replace(
-        /<p>(?:[A-Za-z0-9+/=\r\n]){100,}<\/p>/g, ''
-      );
       if (isReel) {
         const existingSrcs = new Set();
         const videoRegex = /<video[^>]+src="([^"]+)"[^>]*>\s*<\/video>/gi;
@@ -958,6 +955,7 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
           .join('');
         finalContent = finalContent + missingVideos;
       }
+
       for (const image of imageFiles) {
         if (image.isRestored || !image.file) continue;
         const formData = new FormData();
@@ -989,6 +987,7 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
         }
       }
 
+      finalContent = finalContent.replace(/<img[^>]*src="data:image\/[^"]*"[^>]*\/?>/gi, '');
       const res = await fetch(`${API}/feed/${postId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

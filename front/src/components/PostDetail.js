@@ -778,10 +778,10 @@ const ProfileHoverCard = ({ nickname, token, anchorEl, colors, navigate, onMouse
     document.body
   );
 };
-const AIAnswerSection = ({ postId, token, colors, postUpdatedAt, isMyPost }) => {
+const AIAnswerSection = ({ postId, token, colors, postUpdatedAt, postCreatedAt, isMyPost }) => {
   const [loading, setLoading] = useState(false);
   const [answer, setAnswer] = useState(null);
-  const [aiCreatedAt, setAiCreatedAt] = useState(null);
+  const [aiFirstCreatedAt, setAiFirstCreatedAt] = useState(null); 
   const [error, setError] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -790,22 +790,28 @@ const AIAnswerSection = ({ postId, token, colors, postUpdatedAt, isMyPost }) => 
     fetch(`${API}/feed/${postId}/ai-answer`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(data => {
-        if (data.success && data.answer) { setAnswer(data.answer); setAiCreatedAt(data.updatedAt || data.createdAt); }
+        if (data.success && data.answer) {
+          setAnswer(data.answer);
+          setAiFirstCreatedAt(data.createdAt); 
+        }
       }).catch(() => { });
   }, [postId, token]);
 
   const isStale = useMemo(() => {
-    if (!answer || !postUpdatedAt || !aiCreatedAt) return false;
-    return new Date(postUpdatedAt) > new Date(aiCreatedAt);
-  }, [answer, postUpdatedAt, aiCreatedAt]);
+    if (!answer || !postUpdatedAt || !aiFirstCreatedAt) return false;
+    return new Date(postUpdatedAt) > new Date(aiFirstCreatedAt);
+  }, [answer, postUpdatedAt, aiFirstCreatedAt]);
 
   const requestAnswer = async () => {
     setLoading(true); setError(null);
     try {
       const res = await fetch(`${API}/feed/${postId}/ai-answer`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
-      if (data.success) { setAnswer(data.answer); setAiCreatedAt(new Date().toISOString()); setModalOpen(true); }
-      else throw new Error(data.message);
+      if (data.success) {
+        setAnswer(data.answer);
+        setAiFirstCreatedAt(new Date().toISOString()); 
+        setModalOpen(true);
+      } else throw new Error(data.message);
     } catch { setError('AI 답변 생성 중 오류가 발생했습니다.'); }
     finally { setLoading(false); }
   };
@@ -2071,6 +2077,7 @@ export default function PostDetail() {
                     token={token}
                     colors={colors}
                     postUpdatedAt={feed.UPDATED_AT || feed.updatedAt}
+                    postCreatedAt={feed.CREATED_AT || feed.createdAt}
                     isMyPost={(feed.WRITER || feed.writer) === myNickname}
                   />
                 </Box>

@@ -18,10 +18,8 @@ import {
   Terminal, Logout, Menu as MenuIcon,
 } from '@mui/icons-material';
 
-// ─── API 설정 ─────────────────────────────────────────────
-const API = 'http://localhost:3010/admin'; // 백엔드 라우터 경로
+const API = 'http://localhost:3010/admin';
 
-// ─── 검정 계열 테마로 업데이트 ─────────────────────────────
 const C = {
   bg: '#F8FAFC',
   paper: '#FFFFFF',
@@ -32,8 +30,8 @@ const C = {
   textHint: '#94A3B8',
   inputBg: '#F1F5F9',
   hover: '#F1F5F9',
-  accent: '#0F172A', // 파란색 -> 검정색(다크 슬레이트)으로 변경
-  accentHover: '#334155', // 마우스 오버 시 약간 밝은 검정
+  accent: '#0F172A',
+  accentHover: '#334155',
   green: '#10B981',
   red: '#EF4444',
   orange: '#F97316',
@@ -41,11 +39,22 @@ const C = {
   yellow: '#F59E0B',
 };
 
-// 날짜 포맷팅 함수
+const stripHtml = (html) => {
+  if (!html) return '-';
+  return html
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim();
+};
+
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('ko-KR') : '-';
 const fmtDT = (d) => d ? new Date(d).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
 
-// ─── 공통 컴포넌트 (크기 확대 반영) ──────────────────────────
 
 const StatusBadge = ({ status }) => {
   const map = {
@@ -257,13 +266,15 @@ const DashboardPage = ({ data }) => {
     color: t === 'LOCAL' ? C.textHint : t === 'GOOGLE' ? C.red : t === 'KAKAO' ? C.yellow : C.textPrimary,
   }));
 
-  const postTypes = ['GENERAL', 'QUESTION', 'SHOWCASE', 'DISCUSSION'];
-  const typeColors = { GENERAL: C.textHint, QUESTION: C.accent, SHOWCASE: C.purple, DISCUSSION: C.green };
-  const typeCounts = postTypes.map(pt => ({
-    type: pt,
-    count: data.posts.filter(p => (p.post_type || p.POST_TYPE) === pt).length,
-    color: typeColors[pt]
+  const colorPalette = [C.accent, C.purple, C.green, C.orange, C.yellow, C.red];
+  const categoryCounts = data.categories.map((cat, i) => ({
+    type: cat.CATEGORY_NAME || cat.category_name,
+    count: data.posts.filter(p =>
+      (p.CATEGORY_ID || p.category_id) === (cat.CATEGORY_ID || cat.category_id)
+    ).length,
+    color: colorPalette[i % colorPalette.length],
   }));
+
   return (
     <Box>
       <Box sx={{ mb: 4 }}>
@@ -300,10 +311,10 @@ const DashboardPage = ({ data }) => {
 
         <TableCard>
           <Box sx={{ px: 3, py: 2.5, borderBottom: `1px solid ${C.border}` }}>
-            <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: C.textPrimary }}>게시글 유형 분포 (POST_TYPE)</Typography>
+            <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: C.textPrimary }}>게시글 카테고리 분포(POST_TYPE)</Typography>
           </Box>
           <Box sx={{ p: 2.5 }}>
-            {typeCounts.map(t => (
+            {categoryCounts.map(t => (
               <Box key={t.type} sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 1.5, borderBottom: `1px solid ${C.border}22` }}>
                 <Typography sx={{ fontSize: '0.85rem', color: t.color, fontWeight: 700, width: 85 }}>{t.type}</Typography>
                 <Box sx={{ flex: 1, height: 8, backgroundColor: C.inputBg, borderRadius: 4, overflow: 'hidden' }}>
@@ -555,7 +566,9 @@ const ReportsPage = ({ data, onToast }) => {
             <Stack spacing={3}>
               <Box>
                 <Typography sx={{ fontSize: '0.8rem', color: C.textHint, fontWeight: 700, mb: 0.5 }}>신고된 게시글/대상</Typography>
-                <Typography sx={{ fontSize: '1rem', fontWeight: 600, color: C.accent }}>{detailModal?.target_content || detailModal?.DETAIL || '대상 데이터 없음'}</Typography>
+                <Typography sx={{ fontSize: '1rem', fontWeight: 600, color: C.accent }}>{stripHtml(detailModal?.TARGET_CONTENT || detailModal?.target_content || detailModal?.DETAIL || detailModal?.detail || `${detailModal?.TARGET_TYPE || detailModal?.target_type} #${detailModal?.TARGET_ID || detailModal?.target_id}`)}
+
+                </Typography>
               </Box>
               <Box>
                 <Typography sx={{ fontSize: '0.8rem', color: C.textHint, fontWeight: 700, mb: 0.5 }}>신고 사유</Typography>
@@ -609,7 +622,7 @@ const CommentsPage = ({ data, onToast }) => {
                 return (
                   <Box component="tr" key={cid || idx} sx={{ '&:hover': { backgroundColor: C.hover } }}>
                     <Td>#{cid}</Td>
-                    <Td primary sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.content || c.CONTENT}</Td>
+                    <Td primary sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stripHtml(c.content || c.CONTENT)}</Td>
                     <Td>P#{c.post_id || c.POST_ID}</Td>
                     <Td>U#{c.user_id || c.USER_ID}</Td>
                     <Td><StatusBadge status={status} /></Td>
