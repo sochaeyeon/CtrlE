@@ -124,11 +124,11 @@
 
 | 메시지 |
 |--------|
-| ![메시지](./assets/demo_message.gif) |
+| ![메시지](./assets/messages.png) |
 
 | 릴스 |
 |------|
-| ![릴스](./assets/demo_reels.gif) |
+| ![릴스](./assets/reels.png) |
 
 | 로그인 | 회원가입 |
 |--------|--------|
