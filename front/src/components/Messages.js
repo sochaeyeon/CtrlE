@@ -13,7 +13,7 @@ import {
   ArrowBack, SentimentSatisfiedAlt, MoreVert, InfoOutlined, ExitToApp,
   ReportGmailerrorred, DeleteOutline, EditOutlined, AddCircleOutline,
   AttachFile, ExpandMore, ExpandLess, PeopleOutline, NotificationsOff,
-  ArrowBackIos, ArrowForwardIos, BookmarkOutlined
+  ArrowBackIos, ArrowForwardIos, BookmarkOutlined, BlockOutlined
 } from '@mui/icons-material';
 import { useColorMode } from '../App';
 
@@ -1342,6 +1342,8 @@ export default function Messages() {
 
   useEffect(() => {
     if (!roomId || !token) return;
+    isCustomBgColorRef.current = false;
+    setIsCustomBgColor(false);
     const fetchSettings = async () => {
       try {
         const res = await fetch(`${API}/messages/${roomId}/settings?t=${Date.now()}`, {
@@ -1429,6 +1431,7 @@ export default function Messages() {
       if (roomInfo.ROOM_NAME && roomInfo.ROOM_NAME.trim() !== '') return roomInfo.ROOM_NAME;
       return participants.map(p => p.NICKNAME).filter(n => n !== myNickname).join(', ');
     }
+    if (isBlocked) return '차단된 사용자';
     return roomInfo.TARGET_NICKNAME;
   };
   const displayTitle = getDisplayTitle();
@@ -1706,8 +1709,8 @@ export default function Messages() {
                             {room.ROOM_TYPE === 'GROUP' ? (
                               <GroupAvatar avatarBg={mode === 'dark' ? '#F1F5F9' : '#0F172A'} avatars={room.PARTICIPANT_AVATARS} nicknames={room.PARTICIPANT_NICKNAMES} roomImage={room.ROOM_IMAGE} size={42} />
                             ) : (
-                              <Avatar src={room.TARGET_AVATAR ? `${API}${room.TARGET_AVATAR}` : null} sx={{ width: 42, height: 42, backgroundColor: mode === 'dark' ? '#F1F5F9' : '#0F172A', color: mode === 'dark' ? '#0F172A' : '#fff', fontWeight: 800 }}>
-                                {getInitial(room.TARGET_NICKNAME)}
+                              <Avatar src={!room.IS_BLOCKED && room.TARGET_AVATAR ? `${API}${room.TARGET_AVATAR}` : null} sx={{ width: 42, height: 42, backgroundColor: room.IS_BLOCKED ? '#94A3B8' : (mode === 'dark' ? '#F1F5F9' : '#0F172A'), color: mode === 'dark' ? '#0F172A' : '#fff', fontWeight: 800 }}>
+                                {room.IS_BLOCKED ? <BlockOutlined fontSize="small" /> : getInitial(room.TARGET_NICKNAME)}
                               </Avatar>
                             )}
                           </Badge>
@@ -1830,16 +1833,16 @@ export default function Messages() {
                             sx={{ '& .MuiBadge-badge': { backgroundColor: '#22C55E', border: '2px solid #fff', width: 12, height: 12, borderRadius: '50%' } }}
                           >
                             <Avatar
-                              src={displayAvatar ? (displayAvatar.startsWith('http') ? displayAvatar : `${API}${displayAvatar}`) : undefined}
-                              onClick={() => navigate(`/user/${displayTitle}`)}
+                              src={!isBlocked && displayAvatar ? (displayAvatar.startsWith('http') ? displayAvatar : `${API}${displayAvatar}`) : undefined}
+                              onClick={() => { if (!isBlocked) navigate(`/user/${displayTitle}`); }}
                               sx={{
                                 width: 36, height: 36,
-                                backgroundColor: mode === 'dark' ? '#F1F5F9' : '#0F172A',
+                                backgroundColor: isBlocked ? '#94A3B8' : (mode === 'dark' ? '#F1F5F9' : '#0F172A'),
                                 color: mode === 'dark' ? '#0F172A' : '#fff',
-                                fontWeight: 800, cursor: 'pointer'
+                                fontWeight: 800, cursor: isBlocked ? 'default' : 'pointer'
                               }}
                             >
-                              {getInitial(displayTitle)}
+                              {isBlocked ? <BlockOutlined fontSize="small" /> : getInitial(displayTitle)}
                             </Avatar>
                           </Badge>
                         </Box>
@@ -1848,12 +1851,12 @@ export default function Messages() {
                       <Box sx={{ ml: 0.5 }}>
                         <Typography
                           sx={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-primary)', cursor: 'pointer' }}
-                          onClick={() => isGroup ? setSettingsOpen(true) : navigate(`/user/${displayTitle}`)}
+                          onClick={() => { if (isGroup) setSettingsOpen(true); else if (!isBlocked) navigate(`/user/${displayTitle}`); }}
                         >
                           {displayTitle}{isGroup && roomInfo?.MEMBER_COUNT ? ` (${roomInfo.MEMBER_COUNT})` : ''}
                         </Typography>
 
-                        {(isOnline || activityLabel) && !isGroup && (
+                        {(isOnline || activityLabel) && !isGroup && !isBlocked && (
                           <Typography sx={{ fontSize: '0.7rem', color: isOnline ? '#22C55E' : '#64748B', fontWeight: 600 }}>
                             {isOnline ? '현재 접속 중' : activityLabel}
                           </Typography>
@@ -1873,7 +1876,7 @@ export default function Messages() {
                         )}
                       </Box>
                     </Box>
-                    <IconButton onClick={() => setSettingsOpen(true)} sx={{ color: 'var(--text-primary)' }}><InfoOutlined /></IconButton>
+                    <IconButton onClick={() => !isBlocked && setSettingsOpen(true)} disabled={isBlocked} sx={{ color: 'var(--text-primary)' }}><InfoOutlined /></IconButton>
                   </Box>
                 </Box>
               )}
@@ -2021,15 +2024,14 @@ export default function Messages() {
                             </Box>
                           )}
                           <Box sx={{ flex: 1, display: 'flex', flexDirection: isMe ? 'row-reverse' : 'row', alignItems: 'flex-end', gap: 1 }}>
-                            {/* 보낸 사람 아바타 */}
                             <Box sx={{ width: 36, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
                               {showAvatar && !isMe && (
                                 <Avatar
-                                  src={msg.SENDER_AVATAR ? (msg.SENDER_AVATAR.startsWith('http') ? msg.SENDER_AVATAR : `${API}${msg.SENDER_AVATAR}`) : undefined}
-                                  onClick={(e) => { e.stopPropagation(); navigate(`/user/${msg.SENDER_NICKNAME}`); }}
-                                  sx={{ width: 32, height: 32, backgroundColor: 'var(--text-primary)', fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer' }}
+                                  src={(!isBlocked || msg.SENDER_NICKNAME === myNickname) && msg.SENDER_AVATAR ? (msg.SENDER_AVATAR.startsWith('http') ? msg.SENDER_AVATAR : `${API}${msg.SENDER_AVATAR}`) : undefined}
+                                  onClick={(e) => { e.stopPropagation(); if (!isBlocked) navigate(`/user/${msg.SENDER_NICKNAME}`); }}
+                                  sx={{ width: 32, height: 32, backgroundColor: isBlocked && msg.SENDER_NICKNAME !== myNickname ? '#94A3B8' : 'var(--text-primary)', fontSize: '0.7rem', fontWeight: 800, cursor: isBlocked ? 'default' : 'pointer' }}
                                 >
-                                  {getInitial(msg.SENDER_NICKNAME)}
+                                  {isBlocked && msg.SENDER_NICKNAME !== myNickname ? <BlockOutlined sx={{ fontSize: 16 }} /> : getInitial(msg.SENDER_NICKNAME)}
                                 </Avatar>
                               )}
                             </Box>
@@ -2037,7 +2039,7 @@ export default function Messages() {
                             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: isSticker ? 120 : '70%' }}>
                               {showAvatar && !isMe && (
                                 <Typography sx={{ fontSize: '0.75rem', color: 'var(--text-secondary)', mb: 0.5, ml: 0.5, fontWeight: 600 }}>
-                                  {msg.SENDER_NICKNAME}
+                                  {isBlocked ? '차단된 사용자' : msg.SENDER_NICKNAME}
                                 </Typography>
                               )}
                               <Stack direction={isMe ? 'row-reverse' : 'row'} alignItems="flex-end" spacing={0.5}>
@@ -2434,7 +2436,6 @@ export default function Messages() {
         }
       </Menu >
 
-      {/* 새 채팅 다이얼로그 */}
       < Dialog open={createChatOpen} onClose={() => { setCreateChatOpen(false); setSelectedUsers([]); setNewChatSearchQuery(''); setNewChatSearchResults([]); }} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3, minHeight: 400 } }}>
         <DialogTitle sx={{ fontWeight: 800, fontSize: '1.1rem', textAlign: 'center', borderBottom: `1px solid ${mode === 'dark' ? '#2D3148' : '#E2E8F0'}`, pb: 1.5 }}>새 채팅</DialogTitle>
         <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column' }}>
@@ -2476,8 +2477,8 @@ export default function Messages() {
         </DialogActions>
       </Dialog >
 
-      {/* 채팅방 설정 */}
-      < Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 4, backgroundColor: 'var(--bg-default)' } }}>
+      <Dialog open={settingsOpen && !isBlocked} onClose={() => setSettingsOpen(false)}
+        maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 4, backgroundColor: 'var(--bg-default)' } }}>
         <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 800, fontSize: '1.2rem', borderBottom: `1px solid ${mode === 'dark' ? '#2D3148' : '#E2E8F0'}`, backgroundColor: 'var(--bg-paper)', py: 2 }}>
           채팅방 설정
           <IconButton onClick={() => setSettingsOpen(false)} size="small" sx={{ backgroundColor: 'var(--hover-bg)' }}><Close fontSize="small" /></IconButton>

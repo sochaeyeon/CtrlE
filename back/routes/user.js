@@ -21,7 +21,6 @@ const transporter = nodemailer.createTransport({
 
 const emailVerificationStore = {};
 
-// ── [1단계] 이메일 인증 코드 발송 API ───────────────────────────
 router.post('/signup/request', async (req, res) => {
     const { email, nickname } = req.body;
 
@@ -91,7 +90,6 @@ router.post('/signup/request', async (req, res) => {
     }
 });
 
-// ── [2단계] 인증코드 검증 및 최종 회원 데이터 인서트 API ──────────────────
 router.post('/signup/verify', async (req, res) => {
     const { email, password, nickname, termsAgree, privacyAgree, marketingAgree, code } = req.body;
 
@@ -158,7 +156,6 @@ router.post('/signup/verify', async (req, res) => {
     }
 });
 
-// ── [3단계] 일반 로그인 검증 및 처리 API ──────────────────────────────────
 router.post('/login', async (req, res) => {
     const { email, password } = req.body;
 
@@ -171,8 +168,9 @@ router.post('/login', async (req, res) => {
     try {
         connection = await db.getConnection();
 
+        // ↓ STATUS, DELETED_AT 추가
         const selectSql = `
-            SELECT USER_ID, EMAIL, PASSWORD, NICKNAME, OAUTH_TYPE 
+            SELECT USER_ID, EMAIL, PASSWORD, NICKNAME, OAUTH_TYPE, STATUS, DELETED_AT
             FROM USERS 
             WHERE EMAIL = :email
         `;
@@ -183,7 +181,40 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ success: false, message: '가입되지 않은 이메일 주소입니다.' });
         }
 
-        const [userId, dbEmail, dbPassword, nickname, oauthType] = result.rows[0];
+        // ↓ STATUS, DELETED_AT 추가
+        const [userId, dbEmail, dbPassword, nickname, oauthType, status, deletedAt] = result.rows[0];
+
+        // ↓ 여기가 추가 위치 — 탈퇴 계정 복구 로직
+        if (status === 'DELETED' && deletedAt) {
+            const daysSinceDelete = (Date.now() - new Date(deletedAt).getTime()) / (1000 * 60 * 60 * 24);
+            if (daysSinceDelete <= 7) {
+                const isMatch = await bcrypt.compare(password, dbPassword);
+                if (isMatch) {
+                    const conn2 = await db.getConnection();
+                    try {
+                        await conn2.execute(
+                            `UPDATE USERS SET STATUS = 'ACTIVE', DELETED_AT = NULL WHERE USER_ID = :userId`,
+                            { userId }
+                        );
+                        await conn2.execute(
+                            `UPDATE POSTS SET STATUS = 'ACTIVE' WHERE USER_ID = :userId AND STATUS = 'DELETED'`,
+                            { userId }
+                        );
+                        await conn2.commit();
+                    } finally {
+                        await conn2.close();
+                    }
+                    const token = jwt.sign({ userId, email: dbEmail, nickname }, JWT_SECRET, { expiresIn: '2h' });
+                    return res.status(200).json({
+                        success: true,
+                        message: `${nickname}님, 계정이 복구되었습니다!`,
+                        token,
+                        restored: true,
+                    });
+                }
+            }
+            return res.status(401).json({ success: false, message: '탈퇴한 계정입니다.' });
+        }
 
         if (!dbPassword && (oauthType === 'GOOGLE' || oauthType === 'GITHUB')) {
             return res.status(401).json({
@@ -219,16 +250,11 @@ router.post('/login', async (req, res) => {
         }
     }
 });
-
-// ──────────────────────────────────────────────────────────
-//  GET /user/mypage/data  — BIO_SHORT + 카테고리 JOIN 추가
-// ──────────────────────────────────────────────────────────
 router.get('/mypage/data', jwtAuthentication, async (req, res) => {
     const userId = req.user.userId;
     let connection;
     try {
         connection = await db.getConnection();
-        // userRes SELECT에 IS_PRIVATE 추가
         const userRes = await connection.execute(
             `SELECT 
      u.NICKNAME, u.EMAIL, u.BIO, u.BIO_SHORT, u.GITHUB, u.WEBSITE,
@@ -313,9 +339,6 @@ router.get('/followers', jwtAuthentication, async (req, res) => {
     }
 });
 
-// ──────────────────────────────────────────────────────────
-//  GET /user/following  — 내가 팔로우하는 사람들
-// ──────────────────────────────────────────────────────────
 router.get('/following', jwtAuthentication, async (req, res) => {
     const userId = req.user.userId;
     let connection;
@@ -344,9 +367,6 @@ router.get('/following', jwtAuthentication, async (req, res) => {
     }
 });
 
-// ──────────────────────────────────────────────────────────
-//  PUT /user/profile
-// ──────────────────────────────────────────────────────────
 router.put('/profile', jwtAuthentication, async (req, res) => {
     const userId = req.user.userId;
     const { nickname, bio, bio_short, github, website } = req.body;
@@ -397,9 +417,6 @@ router.put('/profile', jwtAuthentication, async (req, res) => {
     }
 });
 
-// ──────────────────────────────────────────────────────────
-//  POST /user/avatar
-// ──────────────────────────────────────────────────────────
 router.post('/avatar', jwtAuthentication, upload.single('avatar'), async (req, res) => {
     const userId = req.user.userId;
 
@@ -453,15 +470,27 @@ router.get('/suggestions', jwtAuthentication, async (req, res) => {
                     (SELECT STATUS FROM follows
                      WHERE follower_id = :userId4 AND following_id = u.user_id) AS IS_FOLLOWING
              FROM users u
-             WHERE u.user_id <> :userId
-               AND u.user_id NOT IN (
-                   SELECT following_id FROM follows
-                   WHERE follower_id = :userId2
-                   AND status IN ('ACCEPTED', 'PENDING')
-               )
+         WHERE u.user_id <> :userId
+      AND u.user_id NOT IN (
+                SELECT following_id FROM follows
+                WHERE follower_id = :userId2
+                AND status IN ('ACCEPTED', 'PENDING')
+            )
+            AND u.user_id NOT IN (
+                SELECT blocked_id FROM blocks WHERE blocker_id = :userId5
+            )
+            AND u.user_id NOT IN (
+                SELECT blocker_id FROM blocks WHERE blocked_id = :userId6
+            )
+            AND u.user_id NOT IN (
+                SELECT blocked_id FROM blocks WHERE blocker_id = :userId5
+            )
+            AND u.user_id NOT IN (
+                SELECT blocker_id FROM blocks WHERE blocked_id = :userId6
+            )
              ORDER BY DBMS_RANDOM.VALUE
              FETCH FIRST :limit ROWS ONLY`,
-            { userId, userId2: userId, userId3: userId, userId4: userId, limit },
+            { userId, userId2: userId, userId3: userId, userId4: userId, limit, userId5: userId, userId6: userId },
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
         res.json({ success: true, users: result.rows });
@@ -474,7 +503,7 @@ router.get('/suggestions', jwtAuthentication, async (req, res) => {
 });
 router.post('/follow/:targetId', jwtAuthentication, async (req, res) => {
     const userId = req.user?.userId ?? req.user?.id;
-    const targetId = Number(req.params.targetId);  
+    const targetId = Number(req.params.targetId);
     const conn = await db.getConnection();
     try {
         const targetUser = await conn.execute(
@@ -484,7 +513,6 @@ router.post('/follow/:targetId', jwtAuthentication, async (req, res) => {
         );
         const isPrivate = targetUser.rows[0]?.IS_PRIVATE === 'Y';
 
-        // 기존 팔로우/요청 여부 확인
         const exists = await conn.execute(
             `SELECT STATUS FROM FOLLOWS WHERE FOLLOWER_ID = :userId AND FOLLOWING_ID = :targetId`,
             { userId, targetId },
@@ -492,12 +520,10 @@ router.post('/follow/:targetId', jwtAuthentication, async (req, res) => {
         );
 
         if (exists.rows.length > 0) {
-            // 이미 존재 → 취소 (팔로우 또는 요청 모두)
             await conn.execute(
                 `DELETE FROM FOLLOWS WHERE FOLLOWER_ID = :userId AND FOLLOWING_ID = :targetId`,
                 { userId, targetId }
             );
-            // 관련 알림도 삭제
             await conn.execute(
                 `DELETE FROM NOTIFICATIONS 
                  WHERE SENDER_ID = :userId AND RECEIVER_ID = :targetId 
@@ -534,7 +560,7 @@ router.post('/follow/:targetId', jwtAuthentication, async (req, res) => {
 });
 
 router.put('/follow/:requesterId/accept', jwtAuthentication, async (req, res) => {
-    const userId = req.user?.userId ?? req.user?.id; // 나 (수락하는 사람)
+    const userId = req.user?.userId ?? req.user?.id;
     const { requesterId } = req.params;
     const conn = await db.getConnection();
     try {
@@ -543,13 +569,11 @@ router.put('/follow/:requesterId/accept', jwtAuthentication, async (req, res) =>
              WHERE FOLLOWER_ID = :requesterId AND FOLLOWING_ID = :userId AND STATUS = 'PENDING'`,
             { requesterId, userId }
         );
-        // 요청 알림 → FOLLOW 알림으로 교체
         await conn.execute(
             `UPDATE NOTIFICATIONS SET NOTI_TYPE = 'FOLLOW'
              WHERE SENDER_ID = :requesterId AND RECEIVER_ID = :userId AND NOTI_TYPE = 'FOLLOW_REQUEST'`,
             { requesterId, userId }
         );
-        // 수락 알림을 요청자에게 발송
         await conn.execute(
             `INSERT INTO NOTIFICATIONS (NOTI_ID, RECEIVER_ID, SENDER_ID, NOTI_TYPE, TARGET_TYPE, TARGET_ID)
              VALUES (SEQ_NOTI_ID.NEXTVAL, :requesterId, :userId, 'FOLLOW_ACCEPTED', 'USER', :userId2)`,
@@ -601,13 +625,15 @@ router.get('/profile/:nickname', jwtAuthentication, async (req, res) => {
         connection = await db.getConnection();
         const userRes = await connection.execute(
             `SELECT u.USER_ID, u.NICKNAME, u.BIO, u.BIO_SHORT, u.GITHUB, u.WEBSITE, u.IS_PRIVATE,
-        (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWER_ID = u.USER_ID AND STATUS = 'ACCEPTED') AS FOLLOWING_CNT,
-        (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWING_ID = u.USER_ID AND STATUS = 'ACCEPTED') AS FOLLOWER_CNT,
-        (SELECT STATUS FROM FOLLOWS WHERE FOLLOWER_ID = :myId AND FOLLOWING_ID = u.USER_ID) AS FOLLOW_STATUS,
-        (SELECT STATUS FROM FOLLOWS WHERE FOLLOWER_ID = u.USER_ID AND FOLLOWING_ID = :myId2) AS FOLLOW_STATUS_FROM_THEM,  -- 추가
-        (SELECT IMAGE_URL FROM PROFILE_IMAGES WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR
- FROM USERS u WHERE u.NICKNAME = :nickname`,
-            { myId, myId2: myId, nickname },
+            (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWER_ID = u.USER_ID AND STATUS = 'ACCEPTED') AS FOLLOWING_CNT,
+            (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWING_ID = u.USER_ID AND STATUS = 'ACCEPTED') AS FOLLOWER_CNT,
+            (SELECT STATUS FROM FOLLOWS WHERE FOLLOWER_ID = :myId AND FOLLOWING_ID = u.USER_ID) AS FOLLOW_STATUS,
+            (SELECT STATUS FROM FOLLOWS WHERE FOLLOWER_ID = u.USER_ID AND FOLLOWING_ID = :myId2) AS FOLLOW_STATUS_FROM_THEM,
+            (SELECT COUNT(*) FROM BLOCKS WHERE BLOCKER_ID = :myId3 AND BLOCKED_ID = u.USER_ID) AS I_BLOCKED,
+            (SELECT COUNT(*) FROM BLOCKS WHERE BLOCKER_ID = u.USER_ID AND BLOCKED_ID = :myId4) AS THEY_BLOCKED,
+            (SELECT IMAGE_URL FROM PROFILE_IMAGES WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR
+        FROM USERS u WHERE u.NICKNAME = :nickname`,
+            { myId, myId2: myId, myId3: myId, myId4: myId, nickname },
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
 
@@ -656,7 +682,9 @@ router.get('/profile/:nickname', jwtAuthentication, async (req, res) => {
             user: targetUser,
             posts,
             canView,
-            isMe
+            isMe,
+            iBlocked: targetUser.I_BLOCKED > 0,
+            theyBlocked: targetUser.THEY_BLOCKED > 0,
         });
 
     } catch (err) {
@@ -666,11 +694,9 @@ router.get('/profile/:nickname', jwtAuthentication, async (req, res) => {
     }
 });
 
-// routes/user.js 에 추가
 router.get('/search/public', jwtAuthentication, async (req, res) => {
     const myId = req.user?.userId ?? req.user?.id;
     const { q = '' } = req.query;
-    // 검색어가 없으면 '%%'가 되어 모든 계정을 가져옵니다.
     const keyword = `%${q.toLowerCase()}%`;
 
     const conn = await db.getConnection();
@@ -739,23 +765,44 @@ router.get('/bookmarks', jwtAuthentication, async (req, res) => {
     }
 });
 
-// GET /user/settings — 설정값 조회
 router.get('/settings', jwtAuthentication, async (req, res) => {
     const userId = req.user.userId;
     const conn = await db.getConnection();
     try {
         const result = await conn.execute(
             `SELECT IS_PRIVATE, NOTI_COMMENT, NOTI_LIKE, NOTI_FOLLOW, NOTI_MESSAGE,
-              MSG_ALLOW, GROUP_ALLOW, TAG_ALLOW, MENTION_ALLOW, HIDE_LIKE_COUNT
-       FROM USERS WHERE USER_ID = :userId`,
-            { userId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+                    MSG_ALLOW, GROUP_ALLOW, TAG_ALLOW, MENTION_ALLOW, HIDE_LIKE_COUNT
+             FROM USERS WHERE USER_ID = :userId`,
+            { userId },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
-        res.json({ success: true, settings: result.rows[0] });
-    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
-    finally { await conn.close(); }
+        if (!result.rows.length) {
+            return res.status(404).json({ success: false, message: '사용자를 찾을 수 없습니다.' });
+        }
+        const r = result.rows[0];
+        res.json({
+            success: true,
+            settings: {
+                is_private: r.IS_PRIVATE ?? 'N',
+                noti_comment: r.NOTI_COMMENT ?? 'Y',
+                noti_like: r.NOTI_LIKE ?? 'Y',
+                noti_follow: r.NOTI_FOLLOW ?? 'Y',
+                noti_message: r.NOTI_MESSAGE ?? 'Y',
+                msg_allow: r.MSG_ALLOW ?? 'EVERYONE',
+                group_allow: r.GROUP_ALLOW ?? 'EVERYONE',
+                tag_allow: r.TAG_ALLOW ?? 'EVERYONE',
+                mention_allow: r.MENTION_ALLOW ?? 'EVERYONE',
+                hide_like_count: r.HIDE_LIKE_COUNT ?? 'N',
+            },
+        });
+    } catch (err) {
+        console.error('[GET /user/settings]', err);
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        await conn.close();
+    }
 });
 
-// PUT /user/settings — 설정값 저장
 router.put('/settings', jwtAuthentication, async (req, res) => {
     const userId = req.user.userId;
     const fields = ['is_private', 'noti_comment', 'noti_like', 'noti_follow', 'noti_message',
@@ -774,7 +821,6 @@ router.put('/settings', jwtAuthentication, async (req, res) => {
     finally { await conn.close(); }
 });
 
-// GET /user/blocked — 차단 목록
 router.get('/blocked', jwtAuthentication, async (req, res) => {
     const userId = req.user.userId;
     const conn = await db.getConnection();
@@ -791,7 +837,6 @@ router.get('/blocked', jwtAuthentication, async (req, res) => {
     finally { await conn.close(); }
 });
 
-// POST /user/block/:targetId — 차단/해제 토글
 router.post('/block/:targetId', jwtAuthentication, async (req, res) => {
     const userId = req.user.userId;
     const { targetId } = req.params;
@@ -808,14 +853,31 @@ router.post('/block/:targetId', jwtAuthentication, async (req, res) => {
         }
         await conn.execute(
             `INSERT INTO BLOCKS (BLOCK_ID, BLOCKER_ID, BLOCKED_ID) VALUES (SEQ_BLOCK_ID.NEXTVAL, :userId, :targetId)`,
-            { userId, targetId }, { autoCommit: true }
+            { userId, targetId }, { autoCommit: false }
         );
+
+        await conn.execute(
+            `DELETE FROM FOLLOWS 
+     WHERE (FOLLOWER_ID = :userId AND FOLLOWING_ID = :targetId)
+        OR (FOLLOWER_ID = :targetId2 AND FOLLOWING_ID = :userId2)`,
+            { userId, targetId, targetId2: targetId, userId2: userId }
+        );
+
+        await conn.execute(
+            `DELETE FROM NOTIFICATIONS
+     WHERE (SENDER_ID = :userId AND RECEIVER_ID = :targetId 
+            AND NOTI_TYPE IN ('FOLLOW', 'FOLLOW_REQUEST', 'FOLLOW_ACCEPTED'))
+        OR (SENDER_ID = :targetId2 AND RECEIVER_ID = :userId2
+            AND NOTI_TYPE IN ('FOLLOW', 'FOLLOW_REQUEST', 'FOLLOW_ACCEPTED'))`,
+            { userId, targetId, targetId2: targetId, userId2: userId }
+        );
+
+        await conn.commit();
         res.json({ success: true, status: 'BLOCKED' });
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
     finally { await conn.close(); }
 });
 
-// GET /user/muted — 뮤트 목록
 router.get('/muted', jwtAuthentication, async (req, res) => {
     const userId = req.user.userId;
     const conn = await db.getConnection();
@@ -995,7 +1057,6 @@ router.get('/followers/by/:targetId', jwtAuthentication, async (req, res) => {
     }
 });
 
-// GET /user/following/by/:userId — 특정 유저의 팔로잉 목록
 router.get('/following/by/:targetId', jwtAuthentication, async (req, res) => {
     const { targetId } = req.params;
     const conn = await db.getConnection();
@@ -1011,6 +1072,80 @@ router.get('/following/by/:targetId', jwtAuthentication, async (req, res) => {
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
         res.json({ success: true, list: result.rows || [] });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        await conn.close();
+    }
+});
+
+router.delete('/delete', jwtAuthentication, async (req, res) => {
+    const userId = req.user.userId;
+    const { password } = req.body;
+    const conn = await db.getConnection();
+    try {
+        const userRes = await conn.execute(
+            `SELECT PASSWORD, OAUTH_TYPE FROM USERS WHERE USER_ID = :userId`,
+            { userId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        if (!userRes.rows.length) {
+            return res.status(404).json({ success: false, message: '사용자를 찾을 수 없습니다.' });
+        }
+
+        const { PASSWORD: dbPassword, OAUTH_TYPE: oauthType } = userRes.rows[0];
+
+        // 비밀번호 검증 — dbPassword가 있는 계정은 무조건 검증
+        if (dbPassword) {
+            if (!password) {
+                return res.status(400).json({ success: false, message: '비밀번호를 입력해주세요.' });
+            }
+            const isMatch = await bcrypt.compare(password, dbPassword);
+            if (!isMatch) {
+                return res.status(401).json({ success: false, message: '비밀번호가 일치하지 않습니다.' });
+            }
+        }
+
+        // 소프트 딜리트 — 완전 삭제 없이 STATUS만 변경
+        await conn.execute(
+            `UPDATE USERS SET STATUS = 'DELETED', DELETED_AT = SYSDATE WHERE USER_ID = :userId`,
+            { userId }
+        );
+        await conn.execute(
+            `UPDATE POSTS SET STATUS = 'DELETED' WHERE USER_ID = :userId AND STATUS = 'ACTIVE'`,
+            { userId }
+        );
+        await conn.execute(
+            `UPDATE COMMENTS SET STATUS = 'DELETED', DELETED_AT = SYSDATE WHERE USER_ID = :userId AND STATUS = 'ACTIVE'`,
+            { userId }
+        );
+
+        await conn.commit();
+        res.json({ success: true });
+
+    } catch (err) {
+        await conn.rollback();
+        console.error('[DELETE /user/delete]', err);
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        await conn.close();
+    }
+});
+
+router.post('/verify-password', jwtAuthentication, async (req, res) => {
+    const userId = req.user.userId;
+    const { password } = req.body;
+    const conn = await db.getConnection();
+    try {
+        const result = await conn.execute(
+            `SELECT PASSWORD FROM USERS WHERE USER_ID = :userId`,
+            { userId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        if (!result.rows.length) return res.status(404).json({ success: false });
+        const dbPassword = result.rows[0].PASSWORD;
+        if (!dbPassword) return res.json({ success: true }); // 소셜 계정
+        const isMatch = await bcrypt.compare(password, dbPassword);
+        if (!isMatch) return res.status(401).json({ success: false, message: '비밀번호가 일치하지 않습니다.' });
+        res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     } finally {

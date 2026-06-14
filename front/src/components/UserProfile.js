@@ -11,7 +11,8 @@ import {
   GitHub, Language, ArrowBack, GridOn, ViewList,
   BugReport, Code, Rocket, Lightbulb, TrendingUp, Favorite, ChatBubbleOutline,
   Lock, PersonAdd, Check, AccessTime, MailOutlined, PersonPin,
-  SortRounded, Search, Close, Videocam, Visibility
+  SortRounded, Search, Close, Videocam, Visibility, MoreHoriz,
+  Block, VolumeOff
 } from '@mui/icons-material';
 import { useColorMode } from '../App';
 
@@ -98,35 +99,22 @@ const PostGrid = ({ posts, onPostClick }) => (
               '&:hover .overlay': { opacity: 1 },
               '&:hover img, &:hover .default-img, &:hover video': { filter: 'brightness(0.55)' },
             }}>
-
             {isReel ? (
-              <Box
-                component="video"
-                src={post.image}
-                muted
-                playsInline
-                loop
-                sx={{
-                  width: '100%', height: '100%', objectFit: 'cover',
-                  display: 'block', transition: 'filter 0.2s', pointerEvents: 'none',
-                }}
-              />
+              <Box component="video" src={post.image} muted playsInline loop
+                sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', transition: 'filter 0.2s', pointerEvents: 'none' }} />
             ) : (
               <Box component={post.image ? 'img' : 'div'} src={post.image || undefined}
                 className={post.image ? '' : 'default-img'}
                 sx={{
                   width: '100%', height: '100%', objectFit: 'cover', display: 'block', transition: 'filter 0.2s',
                   ...(post.image ? {} : { backgroundImage: `url(${API}/uploads/post/defaultImg.png)`, backgroundSize: 'cover', backgroundPosition: 'center' })
-                }}
-              />
+                }} />
             )}
-
             {isReel && (
               <Box sx={{ position: 'absolute', top: 6, right: 6, color: '#fff', filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.7))' }}>
                 <Videocam sx={{ fontSize: 18 }} />
               </Box>
             )}
-
             <Box className="overlay" sx={{ position: 'absolute', inset: 0, opacity: 0, transition: 'opacity 0.2s' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, height: '100%' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
@@ -183,8 +171,7 @@ const PostList = ({ posts, onPostClick }) => (
   </Box>
 );
 
-// ── FollowModal (타 유저 프로필용) ─────────────────────────────────
-// 팔로워/팔로잉 목록 + 팔로우/팔로잉 버튼 포함
+// ── FollowModal ────────────────────────────────────────────────────────
 const FollowModal = ({ open, initialTab, userId, token, onClose, colors }) => {
   const navigate = useNavigate();
   const [tab, setTab] = useState(initialTab);
@@ -213,7 +200,6 @@ const FollowModal = ({ open, initialTab, userId, token, onClose, colors }) => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 팔로우 토글 핸들러
   const handleFollowToggle = async (u) => {
     setPendingId(u.userId);
     try {
@@ -224,52 +210,30 @@ const FollowModal = ({ open, initialTab, userId, token, onClose, colors }) => {
       const data = await res.json();
       if (data.success) {
         const newStatus = data.status;
-        // 팔로워 탭: followStatus 업데이트
         setFollowers(prev => prev.map(f => f.userId === u.userId ? { ...f, followStatus: newStatus } : f));
-        // 팔로잉 탭: followStatus 업데이트
         setFollowing(prev => prev.map(f => f.userId === u.userId ? { ...f, followStatus: newStatus } : f));
       }
     } catch { } finally { setPendingId(null); }
   };
 
-  // 팔로우 버튼 컴포넌트
   const FollowBtn = ({ u }) => {
     const isPending = pendingId === u.userId;
     const status = u.followStatus;
     if (status === 'ACCEPTED') return (
       <Button size="small" onClick={() => handleFollowToggle(u)} disabled={isPending}
-        sx={{
-          ml: 1, flexShrink: 0, fontSize: '0.72rem', fontWeight: 700,
-          color: colors.textPrimary, border: `1px solid ${colors.border}`,
-          borderRadius: 1.5, px: 1.5, py: 0.5, textTransform: 'none', minWidth: 64,
-          backgroundColor: colors.inputBg,
-          '&:hover': { borderColor: colors.borderFocus, backgroundColor: colors.hover },
-          transition: 'all 0.15s',
-        }}>
+        sx={{ ml: 1, flexShrink: 0, fontSize: '0.72rem', fontWeight: 700, color: colors.textPrimary, border: `1px solid ${colors.border}`, borderRadius: 1.5, px: 1.5, py: 0.5, textTransform: 'none', minWidth: 64, backgroundColor: colors.inputBg, '&:hover': { borderColor: colors.borderFocus, backgroundColor: colors.hover } }}>
         {isPending ? <CircularProgress size={10} /> : '팔로잉'}
       </Button>
     );
     if (status === 'PENDING') return (
       <Button size="small" onClick={() => handleFollowToggle(u)} disabled={isPending}
-        sx={{
-          ml: 1, flexShrink: 0, fontSize: '0.72rem', fontWeight: 700,
-          color: colors.textMuted, border: `1px solid ${colors.border}`,
-          borderRadius: 1.5, px: 1.5, py: 0.5, textTransform: 'none', minWidth: 64,
-          '&:hover': { borderColor: colors.borderFocus, backgroundColor: colors.hover },
-          transition: 'all 0.15s',
-        }}>
+        sx={{ ml: 1, flexShrink: 0, fontSize: '0.72rem', fontWeight: 700, color: colors.textMuted, border: `1px solid ${colors.border}`, borderRadius: 1.5, px: 1.5, py: 0.5, textTransform: 'none', minWidth: 64, '&:hover': { borderColor: colors.borderFocus, backgroundColor: colors.hover } }}>
         {isPending ? <CircularProgress size={10} /> : '요청됨'}
       </Button>
     );
     return (
       <Button size="small" onClick={() => handleFollowToggle(u)} disabled={isPending}
-        sx={{
-          ml: 1, flexShrink: 0, fontSize: '0.72rem', fontWeight: 700,
-          color: '#fff', backgroundColor: '#2563EB',
-          border: '1px solid #2563EB',
-          borderRadius: 1.5, px: 1.5, py: 0.5, textTransform: 'none', minWidth: 64,
-          '&:hover': { backgroundColor: '#1D4ED8' }, transition: 'all 0.15s',
-        }}>
+        sx={{ ml: 1, flexShrink: 0, fontSize: '0.72rem', fontWeight: 700, color: '#fff', backgroundColor: '#2563EB', border: '1px solid #2563EB', borderRadius: 1.5, px: 1.5, py: 0.5, textTransform: 'none', minWidth: 64, '&:hover': { backgroundColor: '#1D4ED8' } }}>
         {isPending ? <CircularProgress size={10} sx={{ color: '#fff' }} /> : '팔로우'}
       </Button>
     );
@@ -280,15 +244,7 @@ const FollowModal = ({ open, initialTab, userId, token, onClose, colors }) => {
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs" scroll="paper"
-      PaperProps={{
-        sx: {
-          borderRadius: 2.5,
-          border: `1px solid ${colors.border}`,
-          boxShadow: '0 24px 64px rgba(15,23,42,0.15)',
-          mx: 2, my: 'auto', maxHeight: '80vh',
-          backgroundColor: colors.paper,
-        }
-      }}>
+      PaperProps={{ sx: { borderRadius: 2.5, border: `1px solid ${colors.border}`, boxShadow: '0 24px 64px rgba(15,23,42,0.15)', mx: 2, my: 'auto', maxHeight: '80vh', backgroundColor: colors.paper } }}>
       <DialogTitle sx={{ p: 0, borderBottom: `1px solid ${colors.border}`, flexShrink: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2.5, pt: 2, pb: 0 }}>
           <Typography sx={{ fontWeight: 800, fontSize: '0.95rem', color: colors.textPrimary }}>
@@ -307,12 +263,7 @@ const FollowModal = ({ open, initialTab, userId, token, onClose, colors }) => {
               </Typography>
             </Box>
           ))}
-          <Box sx={{
-            position: 'absolute', bottom: 0, left: `calc(${tab * 50}% + 8px)`,
-            width: 'calc(50% - 16px)', height: 2,
-            backgroundColor: '#2563EB', borderRadius: 1,
-            transition: 'left 0.25s cubic-bezier(0.4,0,0.2,1)',
-          }} />
+          <Box sx={{ position: 'absolute', bottom: 0, left: `calc(${tab * 50}% + 8px)`, width: 'calc(50% - 16px)', height: 2, backgroundColor: '#2563EB', borderRadius: 1, transition: 'left 0.25s cubic-bezier(0.4,0,0.2,1)' }} />
         </Box>
       </DialogTitle>
       <DialogContent sx={{ px: 2, pt: 2, pb: 1, overflowY: 'auto', backgroundColor: colors.paper }}>
@@ -332,26 +283,16 @@ const FollowModal = ({ open, initialTab, userId, token, onClose, colors }) => {
         ) : (
           <List disablePadding>
             {filtered.map((u, idx) => (
-              <ListItem key={u.userId} sx={{
-                px: 0.5, py: 1, borderRadius: 1.5, cursor: 'pointer', transition: 'background 0.15s',
-                '&:hover': { backgroundColor: colors.hover },
-                borderBottom: idx < filtered.length - 1 ? `1px solid ${colors.border}` : 'none',
-                alignItems: 'center',
-              }}>
-                <ListItemAvatar sx={{ minWidth: 46 }}
-                  onClick={() => { onClose(); navigate(`/user/${u.nickname}`); }}>
+              <ListItem key={u.userId} sx={{ px: 0.5, py: 1, borderRadius: 1.5, cursor: 'pointer', transition: 'background 0.15s', '&:hover': { backgroundColor: colors.hover }, borderBottom: idx < filtered.length - 1 ? `1px solid ${colors.border}` : 'none', alignItems: 'center' }}>
+                <ListItemAvatar sx={{ minWidth: 46 }} onClick={() => { onClose(); navigate(`/user/${u.nickname}`); }}>
                   <Avatar src={u.avatar ? `${API}${u.avatar}` : undefined}
                     sx={{ width: 36, height: 36, backgroundColor: colors.textPrimary, fontSize: '0.9rem', fontWeight: 800, border: `1.5px solid ${colors.border}` }}>
                     {getInitial(u.nickname)}
                   </Avatar>
                 </ListItemAvatar>
-                <ListItemText
-                  onClick={() => { onClose(); navigate(`/user/${u.nickname}`); }}
-                  sx={{ my: 0 }}
+                <ListItemText onClick={() => { onClose(); navigate(`/user/${u.nickname}`); }} sx={{ my: 0 }}
                   primary={<Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: colors.textPrimary }}>{u.nickname}</Typography>}
-                  secondary={u.bioShort ? <Typography sx={{ fontSize: '0.75rem', color: colors.textHint, mt: 0.2 }}>{u.bioShort}</Typography> : null}
-                />
-                {/* 팔로우/팔로잉 버튼 */}
+                  secondary={u.bioShort ? <Typography sx={{ fontSize: '0.75rem', color: colors.textHint, mt: 0.2 }}>{u.bioShort}</Typography> : null} />
                 <FollowBtn u={u} />
               </ListItem>
             ))}
@@ -361,6 +302,38 @@ const FollowModal = ({ open, initialTab, userId, token, onClose, colors }) => {
     </Dialog>
   );
 };
+
+// ── BlockConfirmDialog ─────────────────────────────────────────────────
+const BlockConfirmDialog = ({ open, userName, isBlocked, onConfirm, onClose, colors }) => (
+  <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth
+    PaperProps={{ sx: { borderRadius: 2.5, border: `1px solid ${colors.border}`, backgroundColor: colors.paper, mx: 2 } }}>
+    <DialogTitle sx={{ fontWeight: 800, fontSize: '1rem', color: isBlocked ? colors.textPrimary : '#DC2626', pb: 1 }}>
+      {isBlocked ? `${userName} 차단 해제` : `${userName} 차단`}
+    </DialogTitle>
+    <DialogContent sx={{ pb: 1 }}>
+      <Typography sx={{ fontSize: '0.88rem', color: colors.textMuted, lineHeight: 1.7 }}>
+        {isBlocked
+          ? `${userName}님의 차단을 해제하면 상대방이 다시 내 프로필과 게시물을 볼 수 있게 됩니다.`
+          : `${userName}님을 차단하면 상대방은 내 프로필과 게시물을 볼 수 없게 됩니다. 팔로우 관계도 모두 해제됩니다.`
+        }
+      </Typography>
+    </DialogContent>
+    <DialogActions sx={{ px: 2.5, pb: 2, gap: 1 }}>
+      <Button onClick={onClose}
+        sx={{ color: colors.textMuted, fontWeight: 700, fontSize: '0.85rem', textTransform: 'none', border: `1px solid ${colors.border}`, borderRadius: 1.5, px: 2, '&:hover': { backgroundColor: colors.hover } }}>
+        취소
+      </Button>
+      <Button onClick={onConfirm} variant="contained"
+        sx={{
+          fontWeight: 800, fontSize: '0.85rem', textTransform: 'none', borderRadius: 1.5, px: 2, boxShadow: 'none',
+          backgroundColor: isBlocked ? '#2563EB' : '#DC2626',
+          '&:hover': { backgroundColor: isBlocked ? '#1D4ED8' : '#B91C1C', boxShadow: 'none' }
+        }}>
+        {isBlocked ? '차단 해제' : '차단하기'}
+      </Button>
+    </DialogActions>
+  </Dialog>
+);
 
 const IconTabBar = ({ activeTab, onChange, colors }) => {
   const tabs = [
@@ -380,13 +353,7 @@ const IconTabBar = ({ activeTab, onChange, colors }) => {
           {React.cloneElement(t.icon, { sx: { fontSize: 20 } })}
         </Box>
       ))}
-      <Box sx={{
-        position: 'absolute', bottom: 0,
-        left: `${(activeTab / 2) * 100}%`,
-        width: '50%', height: 2,
-        backgroundColor: colors.textPrimary, borderRadius: '2px 2px 0 0',
-        transition: 'left 0.28s cubic-bezier(0.4,0,0.2,1)',
-      }} />
+      <Box sx={{ position: 'absolute', bottom: 0, left: `${(activeTab / 2) * 100}%`, width: '50%', height: 2, backgroundColor: colors.textPrimary, borderRadius: '2px 2px 0 0', transition: 'left 0.28s cubic-bezier(0.4,0,0.2,1)' }} />
     </Box>
   );
 };
@@ -418,7 +385,6 @@ export default function UserProfile() {
   const token = localStorage.getItem('accessToken');
   const location = useLocation();
 
-  // 다크모드
   const { mode } = useColorMode();
   const colors = {
     mode,
@@ -446,21 +412,11 @@ export default function UserProfile() {
     components: {
       MuiCssBaseline: {
         styleOverrides: `
-          @keyframes fadeUp {
-            from { opacity: 0; transform: translateY(16px); }
-            to   { opacity: 1; transform: translateY(0); }
-          }
-          @keyframes scaleIn {
-            from { opacity: 0; transform: scale(0.95); }
-            to   { opacity: 1; transform: scale(1); }
-          }
+          @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+          @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         `,
       },
-      MuiButton: {
-        styleOverrides: {
-          root: { boxShadow: 'none', '&:hover': { boxShadow: 'none' }, '&:active': { boxShadow: 'none' } }
-        }
-      }
+      MuiButton: { styleOverrides: { root: { boxShadow: 'none', '&:hover': { boxShadow: 'none' }, '&:active': { boxShadow: 'none' } } } }
     },
   });
 
@@ -471,6 +427,12 @@ export default function UserProfile() {
   const [followStatus, setFollowStatus] = useState('NONE');
   const [isMe, setIsMe] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
+
+  // 차단 상태
+  const [iBlocked, setIBlocked] = useState(false);       // 내가 상대를 차단
+  const [theyBlocked, setTheyBlocked] = useState(false); // 상대가 나를 차단
+  const [blockLoading, setBlockLoading] = useState(false);
+  const [blockConfirmOpen, setBlockConfirmOpen] = useState(false);
 
   const [viewMode, setViewMode] = useState('grid');
   const [sortOrder, setSortOrder] = useState('desc');
@@ -486,6 +448,9 @@ export default function UserProfile() {
   const [followModal, setFollowModal] = useState({ open: false, tab: 0 });
   const [sortAnchor, setSortAnchor] = useState(null);
   const [activeCategory, setActiveCategory] = useState('전체');
+
+  // 더보기 메뉴 (차단/신고 등)
+  const [moreAnchor, setMoreAnchor] = useState(null);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -518,7 +483,7 @@ export default function UserProfile() {
             tag: p.tag || 'General',
             likes: p.likes ?? 0,
             commentCount: p.commentCount ?? 0,
-            views: p.views ?? 0,   // ← 추가
+            views: p.views ?? 0,
             image: (p.images && p.images.trim()) ? (p.images.trim().startsWith('http') ? p.images.trim() : `${API}${p.images.trim()}`) : null,
           }));
 
@@ -526,6 +491,11 @@ export default function UserProfile() {
           setCanView(data.canView);
           setIsMe(data.isMe);
           setFollowStatus(data.user.FOLLOW_STATUS || 'NONE');
+
+          // 차단 상태 반영 (백엔드에서 내려줄 경우)
+          setIBlocked(!!data.iBlocked);
+          setTheyBlocked(!!data.theyBlocked);
+
           const avatarUrl = data.user.AVATAR ? `${API}${data.user.AVATAR}` : null;
           if (avatarUrl) {
             extractDominantColor(avatarUrl).then(color => {
@@ -566,6 +536,31 @@ export default function UserProfile() {
       }
     } finally {
       setFollowLoading(false);
+    }
+  };
+
+  // 차단 토글
+  const handleBlockToggle = async () => {
+    setBlockConfirmOpen(false);
+    setBlockLoading(true);
+    try {
+      const res = await fetch(`${API}/user/block/${user.id}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.status === 'BLOCKED') {
+          setIBlocked(true);
+          // 차단 시 팔로우 관계 끊기
+          setFollowStatus('NONE');
+          setUser(u => ({ ...u, followers: Math.max(0, u.followers - (followStatus === 'ACCEPTED' ? 1 : 0)) }));
+        } else {
+          setIBlocked(false);
+        }
+      }
+    } catch { } finally {
+      setBlockLoading(false);
     }
   };
 
@@ -620,16 +615,47 @@ export default function UserProfile() {
     );
   }
 
+  // ── 상태별 렌더링 분기 ────────────────────────────────────────────────
+
+  // 상대가 나를 차단한 경우
+  if (theyBlocked) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Box sx={{ minHeight: '100vh', backgroundColor: colors.bg }}>
+          <Box sx={{ position: 'sticky', top: 0, zIndex: 100, backgroundColor: mode === 'dark' ? 'rgba(15,17,23,0.9)' : 'rgba(248,250,252,0.85)', backdropFilter: 'blur(12px)', borderBottom: `1px solid ${colors.border}` }}>
+            <Box sx={{ maxWidth: 800, mx: 'auto', px: { xs: 2, md: 4 }, py: 1.5, display: 'flex', alignItems: 'center', gap: 2 }}>
+              <IconButton size="small" onClick={() => navigate(-1)} sx={{ color: colors.textMuted }}><ArrowBack sx={{ fontSize: 20 }} /></IconButton>
+              <Typography sx={{ fontWeight: 800, fontSize: '0.95rem', color: colors.textPrimary }}>{user.name}</Typography>
+            </Box>
+          </Box>
+          <Box sx={{ maxWidth: 800, mx: 'auto', px: { xs: 2, md: 4 }, py: 4 }}>
+            <Box sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2.5, p: { xs: 3, md: 5 }, textAlign: 'center', animation: 'scaleIn 0.3s ease both' }}>
+              <Avatar src={user.avatar || undefined}
+                sx={{ width: 72, height: 72, mx: 'auto', mb: 2, backgroundColor: colors.inputBg, fontSize: 26, fontWeight: 800, border: `2px solid ${colors.border}` }}>
+                {getInitial(user.name)}
+              </Avatar>
+              <Typography sx={{ fontWeight: 800, fontSize: '1.05rem', color: colors.textPrimary, mb: 0.5 }}>{user.name}</Typography>
+              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.8, mt: 2, mb: 1.5, px: 2, py: 1, backgroundColor: mode === 'dark' ? '#2A1A1A' : '#FEF2F2', border: `1px solid ${mode === 'dark' ? '#5C2B2B' : '#FECACA'}`, borderRadius: 2 }}>
+                <Block sx={{ fontSize: 16, color: '#DC2626' }} />
+                <Typography sx={{ fontSize: '0.85rem', color: '#DC2626', fontWeight: 700 }}>이 사용자의 콘텐츠를 볼 수 없습니다</Typography>
+              </Box>
+              <Typography sx={{ fontSize: '0.82rem', color: colors.textHint, mt: 1 }}>
+                이 계정은 회원님을 차단했습니다.
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box sx={{ minHeight: '100vh', backgroundColor: colors.bg }}>
         {/* 상단 네비 */}
-        <Box sx={{
-          position: 'sticky', top: 0, zIndex: 100,
-          backgroundColor: mode === 'dark' ? 'rgba(15,17,23,0.9)' : 'rgba(248,250,252,0.85)',
-          backdropFilter: 'blur(12px)', borderBottom: `1px solid ${colors.border}`
-        }}>
+        <Box sx={{ position: 'sticky', top: 0, zIndex: 100, backgroundColor: mode === 'dark' ? 'rgba(15,17,23,0.9)' : 'rgba(248,250,252,0.85)', backdropFilter: 'blur(12px)', borderBottom: `1px solid ${colors.border}` }}>
           <Box sx={{ maxWidth: 800, mx: 'auto', px: { xs: 2, md: 4 }, py: 1.5, display: 'flex', alignItems: 'center', gap: 2 }}>
             <IconButton size="small" onClick={() => navigate(-1)} sx={{ color: colors.textMuted }}><ArrowBack sx={{ fontSize: 20 }} /></IconButton>
             <Typography sx={{ fontWeight: 800, fontSize: '0.95rem', color: colors.textPrimary }}>{user.name}</Typography>
@@ -672,53 +698,74 @@ export default function UserProfile() {
 
           {/* 프로필 카드 */}
           <Box sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2.5, p: { xs: 2.5, md: 3.5 }, mb: 3, animation: 'scaleIn 0.3s ease both' }}>
-            <Box sx={{
-              height: 80, borderRadius: 1.5, background: headerBg,
-              transition: 'background 1s ease', mb: -4, position: 'relative', overflow: 'hidden',
-              '&::after': { content: '""', position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.08) 0%, transparent 60%)' }
-            }} />
+            <Box sx={{ height: 80, borderRadius: 1.5, background: iBlocked ? (mode === 'dark' ? '#1A1D27' : '#F1F5F9') : headerBg, transition: 'background 1s ease', mb: -4, position: 'relative', overflow: 'hidden', '&::after': { content: '""', position: 'absolute', inset: 0, backgroundImage: iBlocked ? 'none' : 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.08) 0%, transparent 60%)' } }} />
 
             <Box sx={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', mb: 2 }}>
-              <Avatar src={user.avatar || undefined} sx={{ width: 88, height: 88, backgroundColor: mode === 'dark' ? '#F1F5F9' : '#0F172A', color: mode === 'dark' ? '#0F172A' : '#fff', fontSize: 30, fontWeight: 800, border: '3px solid #FFFFFF', boxShadow: '0 4px 20px rgba(15,23,42,0.12)' }}>
-                {getInitial(user.name)}
+              <Avatar src={iBlocked ? undefined : (user.avatar || undefined)}
+                sx={{ width: 88, height: 88, backgroundColor: iBlocked ? colors.inputBg : (mode === 'dark' ? '#F1F5F9' : '#0F172A'), color: iBlocked ? colors.textHint : (mode === 'dark' ? '#0F172A' : '#fff'), fontSize: 30, fontWeight: 800, border: '3px solid #FFFFFF', boxShadow: '0 4px 20px rgba(15,23,42,0.12)', filter: iBlocked ? 'grayscale(1) opacity(0.5)' : 'none' }}>
+                {iBlocked ? <Block sx={{ fontSize: 32, color: colors.textHint }} /> : getInitial(user.name)}
               </Avatar>
 
               {!isMe && (
-                <Stack direction="row" spacing={1}>
-                  <Button variant="contained" onClick={toggleFollow} disabled={followLoading}
-                    startIcon={followStatus === 'ACCEPTED' ? <Check sx={{ fontSize: 16 }} /> : followStatus === 'PENDING' ? <AccessTime sx={{ fontSize: 16 }} /> : <PersonAdd sx={{ fontSize: 16 }} />}
-                    sx={{
-                      textTransform: 'none', fontWeight: 700, fontSize: '0.8rem', px: 2, py: 0.8, borderRadius: 1.5, boxShadow: 'none',
-                      ...(followStatus === 'ACCEPTED'
-                        ? { backgroundColor: colors.inputBg, color: colors.textPrimary, border: `1px solid ${colors.border}`, '&:hover': { backgroundColor: mode === 'dark' ? '#3A1A1A' : '#FEF2F2', color: '#DC2626', borderColor: '#FECACA' } }
-                        : followStatus === 'PENDING'
-                          ? { backgroundColor: colors.inputBg, color: colors.textMuted, border: `1px solid ${colors.border}` }
-                          : { backgroundColor: colors.textPrimary, color: colors.paper, '&:hover': { backgroundColor: '#2563EB' } })
-                    }}>
-                    {followStatus === 'ACCEPTED' ? '팔로잉' : followStatus === 'PENDING' ? '요청됨' : '팔로우'}
-                  </Button>
-                  {canView && (
-                    <Button variant="outlined" onClick={handleMessageClick}
-                      startIcon={<MailOutlined sx={{ fontSize: 16 }} />}
-                      sx={{
-                        textTransform: 'none', fontWeight: 700, fontSize: '0.8rem', px: 2, py: 0.8, borderRadius: 1.5,
-                        borderColor: colors.border, color: colors.textPrimary, backgroundColor: colors.paper,
-                        '&:hover': { backgroundColor: colors.hover, borderColor: colors.borderFocus }
-                      }}>
-                      메시지
-                    </Button>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  {/* 차단 상태가 아닐 때만 팔로우/메시지 버튼 표시 */}
+                  {!iBlocked && (
+                    <>
+                      <Button variant="contained" onClick={toggleFollow} disabled={followLoading}
+                        startIcon={followStatus === 'ACCEPTED' ? <Check sx={{ fontSize: 16 }} /> : followStatus === 'PENDING' ? <AccessTime sx={{ fontSize: 16 }} /> : <PersonAdd sx={{ fontSize: 16 }} />}
+                        sx={{
+                          textTransform: 'none', fontWeight: 700, fontSize: '0.8rem', px: 2, py: 0.8, borderRadius: 1.5, boxShadow: 'none',
+                          ...(followStatus === 'ACCEPTED'
+                            ? { backgroundColor: colors.inputBg, color: colors.textPrimary, border: `1px solid ${colors.border}`, '&:hover': { backgroundColor: mode === 'dark' ? '#3A1A1A' : '#FEF2F2', color: '#DC2626', borderColor: '#FECACA' } }
+                            : followStatus === 'PENDING'
+                              ? { backgroundColor: colors.inputBg, color: colors.textMuted, border: `1px solid ${colors.border}` }
+                              : { backgroundColor: colors.textPrimary, color: colors.paper, '&:hover': { backgroundColor: '#2563EB' } })
+                        }}>
+                        {followStatus === 'ACCEPTED' ? '팔로잉' : followStatus === 'PENDING' ? '요청됨' : '팔로우'}
+                      </Button>
+                      {canView && (
+                        <Button variant="outlined" onClick={handleMessageClick}
+                          startIcon={<MailOutlined sx={{ fontSize: 16 }} />}
+                          sx={{ textTransform: 'none', fontWeight: 700, fontSize: '0.8rem', px: 2, py: 0.8, borderRadius: 1.5, borderColor: colors.border, color: colors.textPrimary, backgroundColor: colors.paper, '&:hover': { backgroundColor: colors.hover, borderColor: colors.borderFocus } }}>
+                          메시지
+                        </Button>
+                      )}
+                    </>
                   )}
+
+                  {/* 더보기 버튼 (차단/해제) */}
+                  <IconButton size="small" onClick={(e) => setMoreAnchor(e.currentTarget)}
+                    sx={{ color: colors.textMuted, border: `1px solid ${colors.border}`, borderRadius: 1.5, p: 0.8, '&:hover': { backgroundColor: colors.hover } }}>
+                    <MoreHoriz sx={{ fontSize: 20 }} />
+                  </IconButton>
+                  <Menu anchorEl={moreAnchor} open={Boolean(moreAnchor)} onClose={() => setMoreAnchor(null)}
+                    PaperProps={{ sx: { borderRadius: 1.5, border: `1px solid ${colors.border}`, boxShadow: '0 8px 24px rgba(15,23,42,0.1)', minWidth: 140, backgroundColor: colors.paper } }}>
+                    <MenuItem
+                      onClick={() => { setMoreAnchor(null); setBlockConfirmOpen(true); }}
+                      sx={{ fontSize: '0.85rem', fontWeight: 600, py: 1, gap: 1.2, color: iBlocked ? colors.textPrimary : '#DC2626' }}>
+                      <Block sx={{ fontSize: 16 }} />
+                      {iBlocked ? '차단 해제' : '차단하기'}
+                    </MenuItem>
+                  </Menu>
                 </Stack>
               )}
             </Box>
 
             <Box sx={{ mb: 2 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography sx={{ fontWeight: 800, fontSize: '1.15rem', color: colors.textPrimary, lineHeight: 1.2 }}>{user.name}</Typography>
-                {user.isPrivate && <Lock sx={{ fontSize: 16, color: colors.textHint }} />}
+                <Typography sx={{ fontWeight: 800, fontSize: '1.15rem', color: iBlocked ? colors.textHint : colors.textPrimary, lineHeight: 1.2 }}>{user.name}</Typography>
+                {user.isPrivate && !iBlocked && <Lock sx={{ fontSize: 16, color: colors.textHint }} />}
+                {iBlocked && (
+                  <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.3, backgroundColor: mode === 'dark' ? '#2A1A1A' : '#FEF2F2', border: `1px solid ${mode === 'dark' ? '#5C2B2B' : '#FECACA'}`, borderRadius: 1 }}>
+                    <Block sx={{ fontSize: 11, color: '#DC2626' }} />
+                    <Typography sx={{ fontSize: '0.7rem', color: '#DC2626', fontWeight: 700 }}>차단됨</Typography>
+                  </Box>
+                )}
               </Box>
               <Typography sx={{ color: colors.textHint, fontSize: '0.82rem', mt: 0.2 }}>{user.handle}</Typography>
-              {user.role && (
+
+              {/* 차단 상태가 아닐 때만 bio 표시 */}
+              {!iBlocked && user.role && (
                 <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6, mt: 1.2, px: 1.2, py: 0.5, backgroundColor: colors.inputBg, border: `1px solid ${colors.border}`, borderRadius: 2, maxWidth: '100%' }}>
                   <Box sx={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: '#2563EB', flexShrink: 0 }} />
                   <Typography sx={{ fontSize: '0.78rem', color: colors.textMuted, fontWeight: 600, lineHeight: 1 }}>
@@ -728,37 +775,54 @@ export default function UserProfile() {
               )}
             </Box>
 
-            {user.bio && (
+            {!iBlocked && user.bio && (
               <Typography sx={{ color: colors.textMuted, fontSize: '0.88rem', lineHeight: 1.75, mb: 2, whiteSpace: 'pre-line' }}>
                 <MentionText text={user.bio} onNavigate={(nick) => navigate(`/user/${nick}`)} />
               </Typography>
             )}
 
-            <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
-              {user.github && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', '&:hover .link-text': { color: '#2563EB' } }} onClick={() => window.open(`https://github.com/${user.github.replace('@', '')}`, '_blank')}>
-                  <GitHub sx={{ fontSize: 14, color: colors.textHint }} />
-                  <Typography className="link-text" sx={{ fontSize: '0.78rem', color: colors.textMuted, fontWeight: 600, transition: 'color 0.15s' }}>{user.github}</Typography>
-                </Box>
-              )}
-              {user.website && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', '&:hover .link-text': { color: '#2563EB' } }} onClick={() => window.open(user.website, '_blank')}>
-                  <Language sx={{ fontSize: 14, color: colors.textHint }} />
-                  <Typography className="link-text" sx={{ fontSize: '0.78rem', color: colors.textMuted, fontWeight: 600, transition: 'color 0.15s' }}>{user.website}</Typography>
-                </Box>
-              )}
-            </Stack>
+            {!iBlocked && (
+              <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+                {user.github && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', '&:hover .link-text': { color: '#2563EB' } }} onClick={() => window.open(`https://github.com/${user.github.replace('@', '')}`, '_blank')}>
+                    <GitHub sx={{ fontSize: 14, color: colors.textHint }} />
+                    <Typography className="link-text" sx={{ fontSize: '0.78rem', color: colors.textMuted, fontWeight: 600, transition: 'color 0.15s' }}>{user.github}</Typography>
+                  </Box>
+                )}
+                {user.website && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', '&:hover .link-text': { color: '#2563EB' } }} onClick={() => window.open(user.website, '_blank')}>
+                    <Language sx={{ fontSize: 14, color: colors.textHint }} />
+                    <Typography className="link-text" sx={{ fontSize: '0.78rem', color: colors.textMuted, fontWeight: 600, transition: 'color 0.15s' }}>{user.website}</Typography>
+                  </Box>
+                )}
+              </Stack>
+            )}
 
             <Divider sx={{ borderColor: colors.border, mb: 2.5 }} />
             <Stack direction="row" divider={<Divider orientation="vertical" flexItem sx={{ borderColor: colors.border }} />}>
-              <StatBadge value={user.postCount} label="게시물" colors={colors} />
-              <StatBadge value={user.followers} label="팔로워" onClick={() => setFollowModal({ open: true, tab: 0 })} colors={colors} />
-              <StatBadge value={user.following} label="팔로잉" onClick={() => setFollowModal({ open: true, tab: 1 })} colors={colors} />
+              <StatBadge value={iBlocked ? '-' : user.postCount} label="게시물" colors={colors} />
+              <StatBadge value={iBlocked ? '-' : user.followers} label="팔로워" onClick={iBlocked ? undefined : () => setFollowModal({ open: true, tab: 0 })} colors={colors} />
+              <StatBadge value={iBlocked ? '-' : user.following} label="팔로잉" onClick={iBlocked ? undefined : () => setFollowModal({ open: true, tab: 1 })} colors={colors} />
             </Stack>
           </Box>
 
           {/* 게시물 영역 */}
-          {!canView ? (
+          {iBlocked ? (
+            // 내가 차단한 경우 — 게시물 잠금 화면
+            <Box sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2.5, p: 8, textAlign: 'center', mb: 3, animation: 'fadeUp 0.3s ease both' }}>
+              <Block sx={{ fontSize: 40, color: colors.border, mb: 2 }} />
+              <Typography sx={{ fontWeight: 800, fontSize: '1.05rem', color: colors.textPrimary, mb: 1 }}>차단한 계정입니다</Typography>
+              <Typography sx={{ fontSize: '0.85rem', color: colors.textMuted, mb: 3 }}>
+                {user.name}님을 차단하는 동안 게시물을 볼 수 없습니다.
+              </Typography>
+              <Button
+                onClick={() => setBlockConfirmOpen(true)}
+                disabled={blockLoading}
+                sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#2563EB', border: '1px solid #BFDBFE', borderRadius: 1.5, px: 2.5, py: 0.8, textTransform: 'none', backgroundColor: mode === 'dark' ? 'rgba(37,99,235,0.08)' : '#EFF6FF', '&:hover': { backgroundColor: mode === 'dark' ? 'rgba(37,99,235,0.15)' : '#DBEAFE' } }}>
+                차단 해제하기
+              </Button>
+            </Box>
+          ) : !canView ? (
             <Box sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, borderRadius: 2.5, p: 8, textAlign: 'center', mb: 3 }}>
               <Lock sx={{ fontSize: 40, color: colors.border, mb: 2 }} />
               <Typography sx={{ fontWeight: 800, fontSize: '1.05rem', color: colors.textPrimary, mb: 1 }}>비공개 계정입니다</Typography>
@@ -820,7 +884,7 @@ export default function UserProfile() {
             </Box>
           )}
 
-          {/* 팔로우 요청 다이얼로그 (미사용이지만 유지) */}
+          {/* 팔로우 요청 다이얼로그 */}
           <Dialog open={requestModalOpen} onClose={() => setRequestModalOpen(false)}
             PaperProps={{ sx: { borderRadius: 3, minWidth: 320, backgroundColor: colors.paper } }}>
             <DialogTitle sx={{ fontWeight: 800, fontSize: '1.05rem', color: colors.textPrimary }}>팔로우 요청</DialogTitle>
@@ -839,6 +903,16 @@ export default function UserProfile() {
             userId={user.id}
             token={token}
             onClose={() => setFollowModal(m => ({ ...m, open: false }))}
+            colors={colors}
+          />
+
+          {/* 차단 확인 다이얼로그 */}
+          <BlockConfirmDialog
+            open={blockConfirmOpen}
+            userName={user.name}
+            isBlocked={iBlocked}
+            onConfirm={handleBlockToggle}
+            onClose={() => setBlockConfirmOpen(false)}
             colors={colors}
           />
         </Box>

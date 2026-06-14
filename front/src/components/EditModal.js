@@ -668,24 +668,37 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
 
         contentRef.current = existingContent;
 
-        const mediaRegex = /<(?:img|video)[^>]+src="([^">]+)"/g;
-        let match;
+        const categoryName = feed.CATEGORY_NAME || '';
+        const isReelPost = categoryName === 'REEL';
         const restoredImages = [];
-        while ((match = mediaRegex.exec(existingContent)) !== null) {
-          const src = match[1];
-          restoredImages.push({
-            file: null,
-            previewUrl: src.startsWith('http') ? src : `${API}${src}`,
-            editorSrc: src,
-            originalUrl: src.startsWith('http') ? src : `${API}${src}`,
-            isRestored: true,
-          });
-        }
-        setImageFiles(restoredImages);
 
+        if (isReelPost) {
+          const videoRegex = /<video[^>]*src="([^"]+)"[^>]*>/gi;
+          let vm;
+          while ((vm = videoRegex.exec(existingContent)) !== null) {
+            const src = vm[1];
+            if (src.startsWith('data:')) continue;
+            const fullUrl = src.startsWith('http') ? src : `${API}${src}`;
+            restoredImages.push({ file: null, previewUrl: fullUrl, editorSrc: fullUrl, originalUrl: fullUrl, isRestored: true });
+          }
+        } else {
+          const imgRegex = /<img[^>]+src="([^">]+)"/g;
+          let im;
+          while ((im = imgRegex.exec(existingContent)) !== null) {
+            const src = im[1];
+            if (src.startsWith('data:')) continue;
+            const fullUrl = src.startsWith('http') ? src : `${API}${src}`;
+            restoredImages.push({ file: null, previewUrl: fullUrl, editorSrc: fullUrl, originalUrl: fullUrl, isRestored: true });
+          }
+        }
+
+        setImageFiles(restoredImages);
         setTimeout(() => {
           const quill = quillRef.current?.getEditor();
-          if (quill) quill.clipboard.dangerouslyPasteHTML(existingContent);
+          if (quill) {
+            quill.root.innerHTML = existingContent;
+            contentRef.current = existingContent;
+          }
         }, 100);
       } catch (e) {
         console.error('[EditModal] fetchPost error:', e);
@@ -718,7 +731,9 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
           );
           setImageFiles(prev => {
             const next = prev.filter(f =>
-              editorSrcs.has(f.editorSrc) || editorSrcs.has(f.previewUrl)
+              f.isRestored ||
+              editorSrcs.has(f.editorSrc) ||
+              editorSrcs.has(f.previewUrl)
             );
             return next.length === prev.length ? prev : next;
           });
@@ -944,7 +959,7 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
 
       if (isReel) {
         const existingSrcs = new Set();
-        const videoRegex = /<video[^>]+src="([^"]+)"[^>]*>\s*<\/video>/gi;
+        const videoRegex = /<video[^>]*src="([^"]+)"[^>]*>/gi;
         let vm;
         while ((vm = videoRegex.exec(finalContent)) !== null) {
           existingSrcs.add(vm[1]);
@@ -956,17 +971,17 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
         finalContent = finalContent + missingVideos;
       }
 
+      // ── 새 파일만 업로드 ──
       for (const image of imageFiles) {
         if (image.isRestored || !image.file) continue;
+
         const formData = new FormData();
-        let uploadUrl;
         if (isReel) {
           formData.append('video', image.file);
-          uploadUrl = `${API}/feed/upload-video`;
         } else {
           formData.append('image', image.file);
-          uploadUrl = `${API}/feed/upload`;
         }
+        const uploadUrl = isReel ? `${API}/feed/upload-video` : `${API}/feed/upload`;
         const uploadRes = await fetch(uploadUrl, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
@@ -974,20 +989,25 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
         });
         const uploadData = await uploadRes.json();
         if (!uploadData.success) throw new Error('파일 업로드 실패');
+
         const serverUrl = `${API}${uploadData.fileUrl}`;
         if (isReel) {
           if (!finalContent.includes(serverUrl)) {
             finalContent = finalContent + `<video src="${serverUrl}" controls></video>`;
           }
         } else {
-          if (image.editorSrc) finalContent = finalContent.split(image.editorSrc).join(serverUrl);
-          if (image.previewUrl && image.previewUrl !== image.editorSrc) {
-            finalContent = finalContent.split(image.previewUrl).join(serverUrl);
+          // base64만 교체
+          if (image.editorSrc && image.editorSrc.startsWith('data:')) {
+            finalContent = finalContent.split(image.editorSrc).join(serverUrl);
           }
         }
       }
 
+      // ── 찌꺼기 제거 ──
       finalContent = finalContent.replace(/<img[^>]*src="data:image\/[^"]*"[^>]*\/?>/gi, '');
+      finalContent = finalContent.replace(/<img[^>]*src=""[^>]*\/?>/gi, '');
+
+      // ── 서버 저장 ──
       const res = await fetch(`${API}/feed/${postId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -1005,7 +1025,7 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
 
       if (res.ok && data.success) {
         const feedRes = await fetch(`${API}/feed/${postId}`, {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
         const feedData = await feedRes.json();
 
@@ -1040,12 +1060,18 @@ export default function EditModal({ open, postId, onClose, onSaved }) {
     }
   };
 
-  // ── 저장 버튼 ─────────────────────────────────────────────────
   const handleSubmit = async () => {
     setErrorMsg('');
-    const plainContent = contentRef.current.replace(/<[^>]*>?/gm, '').trim();
-    if (!metadata.title.trim() || !plainContent) {
-      setErrorMsg('제목과 본문 내용은 필수 항목입니다.');
+    const plainContent = isReel
+      ? reelContent.trim()
+      : contentRef.current.replace(/<[^>]*>?/gm, '').trim();
+
+    if (!metadata.title.trim()) {
+      setErrorMsg('제목은 필수 항목입니다.');
+      return;
+    }
+    if (!isReel && !plainContent) {
+      setErrorMsg('본문 내용은 필수 항목입니다.');
       return;
     }
     const { words, replaceMap: rm } = await checkBadWords(metadata.title, plainContent);

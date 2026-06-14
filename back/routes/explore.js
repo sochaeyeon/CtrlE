@@ -49,15 +49,21 @@ router.get('/recommended-users', jwtAuthentication, async (req, res) => {
                     FROM FOLLOWS
                     WHERE FOLLOWER_ID = :userId1 AND FOLLOWING_ID = u.USER_ID AND STATUS = 'ACCEPTED') AS IS_FOLLOWING
              FROM USERS u
-         WHERE u.USER_ID != :userId2
+      WHERE u.USER_ID != :userId2
             AND u.STATUS = 'ACTIVE'
             AND NOT EXISTS (
                 SELECT 1 FROM FOLLOWS
                 WHERE FOLLOWER_ID = :userId3 AND FOLLOWING_ID = u.USER_ID AND STATUS = 'ACCEPTED'
             )
+            AND u.USER_ID NOT IN (
+                SELECT BLOCKED_ID FROM BLOCKS WHERE BLOCKER_ID = :userId4
+            )
+            AND u.USER_ID NOT IN (
+                SELECT BLOCKER_ID FROM BLOCKS WHERE BLOCKED_ID = :userId5
+            )
              ORDER BY FOLLOWER_COUNT DESC
              FETCH FIRST 8 ROWS ONLY`,
-            { userId1: userId, userId2: userId, userId3: userId },
+            { userId1: userId, userId2: userId, userId3: userId, userId4: userId, userId5: userId },
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
         res.json({ success: true, users: result.rows });
@@ -88,12 +94,18 @@ router.get('/posts', jwtAuthentication, async (req, res) => {
             FROM POSTS p
             JOIN USERS u ON u.USER_ID = p.USER_ID
             WHERE p.STATUS = 'ACTIVE'
+            AND p.USER_ID NOT IN (
+                SELECT BLOCKED_ID FROM BLOCKS WHERE BLOCKER_ID = :userId3
+            )
+            AND p.USER_ID NOT IN (
+                SELECT BLOCKER_ID FROM BLOCKS WHERE BLOCKED_ID = :userId4
+            )
             ORDER BY p.CREATED_AT DESC
             FETCH FIRST 18 ROWS ONLY
         `;
         const result = await conn.execute(
             sql,
-            { userId1: userId, userId2: userId },
+            { userId1: userId, userId2: userId, userId3: userId, userId4: userId },
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
 
@@ -128,55 +140,69 @@ router.get('/search', jwtAuthentication, async (req, res) => {
 
         if (type === 'posts' || type === 'all') {
             const postSql = `
-                SELECT p.POST_ID        AS "id",
-                       p.TITLE          AS "title",
-                       p.CONTENT        AS "description",
-                       p.USER_ID        AS "userId",
-                       p.CREATED_AT     AS "createdAt",
-                       p.VIEW_COUNT     AS "viewCount",
-                       c.CATEGORY_NAME  AS "category",
-                       u.NICKNAME       AS "writer",
-                       u.BIO            AS "role",
-                       (SELECT IMAGE_URL FROM PROFILE_IMAGES
-                        WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS "avatar",
-                       (SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID)                         AS "likes",
-                       (SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID AND USER_ID = :userId1)  AS "liked",
-                       (SELECT COUNT(*) FROM BOOKMARKS  WHERE POST_ID = p.POST_ID AND USER_ID = :userId2)  AS "bookmarked",
-                       (SELECT COUNT(*) FROM COMMENTS   WHERE POST_ID = p.POST_ID AND STATUS = 'ACTIVE')   AS "commentCount",
-                       (SELECT LISTAGG(t.TAG_NAME, ',') WITHIN GROUP (ORDER BY t.TAG_ID)
-                        FROM POST_TAGS pt JOIN TAGS t ON t.TAG_ID = pt.TAG_ID
-                        WHERE pt.POST_ID = p.POST_ID) AS "tags",
-                       (SELECT LISTAGG(f.FILE_URL, ',') WITHIN GROUP (ORDER BY f.FILE_ID)
-                        FROM ATTACHED_FILES f
-                        WHERE f.TARGET_ID = p.POST_ID AND f.TARGET_TYPE = 'POST') AS "images"
-                FROM POSTS p
-                JOIN USERS u ON u.USER_ID = p.USER_ID
-                LEFT JOIN CATEGORIES c ON c.CATEGORY_ID = p.CATEGORY_ID
-              WHERE p.STATUS = 'ACTIVE'
-  AND (
-        :q = '%%'
-        OR LOWER(p.TITLE) LIKE :q
-        OR EXISTS (
-            SELECT 1 FROM POST_TAGS pt2
-            JOIN TAGS t2 ON t2.TAG_ID = pt2.TAG_ID
-            WHERE pt2.POST_ID = p.POST_ID
-              AND LOWER(t2.TAG_NAME) LIKE :q2
-        )
-  )
-AND (:category IS NULL OR :category = '' OR UPPER(c.CATEGORY_NAME) = UPPER(:category2))
-AND (:location IS NULL OR :location = '' OR UPPER(p.LOCATION) = UPPER(:location2))  -- ← 추가
-AND (:tag IS NULL OR :tag = '' OR EXISTS (
-                        SELECT 1 FROM POST_TAGS pt3
-                        JOIN TAGS t3 ON t3.TAG_ID = pt3.TAG_ID
-                        WHERE pt3.POST_ID = p.POST_ID
-                          AND LOWER(t3.TAG_NAME) = LOWER(:tag)
-                  ))
-                ORDER BY p.CREATED_AT DESC
-                OFFSET :offset ROWS FETCH NEXT :lim ROWS ONLY
-            `;
+    SELECT p.POST_ID        AS "id",
+           p.TITLE          AS "title",
+           p.CONTENT        AS "description",
+           p.USER_ID        AS "userId",
+           p.CREATED_AT     AS "createdAt",
+           p.VIEW_COUNT     AS "viewCount",
+           c.CATEGORY_NAME  AS "category",
+           u.NICKNAME       AS "writer",
+           u.BIO            AS "role",
+           (SELECT IMAGE_URL FROM PROFILE_IMAGES
+            WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS "avatar",
+           (SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID)                         AS "likes",
+           (SELECT COUNT(*) FROM POST_LIKES WHERE POST_ID = p.POST_ID AND USER_ID = :userId1)  AS "liked",
+           (SELECT COUNT(*) FROM BOOKMARKS  WHERE POST_ID = p.POST_ID AND USER_ID = :userId2)  AS "bookmarked",
+           (SELECT COUNT(*) FROM COMMENTS   WHERE POST_ID = p.POST_ID AND STATUS = 'ACTIVE')   AS "commentCount",
+           (SELECT LISTAGG(t.TAG_NAME, ',') WITHIN GROUP (ORDER BY t.TAG_ID)
+            FROM POST_TAGS pt JOIN TAGS t ON t.TAG_ID = pt.TAG_ID
+            WHERE pt.POST_ID = p.POST_ID) AS "tags",
+           (SELECT LISTAGG(f.FILE_URL, ',') WITHIN GROUP (ORDER BY f.FILE_ID)
+            FROM ATTACHED_FILES f
+            WHERE f.TARGET_ID = p.POST_ID AND f.TARGET_TYPE = 'POST') AS "images"
+            FROM POSTS p
+            JOIN USERS u ON u.USER_ID = p.USER_ID
+            LEFT JOIN CATEGORIES c ON c.CATEGORY_ID = p.CATEGORY_ID
+            WHERE p.STATUS = 'ACTIVE'
+            AND (
+                :q = '%%'
+                OR LOWER(p.TITLE) LIKE :q
+                OR EXISTS (
+                    SELECT 1 FROM POST_TAGS pt2
+                    JOIN TAGS t2 ON t2.TAG_ID = pt2.TAG_ID
+                    WHERE pt2.POST_ID = p.POST_ID
+                        AND LOWER(t2.TAG_NAME) LIKE :q2
+                )
+            )
+            AND (:category IS NULL OR :category = '' OR UPPER(c.CATEGORY_NAME) = UPPER(:category2))
+            AND (:location IS NULL OR :location = '' OR UPPER(p.LOCATION) = UPPER(:location2))
+            AND (:tag IS NULL OR :tag = '' OR EXISTS (
+                            SELECT 1 FROM POST_TAGS pt3
+                            JOIN TAGS t3 ON t3.TAG_ID = pt3.TAG_ID
+                            WHERE pt3.POST_ID = p.POST_ID
+                            AND LOWER(t3.TAG_NAME) = LOWER(:tag)
+                    ))
+            AND p.USER_ID NOT IN (
+                SELECT BLOCKED_ID FROM BLOCKS WHERE BLOCKER_ID = :blockerId1
+            )
+            AND p.USER_ID NOT IN (
+                SELECT BLOCKER_ID FROM BLOCKS WHERE BLOCKED_ID = :blockerId2
+            )
+            ORDER BY p.CREATED_AT DESC
+            OFFSET :offset ROWS FETCH NEXT :lim ROWS ONLY
+        `;
             const postRes = await conn.execute(
                 postSql,
-                { userId1: userId, userId2: userId, q: keyword, q2: keyword, tag: tag || null, category: category || null, category2: category || null, location: location || null, location2: location || null, offset, lim: Number(limit) },
+                {
+                    userId1: userId, userId2: userId,
+                    q: keyword, q2: keyword,
+                    tag: tag || null,
+                    category: category || null, category2: category || null,
+                    location: location || null, location2: location || null,
+                    offset, lim: Number(limit),
+                    blockerId1: userId, blockerId2: userId
+                },
                 { outFormat: oracledb.OUT_FORMAT_OBJECT }
             );
 
@@ -199,19 +225,30 @@ AND (:tag IS NULL OR :tag = '' OR EXISTS (
         if (type === 'users' || type === 'all') {
             const userRes = await conn.execute(
                 `SELECT u.USER_ID,
-                        u.NICKNAME,
-                        u.BIO,
-                        (SELECT IMAGE_URL FROM PROFILE_IMAGES
-                         WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR,
-                        (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWING_ID = u.USER_ID AND STATUS = 'ACCEPTED')                          AS FOLLOWER_COUNT,
-                        (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWER_ID = :userId AND FOLLOWING_ID = u.USER_ID AND STATUS = 'ACCEPTED') AS IS_FOLLOWING
-                 FROM USERS u
-                 WHERE u.STATUS = 'ACTIVE'
-                   AND u.USER_ID != :userId2
-                   AND (:q = '%%' OR LOWER(u.NICKNAME) LIKE :q2 OR LOWER(u.EMAIL) LIKE :q3)
-                 ORDER BY FOLLOWER_COUNT DESC
-                 FETCH FIRST :lim ROWS ONLY`,
-                { userId, userId2: userId, q: keyword, q2: keyword, q3: keyword, lim: Number(limit) },
+            u.NICKNAME,
+            u.BIO,
+            (SELECT IMAGE_URL FROM PROFILE_IMAGES
+             WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS AVATAR,
+            (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWING_ID = u.USER_ID AND STATUS = 'ACCEPTED') AS FOLLOWER_COUNT,
+            (SELECT COUNT(*) FROM FOLLOWS WHERE FOLLOWER_ID = :userId AND FOLLOWING_ID = u.USER_ID AND STATUS = 'ACCEPTED') AS IS_FOLLOWING
+            FROM USERS u
+            WHERE u.STATUS = 'ACTIVE'
+            AND u.USER_ID != :userId2
+            AND (:q = '%%' OR LOWER(u.NICKNAME) LIKE :q2 OR LOWER(u.EMAIL) LIKE :q3)
+            AND u.USER_ID NOT IN (
+                SELECT BLOCKED_ID FROM BLOCKS WHERE BLOCKER_ID = :blockerId3
+            )
+            AND u.USER_ID NOT IN (
+                SELECT BLOCKER_ID FROM BLOCKS WHERE BLOCKED_ID = :blockerId4
+            )
+            ORDER BY FOLLOWER_COUNT DESC
+            FETCH FIRST :lim ROWS ONLY`,
+                {
+                    userId, userId2: userId,
+                    q: keyword, q2: keyword, q3: keyword,
+                    lim: Number(limit),
+                    blockerId3: userId, blockerId4: userId 
+                },
                 { outFormat: oracledb.OUT_FORMAT_OBJECT }
             );
             output.users = userRes.rows.map(u => ({

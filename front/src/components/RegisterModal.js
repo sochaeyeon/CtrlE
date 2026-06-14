@@ -75,6 +75,15 @@ const FILTERS = [
 ];
 
 const QUILL_CODE_CSS = `
+  .ql-editor p span,
+  .ql-editor h1 span,
+  .ql-editor h2 span,
+  .ql-editor h3 span,
+  .ql-editor li span {
+    color: inherit !important;
+    background: none !important;
+  }
+
   .ql-editor pre.ql-syntax {
     border-radius: 8px !important;
     padding: 16px !important;
@@ -105,7 +114,25 @@ const QUILL_CODE_CSS = `
   }
 `;
 
-async function cropImageToFile(src, ratio, zoom, offset, outputSize = 800) {
+const CODE_KEYWORDS = [
+  'const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'do',
+  'switch', 'case', 'break', 'continue', 'class', 'new', 'this', 'typeof', 'instanceof',
+  'import', 'export', 'default', 'from', 'async', 'await', 'try', 'catch', 'finally',
+  'throw', 'void', 'null', 'undefined', 'true', 'false', 'in', 'of', 'extends',
+  'super', 'static', 'get', 'set', 'delete', 'interface', 'type', 'enum', 'readonly',
+  'public', 'private', 'protected', 'abstract', 'implements', 'namespace',
+  'def', 'print', 'lambda', 'with', 'pass', 'elif', 'and', 'or', 'not', 'is', 'None',
+  'SELECT', 'FROM', 'WHERE', 'JOIN', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'TABLE',
+  'console', 'document', 'window', 'Promise', 'Array', 'Object', 'String', 'Number',
+  'Math', 'JSON', 'setTimeout', 'setInterval', 'fetch', 'useState', 'useEffect',
+  'useCallback', 'useMemo', 'useRef',
+];
+
+const AUTO_CLOSE_PAIRS = {
+  '(': ')', '[': ']', '{': '}', '"': '"', "'": "'", '`': '`',
+};
+
+async function cropImageToFile(src, ratio, zoom, offset, outputSize = 800, filterStyle = '') {
   return new Promise((resolve) => {
     const img = new window.Image();
     img.crossOrigin = 'anonymous';
@@ -120,6 +147,9 @@ async function cropImageToFile(src, ratio, zoom, offset, outputSize = 800) {
       canvas.height = ch;
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, cw, ch);
+
+      // 필터 적용
+      if (filterStyle) ctx.filter = filterStyle;
 
       const coverScale = Math.max(cw / img.width, ch / img.height);
       const totalScale = coverScale * zoom;
@@ -142,7 +172,18 @@ async function cropImageToFile(src, ratio, zoom, offset, outputSize = 800) {
     img.src = src;
   });
 }
-
+const getFilterStyle = (img) => {
+  const f = FILTERS.find(f => f.value === img.filter)?.css || 'none';
+  const a = img.adjustments;
+  const adj = [
+    `brightness(${a.brightness / 100})`,
+    `contrast(${a.contrast / 100})`,
+    `blur(${a.blur}px)`,
+    `saturate(${a.saturation / 100})`,
+    `hue-rotate(${a.temperature}deg)`,
+  ].join(' ');
+  return f !== 'none' ? `${f} ${adj}` : adj;
+};
 function PhotoEditModal({ open, images, onClose, onDone, tk, mode }) {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [step, setStep] = useState('crop');
@@ -188,18 +229,7 @@ function PhotoEditModal({ open, images, onClose, onDone, tk, mode }) {
     });
   };
 
-  const getFilterStyle = (img) => {
-    const f = FILTERS.find(f => f.value === img.filter)?.css || 'none';
-    const a = img.adjustments;
-    const adj = [
-      `brightness(${a.brightness / 100})`,
-      `contrast(${a.contrast / 100})`,
-      `blur(${a.blur}px)`,
-      `saturate(${a.saturation / 100})`,
-      `hue-rotate(${a.temperature}deg)`,
-    ].join(' ');
-    return f !== 'none' ? `${f} ${adj}` : adj;
-  };
+
 
   const handleDone = async () => {
     setProcessing(true);
@@ -208,7 +238,8 @@ function PhotoEditModal({ open, images, onClose, onDone, tk, mode }) {
         imgList.map(async (img, i) => {
           const meta = perImage[i];
           const src = img.previewUrl || img;
-          return cropImageToFile(src, meta.ratio, meta.zoom, meta.offset);
+          const filterStyle = getFilterStyle(meta);
+          return cropImageToFile(src, meta.ratio, meta.zoom, meta.offset, 800, filterStyle);
         })
       );
       onDone(results, perImage);
@@ -861,9 +892,10 @@ export default function RegisterModal({ open, onClose }) {
   const tagDebounceRef = useRef(null);
   const tagInputRef = useRef(null);
   const [metadata, setMetadata] = useState({ category: 'ERROR', title: '', tags: [] });
+  const [codeAC, setCodeAC] = useState({ open: false, suggestions: [], activeIdx: 0, top: 0, left: 0 });
+  const codeACRef = useRef({ open: false, suggestions: [], activeIdx: 0 });
 
   const tk = TOKEN[mode] || TOKEN.light;
-
 
   const markDirty = useCallback(() => {
     isDirtyRef.current = true;
@@ -1021,15 +1053,13 @@ export default function RegisterModal({ open, onClose }) {
       const editorImages = Array.from(quill.root.querySelectorAll('img'));
       const editorSrcs = new Set(editorImages.map(img => img.getAttribute('src')));
 
-      // 1. 에디터에서 삭제된 이미지 감지하여 목록에서 제거
       setImageFiles(prev => {
+        if (editorSrcs.size === 0 && prev.length > 0) return prev;
         const next = prev.filter(f =>
           editorSrcs.has(f.editorSrc) || editorSrcs.has(f.previewUrl)
         );
         return next.length === prev.length ? prev : next;
       });
-
-      // 2. 에디터에 새로 추가된 Base64 이미지(복붙 등) 감지하여 목록에 추가
       editorImages.forEach(img => {
         const src = img.getAttribute('src');
         if (src && src.startsWith('data:image') && !imageFilesRef.current.some(f => f.editorSrc === src)) {
@@ -1045,7 +1075,7 @@ export default function RegisterModal({ open, onClose }) {
       });
     });
 
-    observer.observe(quill.root, { childList: true, subtree: true });
+    observer.observe(quill.root, { childList: true, subtree: true, attributes: false, characterData: false });
     return () => observer.disconnect();
   }, [markDirty]);
 
@@ -1168,6 +1198,131 @@ export default function RegisterModal({ open, onClose }) {
     quill.root.addEventListener('paste', handlePaste, { capture: true });
     return () => quill.root.removeEventListener('paste', handlePaste, { capture: true });
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const timer = setTimeout(() => {
+      const quill = quillRef.current?.getEditor();
+      if (!quill) return;
+
+      const isInCodeBlock = () => {
+        const sel = quill.getSelection();
+        if (!sel) return false;
+        const [block] = quill.getLine(sel.index);
+        return block?.domNode?.closest('pre.ql-syntax') !== null;
+      };
+
+      const getWordBefore = () => {
+        const sel = quill.getSelection();
+        if (!sel) return { word: '', start: 0 };
+        const text = quill.getText(0, sel.index);
+        const match = text.match(/([a-zA-Z_$][a-zA-Z0-9_$]*)$/);
+        return match
+          ? { word: match[1], start: sel.index - match[1].length }
+          : { word: '', start: sel.index };
+      };
+
+      const closeAC = () => {
+        setCodeAC(p => ({ ...p, open: false }));
+        codeACRef.current.open = false;
+      };
+
+      const onTextChange = (delta, old, source) => {
+        if (source !== 'user') return;
+        if (!isInCodeBlock()) { closeAC(); return; }
+        const { word } = getWordBefore();
+        if (word.length < 1) { closeAC(); return; }
+        const matches = CODE_KEYWORDS.filter(k =>
+          k.toLowerCase().startsWith(word.toLowerCase()) && k !== word
+        );
+        if (matches.length === 0) { closeAC(); return; }
+        const sel = quill.getSelection();
+        const bounds = quill.getBounds(sel.index);
+        const editorRect = quill.root.getBoundingClientRect();
+        const suggestions = matches.slice(0, 8);
+        setCodeAC({
+          open: true, suggestions, activeIdx: 0,
+          top: editorRect.top + bounds.top + bounds.height + window.scrollY + 4,
+          left: editorRect.left + bounds.left,
+        });
+        codeACRef.current = { open: true, suggestions, activeIdx: 0 };
+      };
+
+      const onKeyDown = (e) => {
+        if (isInCodeBlock() && AUTO_CLOSE_PAIRS[e.key]) {
+          const closing = AUTO_CLOSE_PAIRS[e.key];
+          const sel = quill.getSelection();
+          if (sel) {
+            const nextChar = quill.getText(sel.index, 1);
+            if (['"', "'", '`'].includes(e.key) && nextChar === e.key) {
+              e.preventDefault();
+              quill.setSelection(sel.index + 1, 0, 'silent');
+              return;
+            }
+            if ([')', ']', '}'].includes(closing) && nextChar === closing) {
+              e.preventDefault();
+              quill.setSelection(sel.index + 1, 0, 'silent');
+              return;
+            }
+            if (closing !== e.key) {
+              e.preventDefault();
+              quill.insertText(sel.index, e.key + closing, 'user');
+              quill.setSelection(sel.index + 1, 0, 'silent');
+              return;
+            }
+          }
+        }
+
+        const { open, suggestions, activeIdx } = codeACRef.current;
+        if (!open || suggestions.length === 0) return;
+
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          const next = Math.min(activeIdx + 1, suggestions.length - 1);
+          setCodeAC(p => ({ ...p, activeIdx: next }));
+          codeACRef.current.activeIdx = next;
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          const next = Math.max(activeIdx - 1, 0);
+          setCodeAC(p => ({ ...p, activeIdx: next }));
+          codeACRef.current.activeIdx = next;
+        } else if (e.key === 'Tab' || e.key === 'Enter') {
+          if (isInCodeBlock()) {
+            e.preventDefault();
+            const keyword = suggestions[activeIdx];
+            const { word, start } = getWordBefore();
+            quill.deleteText(start, word.length, 'user');
+            quill.insertText(start, keyword, 'user');
+            quill.setSelection(start + keyword.length, 0, 'silent');
+            closeAC();
+          }
+        } else if (e.key === 'Escape') {
+          closeAC();
+        }
+      };
+
+      const onKeyDownTab = (e) => {
+        if (e.key === 'Tab' && isInCodeBlock() && !codeACRef.current.open) {
+          e.preventDefault();
+          const sel = quill.getSelection();
+          if (sel) quill.insertText(sel.index, '  ', 'user');
+        }
+      };
+
+      quill.on('text-change', onTextChange);
+      quill.root.addEventListener('keydown', onKeyDown, true);
+      quill.root.addEventListener('keydown', onKeyDownTab);
+
+      return () => {
+        quill.off('text-change', onTextChange);
+        quill.root.removeEventListener('keydown', onKeyDown, true);
+        quill.root.removeEventListener('keydown', onKeyDownTab);
+      };
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [open]);
+
 
   const quillModules = useMemo(() => ({
     syntax: {
@@ -1638,7 +1793,7 @@ export default function RegisterModal({ open, onClose }) {
                       imageFiles.length > 0 ? (
                         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                           {imageFiles.map((img, i) => (
-                            <Box key={i} sx={{ position: 'relative', width: 70, height: 70, borderRadius: 1.5, overflow: 'hidden', border: `1px solid ${tk.border}`, cursor: 'pointer', '&:hover .edit-overlay': { opacity: 1 }, transition: 'box-shadow 0.15s', '&:hover': { boxShadow: `0 0 0 2px ${tk.accent}` } }}>
+                            <Box key={i} onClick={() => handleReEditImage(i)} sx={{ position: 'relative', width: 70, height: 70, borderRadius: 1.5, overflow: 'hidden', border: `1px solid ${tk.border}`, cursor: 'pointer', '&:hover .edit-overlay': { opacity: 1 }, transition: 'box-shadow 0.15s', '&:hover': { boxShadow: `0 0 0 2px ${tk.accent}` } }}>
                               <img src={img.previewUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />                              <Box className="edit-overlay" sx={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.15s' }}>
                                 <Typography sx={{ color: '#fff', fontSize: '0.65rem', fontWeight: 800 }}>편집</Typography>
                               </Box>
@@ -1806,6 +1961,66 @@ export default function RegisterModal({ open, onClose }) {
           </Box>
         )
       }
+
+      {codeAC.open && codeAC.suggestions.length > 0 && (
+        <Box sx={{
+          position: 'fixed',
+          top: codeAC.top,
+          left: codeAC.left,
+          zIndex: 9999,
+          minWidth: 160,
+          borderRadius: 1.5,
+          border: `1px solid ${tk.border}`,
+          backgroundColor: tk.paper,
+          boxShadow: '0 8px 24px rgba(15,23,42,0.18)',
+          overflow: 'hidden',
+          fontFamily: '"JetBrains Mono", monospace',
+        }}>
+          {codeAC.suggestions.map((kw, idx) => (
+            <Box
+              key={kw}
+              onMouseDown={e => {
+                e.preventDefault();
+                const quill = quillRef.current?.getEditor();
+                if (!quill) return;
+                const sel = quill.getSelection();
+                if (!sel) return;
+                const text = quill.getText(0, sel.index);
+                const match = text.match(/([a-zA-Z_$][a-zA-Z0-9_$]*)$/);
+                const word = match?.[1] || '';
+                const start = sel.index - word.length;
+                quill.deleteText(start, word.length, 'user');
+                quill.insertText(start, kw, 'user');
+                quill.setSelection(start + kw.length, 0, 'silent');
+                setCodeAC(p => ({ ...p, open: false }));
+                codeACRef.current.open = false;
+              }}
+              onMouseEnter={() => {
+                setCodeAC(p => ({ ...p, activeIdx: idx }));
+                codeACRef.current.activeIdx = idx;
+              }}
+              sx={{
+                px: 1.5, py: 0.7,
+                fontSize: '0.78rem',
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2,
+                backgroundColor: idx === codeAC.activeIdx
+                  ? (mode === 'dark' ? '#1E3A5F' : '#EFF6FF')
+                  : tk.paper,
+                color: idx === codeAC.activeIdx ? tk.accent : '#569CD6',
+                borderBottom: idx < codeAC.suggestions.length - 1 ? `1px solid ${tk.border}` : 'none',
+                transition: 'background 0.1s',
+                fontWeight: 600,
+              }}
+            >
+              {kw}
+              <Typography sx={{ fontSize: '0.62rem', color: tk.textHint, backgroundColor: tk.inputBg, border: `1px solid ${tk.border}`, borderRadius: 0.5, px: 0.6, py: 0.15, fontFamily: 'inherit' }}>
+                Tab
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      )}
       <LeaveConfirmDialog open={leaveConfirm} onConfirm={doClose} onCancel={() => setLeaveConfirm(false)} tk={tk} />
 
       <BadWordModal

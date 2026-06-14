@@ -100,7 +100,7 @@ router.get('/:postId/ai-answer', jwtAuthentication, async (req, res) => {
             success: true,
             answer: result.rows[0]?.ANSWER ?? null,
             updatedAt: result.rows[0]?.UPDATED_AT ?? null,
-            createdAt: result.rows[0]?.CREATED_AT ?? null,  
+            createdAt: result.rows[0]?.CREATED_AT ?? null,
         });
     } catch {
         res.json({ success: true, answer: null, updatedAt: null });
@@ -333,15 +333,18 @@ router.get('/list', jwtAuthentication, async (req, res) => {
               AND p.user_id NOT IN (
                   SELECT muted_id FROM mutes WHERE muter_id = :userId4
               )
-              AND p.user_id NOT IN (
-                  SELECT blocked_id FROM blocks WHERE blocker_id = :userId5
-              )
+            AND p.user_id NOT IN (
+                SELECT blocked_id FROM blocks WHERE blocker_id = :userId5
+            )
+            AND p.user_id NOT IN (
+                SELECT blocker_id FROM blocks WHERE blocked_id = :userId6
+            )
             ORDER BY p.created_at DESC
         `;
 
         const result = await connection.execute(
             sql,
-            { userId1: userId, userId2: userId, userId3: userId, userId4: userId, userId5: userId },
+            { userId1: userId, userId2: userId, userId3: userId, userId4: userId, userId5: userId, userId6: userId },
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
 

@@ -72,7 +72,12 @@ router.get('/rooms', jwtAuthentication, async (req, res) => {
           SELECT 1 FROM CHAT_MESSAGE_DELETES d
           WHERE d.MESSAGE_ID = msg2.MESSAGE_ID AND d.USER_ID = :myId
       )
-) AS UNREAD_COUNT
+) AS UNREAD_COUNT,
+        CASE 
+        WHEN EXISTS (SELECT 1 FROM BLOCKS WHERE BLOCKER_ID = :myId2 AND BLOCKED_ID = u.USER_ID) THEN 'ME'
+        WHEN EXISTS (SELECT 1 FROM BLOCKS WHERE BLOCKER_ID = u.USER_ID AND BLOCKED_ID = :myId3) THEN 'THEM'
+        ELSE NULL
+        END AS BLOCK_STATUS
             FROM CHAT_ROOMS r
 JOIN CHAT_MEMBERS cm1 ON r.ROOM_ID = cm1.ROOM_ID AND cm1.USER_ID = :myId AND cm1.IS_HIDDEN = 'N'
             LEFT JOIN CHAT_MEMBERS cm2 ON r.ROOM_ID = cm2.ROOM_ID
@@ -88,16 +93,14 @@ JOIN CHAT_MEMBERS cm1 ON r.ROOM_ID = cm1.ROOM_ID AND cm1.USER_ID = :myId AND cm1
   )
             ORDER BY LAST_MESSAGE_AT DESC NULLS LAST
         `;
-        const result = await conn.execute(sql, { myId }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+        const result = await conn.execute(sql, { myId, myId2: myId, myId3: myId }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
 
-        // GROUP 방 중복 제거 (LEFT JOIN으로 여러 행이 나올 수 있음)
         const seen = new Set();
         const rooms = [];
         for (const row of result.rows) {
             if (seen.has(row.ROOM_ID)) continue;
             seen.add(row.ROOM_ID);
 
-            // GROUP 방이면 참여자 아바타 목록 따로 조회 (목록 표시용, 최대 4명)
             if (row.ROOM_TYPE === 'GROUP') {
                 const avatarRes = await conn.execute(
                     `SELECT u.NICKNAME, pi.IMAGE_URL
@@ -153,6 +156,13 @@ AND NOT EXISTS (SELECT 1 FROM CHAT_MESSAGE_DELETES d WHERE d.MESSAGE_ID = cm.MES
                 { outFormat: oracledb.OUT_FORMAT_OBJECT }
             );
             row.IS_MUTED = muteRes.rows[0]?.IS_MUTED === 'Y';
+            if (row.BLOCK_STATUS) {
+                row.IS_BLOCKED = true;
+                row.TARGET_NICKNAME = '차단된 사용자';
+                row.TARGET_AVATAR = null;
+                row.PARTICIPANT_AVATARS = [];
+                row.PARTICIPANT_NICKNAMES = [];
+            }
             rooms.push(row);
         }
         const now = Date.now();
@@ -281,20 +291,25 @@ router.get('/:roomId', jwtAuthentication, async (req, res) => {
             return res.status(403).json({ success: false, message: '접근 권한이 없습니다.' });
         }
 
-        // 방 정보
         const roomRes = await conn.execute(
             `SELECT r.ROOM_ID, r.ROOM_TYPE, r.ROOM_NAME, r.ROOM_IMAGE,
             (SELECT COUNT(*) FROM CHAT_MEMBERS WHERE ROOM_ID = r.ROOM_ID) AS MEMBER_COUNT,
                     u.NICKNAME AS TARGET_NICKNAME,
                     u.USER_ID AS TARGET_ID,
                     u.LAST_ACTIVE AS TARGET_LAST_ACTIVE,
-                    (SELECT IMAGE_URL FROM PROFILE_IMAGES WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS TARGET_AVATAR
+                    (SELECT IMAGE_URL FROM PROFILE_IMAGES WHERE USER_ID = u.USER_ID AND IS_MAIN = 'Y' AND ROWNUM = 1) AS TARGET_AVATAR,
+CASE 
+                WHEN EXISTS (SELECT 1 FROM BLOCKS WHERE BLOCKER_ID = :myId2 AND BLOCKED_ID = u.USER_ID) THEN 'ME'
+                WHEN EXISTS (SELECT 1 FROM BLOCKS WHERE BLOCKER_ID = u.USER_ID AND BLOCKED_ID = :myId3) THEN 'THEM'
+                ELSE NULL
+                END AS BLOCK_STATUS
              FROM CHAT_ROOMS r
              LEFT JOIN CHAT_MEMBERS cm ON r.ROOM_ID = cm.ROOM_ID AND cm.USER_ID != :myId AND r.ROOM_TYPE = 'DIRECT'
              LEFT JOIN USERS u ON cm.USER_ID = u.USER_ID
              WHERE r.ROOM_ID = :roomId
              FETCH FIRST 1 ROWS ONLY`,
-            { myId, roomId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+            { myId, myId2: myId, myId3: myId, roomId },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
         const roomInfo = roomRes.rows[0];
         if (roomInfo && roomInfo.ROOM_TYPE === 'GROUP') {

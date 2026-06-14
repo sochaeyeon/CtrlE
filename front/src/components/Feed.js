@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import ReactDOM from 'react-dom';
 import {
@@ -1108,11 +1108,6 @@ const PostCard = ({ feed: initialFeed, token, myNickname, onDelete, onUpdate, on
   const navigate = useNavigate();
 
   const [feed, setFeed] = useState(initialFeed);
-
-  useEffect(() => {
-    setFeed(initialFeed);
-  }, [initialFeed]);
-
   const [liked, setLiked] = useState(feed.liked ?? false);
   const [likeCount, setLikeCount] = useState(feed.likes ?? 0);
   const [bookmarked, setBookmarked] = useState(feed.bookmarked ?? false);
@@ -1272,7 +1267,6 @@ const PostCard = ({ feed: initialFeed, token, myNickname, onDelete, onUpdate, on
           p: 3, cursor: 'pointer',
           transition: 'border-color 0.2s, box-shadow 0.2s',
           position: 'relative', overflow: 'hidden',
-          animation: 'fadeUp 0.4s ease both',
           '&:hover': { borderColor: colors.borderFocus, boxShadow: '0 4px 20px rgba(15,23,42,0.06)' },
           '@keyframes fadeUp': {
             from: { opacity: 0, transform: 'translateY(16px)' },
@@ -1678,7 +1672,6 @@ export default function Feed() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // [FIX] handleUpdate — 수정 완료 시 피드 목록 즉시 갱신 + 토스트
   const handleUpdate = useCallback((updatedFeed) => {
     if (updatedFeed) {
       setFeeds(prev => prev.map(f => f.id === (updatedFeed.id ?? updatedFeed.POST_ID) ? { ...f, ...updatedFeed } : f));
@@ -1688,7 +1681,6 @@ export default function Feed() {
   }, []);
 
   const loadTrending = useCallback(async (filter) => {
-    // setLoadingTrending(true);
     try {
       const found = FIXED_CATEGORIES.find(c => c.label === filter);
       const categoryParam = found?.value ? `?category=${found.value}` : '';
@@ -1820,26 +1812,32 @@ export default function Feed() {
   }, [navigate]);
 
   const handleFilterChange = (label) => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
     setActiveFilter(label);
     loadTrending(label);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const dynamicTagLabels = trending.map(t => t.TAG_NAME || t.tag).filter(Boolean);
 
-  const filterFeeds = (list) => {
-    if (activeFilter === '전체') return list;
+  const filteredFeeds = useMemo(() => {
+    if (activeFilter === '전체') return feeds;
     const found = FIXED_CATEGORIES.find(c => c.label === activeFilter);
-    if (found?.value) return list.filter(f => (f.category || f.tag || '') === found.value);
-    return list.filter(f => {
+    if (found?.value) return feeds.filter(f => (f.category || f.tag || '') === found.value);
+    return feeds.filter(f => {
       const tagArr = Array.isArray(f.tags) ? f.tags : (f.tags ? f.tags.split(',') : []);
-      const cat = f.category || f.tag || '';
-      return tagArr.includes(activeFilter) || cat === activeFilter;
+      return tagArr.includes(activeFilter) || (f.category || f.tag || '') === activeFilter;
     });
-  };
+  }, [feeds, activeFilter]);
 
-  const filteredFeeds = filterFeeds(feeds);
-  const filteredRecommended = filterFeeds(recommendedFeeds);
+  const filteredRecommended = useMemo(() => {
+    if (activeFilter === '전체') return recommendedFeeds;
+    const found = FIXED_CATEGORIES.find(c => c.label === activeFilter);
+    if (found?.value) return recommendedFeeds.filter(f => (f.category || f.tag || '') === found.value);
+    return recommendedFeeds.filter(f => {
+      const tagArr = Array.isArray(f.tags) ? f.tags : (f.tags ? f.tags.split(',') : []);
+      return tagArr.includes(activeFilter) || (f.category || f.tag || '') === activeFilter;
+    });
+  }, [recommendedFeeds, activeFilter]);
 
   return (
     <Box sx={{ minHeight: '100vh', backgroundColor: colors.bg }}>
